@@ -4,11 +4,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Laravel 12 application using PHP 8.2+ with Laravel Breeze for authentication. The project uses:
+This is a Laravel 12 application for Mossfield Organic Farm - a dairy producer that bottles milk, produces cheese, and makes yoghurt. The application aims to provide full batch traceability, order management, and invoicing capabilities.
+
+**Tech Stack:**
+- **Framework**: Laravel 12 with PHP 8.2+
 - **Frontend**: Blade templates with Tailwind CSS and Alpine.js
 - **Build System**: Vite for asset compilation
 - **Database**: SQLite (default) with Eloquent ORM
-- **Authentication**: Laravel Breeze with email verification
+- **Authentication**: Laravel Breeze with email verification (supports username OR email login)
 - **Testing**: PHPUnit with Feature and Unit test suites
 
 ## Development Commands
@@ -205,3 +208,21 @@ chmod -R 775 bootstrap/cache/
 ```
 
 This typically happens when Laravel runs under different users (web server vs CLI).
+
+## Business Context
+
+Mossfield Organic Farm produces three main product types:
+1. **Milk**: 1L and 2L bottles (batch code: Mddmmyy)
+2. **Yoghurt**: 250g and 500g tubs (batch code: Yddmmyy)
+3. **Cheese**: Multiple varieties - Farmhouse, Garlic & Basil, Tomato & Herb, Cumin Seed, Mature (batch code: Gddmmyy)
+   - Produced as wheels, later cut into vacuum packs
+   - Requires maturation tracking
+   - Each vacuum pack must be traceable to original wheel
+
+Key features planned:
+- **Batch Traceability** (highest priority): Track production batches with proper coding
+- **Cheese Production Planning**: Track maturation periods and ready-to-sell dates
+- **Order Management**: Support regular and ad-hoc customers with flexible ordering
+- **Invoice Generation**: Generate invoices per order with configurable pricing
+- **Stock Management**: Track whole cheese wheels and vacuum-packed units
+- **Future Customer Portal**: Allow customers to view orders and download invoices
