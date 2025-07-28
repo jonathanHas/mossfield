@@ -16,6 +16,13 @@ class DatabaseSeeder extends Seeder
         // Create admin user for testing
         $this->call(AdminUserSeeder::class);
 
+        // Create products and batches
+        $this->call(ProductSeeder::class);
+        $this->call(BatchSeeder::class);
+        
+        // Create customers for order management
+        $this->call(CustomerSeeder::class);
+
         // Create additional test users if needed
         // User::factory(10)->create();
 

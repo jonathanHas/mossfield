@@ -40,6 +40,9 @@ Route::middleware('auth')->group(function () {
     
     // Stock management routes
     Route::get('/stock', [\App\Http\Controllers\StockController::class, 'index'])->name('stock.index');
+    
+    // Order management routes
+    Route::resource('orders', \App\Http\Controllers\OrderController::class);
 });
 
 require __DIR__.'/auth.php';
