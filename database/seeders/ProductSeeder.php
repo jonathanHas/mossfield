@@ -24,7 +24,7 @@ class ProductSeeder extends Seeder
             'name' => '1L Bottle',
             'size' => '1L',
             'unit' => 'bottle',
-            'weight_kg' => 1.000,
+            'weight_kg' => 1.000, // This represents 1L volume for milk
             'base_price' => 2.50,
             'is_active' => true,
         ]);
@@ -34,7 +34,7 @@ class ProductSeeder extends Seeder
             'name' => '2L Bottle',
             'size' => '2L',
             'unit' => 'bottle',
-            'weight_kg' => 2.000,
+            'weight_kg' => 2.000, // This represents 2L volume for milk
             'base_price' => 4.50,
             'is_active' => true,
         ]);

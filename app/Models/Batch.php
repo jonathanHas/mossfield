@@ -15,7 +15,8 @@ class Batch extends Model
         'production_date',
         'expiry_date',
         'ready_date',
-        'total_quantity_kg',
+        'raw_milk_litres',
+        'wheels_produced',
         'notes',
         'status',
     ];
@@ -24,7 +25,7 @@ class Batch extends Model
         'production_date' => 'date',
         'expiry_date' => 'date',
         'ready_date' => 'date',
-        'total_quantity_kg' => 'decimal:3',
+        'raw_milk_litres' => 'decimal:3',
     ];
 
     protected static function boot()
@@ -62,8 +63,18 @@ class Batch extends Model
     {
         $prefix = $this->product->getTypePrefix();
         $dateCode = $this->production_date->format('dmy');
+        $baseCode = $prefix . $dateCode;
         
-        return $prefix . $dateCode;
+        // Check for duplicates and add a suffix if needed
+        $counter = 1;
+        $finalCode = $baseCode;
+        
+        while (self::where('batch_code', $finalCode)->exists()) {
+            $finalCode = $baseCode . '-' . $counter;
+            $counter++;
+        }
+        
+        return $finalCode;
     }
 
     public function isReadyToSell(): bool
@@ -79,5 +90,30 @@ class Batch extends Model
     public function getRemainingStockAttribute(): int
     {
         return $this->batchItems()->sum('quantity_remaining');
+    }
+
+    public function getFinishedProductWeightAttribute(): float
+    {
+        $total = 0;
+        foreach ($this->batchItems as $item) {
+            $total += $item->quantity_produced * ($item->unit_weight_kg ?? 0);
+        }
+        return $total;
+    }
+
+    public function getProductionYieldAttribute(): ?float
+    {
+        if (!$this->raw_milk_litres || $this->raw_milk_litres == 0) {
+            return null;
+        }
+        
+        // For milk, yield is 1:1 (just bottled)
+        if ($this->product->type === 'milk') {
+            return 1.0;
+        }
+        
+        // For cheese/yoghurt, calculate yield as finished weight / raw milk
+        $finishedWeight = $this->getFinishedProductWeightAttribute();
+        return $finishedWeight / $this->raw_milk_litres;
     }
 }

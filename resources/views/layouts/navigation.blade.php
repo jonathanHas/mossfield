@@ -18,6 +18,15 @@
                     <x-nav-link :href="route('products.index')" :active="request()->routeIs('products.*')">
                         {{ __('Products') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('batches.index')" :active="request()->routeIs('batches.*')">
+                        {{ __('Batches') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('cheese-cutting.index')" :active="request()->routeIs('cheese-cutting.*')">
+                        {{ __('Cheese Cutting') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('stock.index')" :active="request()->routeIs('stock.*')">
+                        {{ __('Stock') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -75,6 +84,15 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('products.index')" :active="request()->routeIs('products.*')">
                 {{ __('Products') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('batches.index')" :active="request()->routeIs('batches.*')">
+                {{ __('Batches') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('cheese-cutting.index')" :active="request()->routeIs('cheese-cutting.*')">
+                {{ __('Cheese Cutting') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('stock.index')" :active="request()->routeIs('stock.*')">
+                {{ __('Stock') }}
             </x-responsive-nav-link>
         </div>
 
