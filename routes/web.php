@@ -43,6 +43,14 @@ Route::middleware('auth')->group(function () {
     
     // Order management routes
     Route::resource('orders', \App\Http\Controllers\OrderController::class);
+    
+    // Order allocation routes
+    Route::get('/order-allocations', [\App\Http\Controllers\OrderAllocationController::class, 'index'])->name('order-allocations.index');
+    Route::get('/order-allocations/{order}', [\App\Http\Controllers\OrderAllocationController::class, 'show'])->name('order-allocations.show');
+    Route::post('/order-allocations/{orderItem}/allocate', [\App\Http\Controllers\OrderAllocationController::class, 'allocate'])->name('order-allocations.allocate');
+    Route::delete('/order-allocations/{allocation}', [\App\Http\Controllers\OrderAllocationController::class, 'deallocate'])->name('order-allocations.deallocate');
+    Route::post('/order-allocations/{allocation}/fulfill', [\App\Http\Controllers\OrderAllocationController::class, 'fulfill'])->name('order-allocations.fulfill');
+    Route::post('/order-allocations/{order}/auto-allocate', [\App\Http\Controllers\OrderAllocationController::class, 'autoAllocate'])->name('order-allocations.auto-allocate');
 });
 
 require __DIR__.'/auth.php';

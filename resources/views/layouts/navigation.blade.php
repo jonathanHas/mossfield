@@ -30,6 +30,9 @@
                     <x-nav-link :href="route('orders.index')" :active="request()->routeIs('orders.*')">
                         {{ __('Orders') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('order-allocations.index')" :active="request()->routeIs('order-allocations.*')">
+                        {{ __('Stock Allocation') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -99,6 +102,9 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('orders.index')" :active="request()->routeIs('orders.*')">
                 {{ __('Orders') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('order-allocations.index')" :active="request()->routeIs('order-allocations.*')">
+                {{ __('Stock Allocation') }}
             </x-responsive-nav-link>
         </div>
 

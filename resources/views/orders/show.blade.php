@@ -188,12 +188,37 @@
                         </div>
                         
                         <div class="flex space-x-2">
+                            @if($order->status === 'pending')
+                                <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
+                                    @csrf
+                                    @method('PATCH')
+                                    <input type="hidden" name="status" value="confirmed">
+                                    <input type="hidden" name="payment_status" value="{{ $order->payment_status }}">
+                                    <input type="hidden" name="delivery_date" value="{{ $order->delivery_date?->format('Y-m-d') }}">
+                                    <input type="hidden" name="delivery_address" value="{{ $order->delivery_address }}">
+                                    <input type="hidden" name="notes" value="{{ $order->notes }}">
+                                    <button type="submit" 
+                                        onclick="return confirm('Confirm this order and make it available for stock allocation?')"
+                                        class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
+                                        Confirm Order
+                                    </button>
+                                </form>
+                            @endif
+                            @if($order->status === 'confirmed')
+                                <a href="{{ route('order-allocations.show', $order) }}" 
+                                   class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                                    Manage Stock Allocation
+                                </a>
+                            @endif
                             @if($order->canBeCancelled())
                                 <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
                                     @csrf
                                     @method('PATCH')
                                     <input type="hidden" name="status" value="cancelled">
                                     <input type="hidden" name="payment_status" value="{{ $order->payment_status }}">
+                                    <input type="hidden" name="delivery_date" value="{{ $order->delivery_date?->format('Y-m-d') }}">
+                                    <input type="hidden" name="delivery_address" value="{{ $order->delivery_address }}">
+                                    <input type="hidden" name="notes" value="{{ $order->notes }}">
                                     <button type="submit" 
                                         onclick="return confirm('Are you sure you want to cancel this order?')"
                                         class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">

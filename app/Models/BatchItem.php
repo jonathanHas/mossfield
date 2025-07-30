@@ -61,4 +61,30 @@ class BatchItem extends Model
         }
         return false;
     }
+
+    public function orderAllocations(): HasMany
+    {
+        return $this->hasMany(OrderAllocation::class);
+    }
+
+    public function getAvailableQuantityAttribute(): int
+    {
+        // Available = remaining - allocated but not yet fulfilled
+        $allocated = $this->orderAllocations()
+            ->whereNull('fulfilled_at')
+            ->sum('quantity_allocated');
+        
+        return max(0, $this->quantity_remaining - $allocated);
+    }
+
+    public function isReadyToSell(): bool
+    {
+        // Check if this batch item is ready based on product type and ready date
+        if ($this->batch->product->type === 'cheese' && $this->batch->ready_date) {
+            return $this->batch->ready_date <= now()->toDateString();
+        }
+        
+        // Milk and yoghurt are ready immediately
+        return true;
+    }
 }
