@@ -20,7 +20,7 @@ return new class extends Migration
             $table->timestamp('allocated_at');
             $table->timestamp('fulfilled_at')->nullable();
             $table->timestamps();
-            
+
             // Ensure no double allocation of the same batch to the same order item
             $table->unique(['order_item_id', 'batch_item_id']);
             $table->index('allocated_at');

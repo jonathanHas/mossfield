@@ -34,8 +34,8 @@ class CheeseCuttingLog extends Model
 
     public function getAveragePackWeightAttribute(): float
     {
-        return $this->vacuum_packs_created > 0 
-            ? round((float)$this->total_weight_kg / $this->vacuum_packs_created, 3)
+        return $this->vacuum_packs_created > 0
+            ? round((float) $this->total_weight_kg / $this->vacuum_packs_created, 3)
             : 0;
     }
 }

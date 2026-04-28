@@ -25,7 +25,7 @@ return new class extends Migration
             $table->text('delivery_address')->nullable(); // Override customer default address
             $table->text('notes')->nullable();
             $table->timestamps();
-            
+
             $table->index(['order_date', 'status']);
             $table->index('delivery_date');
         });

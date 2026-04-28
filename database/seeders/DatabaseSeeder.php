@@ -19,7 +19,7 @@ class DatabaseSeeder extends Seeder
         // Create products and batches
         $this->call(ProductSeeder::class);
         $this->call(BatchSeeder::class);
-        
+
         // Create customers for order management
         $this->call(CustomerSeeder::class);
 

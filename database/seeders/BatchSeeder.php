@@ -7,7 +7,6 @@ use App\Models\BatchItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Carbon\Carbon;
-use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
 class BatchSeeder extends Seeder
@@ -20,10 +19,10 @@ class BatchSeeder extends Seeder
             // Create 3-5 batches per product with different dates
             for ($i = 0; $i < rand(3, 5); $i++) {
                 $productionDate = Carbon::now()->subDays(rand(1, 90));
-                
+
                 $rawMilkLitres = $this->getRawMilkQuantityByType($product->type);
                 $wheelsProduced = null;
-                
+
                 // For cheese, always set wheels_produced
                 if ($product->type === 'cheese') {
                     $wheelsProduced = rand(2, 8);

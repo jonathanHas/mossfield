@@ -2,14 +2,13 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Order;
-use App\Models\OrderItem;
 use App\Models\BatchItem;
+use App\Models\Order;
 use App\Models\OrderAllocation;
+use App\Models\OrderItem;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
-use Illuminate\Http\RedirectResponse;
-use Illuminate\Support\Facades\DB;
 
 class OrderAllocationController extends Controller
 {
@@ -27,7 +26,7 @@ class OrderAllocationController extends Controller
             } elseif ($request->allocation_status === 'partially_allocated') {
                 $query->whereHas('orderItems', function ($q) {
                     $q->whereRaw('quantity_allocated < quantity_ordered')
-                      ->where('quantity_allocated', '>', 0);
+                        ->where('quantity_allocated', '>', 0);
                 });
             } elseif ($request->allocation_status === 'unallocated') {
                 $query->whereHas('orderItems', function ($q) {
@@ -46,7 +45,7 @@ class OrderAllocationController extends Controller
         $order->load([
             'customer',
             'orderItems.productVariant.product',
-            'orderItems.orderAllocations.batchItem.batch'
+            'orderItems.orderAllocations.batchItem.batch',
         ]);
 
         // Get available batch items for each order item
@@ -56,12 +55,14 @@ class OrderAllocationController extends Controller
                 ->where('product_variant_id', $orderItem->product_variant_id)
                 ->where('quantity_remaining', '>', 0)
                 ->whereHas('batch', function ($q) {
-                    $q->where('status', 'active');
+                    $q->where('status', 'active')
+                        ->where(function ($q) {
+                            $q->whereNull('expiry_date')
+                                ->orWhere('expiry_date', '>', now()->toDateString());
+                        });
                 })
                 ->get()
-                ->filter(function ($batchItem) {
-                    return $batchItem->isReadyToSell() && $batchItem->available_quantity > 0;
-                })
+                ->filter(fn ($batchItem) => $batchItem->isAvailableForAllocation())
                 ->sortBy('batch.production_date');
         }
 
@@ -76,7 +77,7 @@ class OrderAllocationController extends Controller
         ]);
 
         $batchItem = BatchItem::findOrFail($validated['batch_item_id']);
-        
+
         // Verify the batch item is for the correct product variant
         if ($batchItem->product_variant_id !== $orderItem->product_variant_id) {
             return redirect()->back()
@@ -85,7 +86,7 @@ class OrderAllocationController extends Controller
 
         $allocation = $orderItem->allocateFromBatchItem($batchItem, $validated['quantity']);
 
-        if (!$allocation) {
+        if (! $allocation) {
             return redirect()->back()
                 ->withErrors(['quantity' => 'Cannot allocate this quantity. Check available stock and order limits.']);
         }
@@ -104,7 +105,7 @@ class OrderAllocationController extends Controller
         // Update order item allocated quantity
         $orderItem = $allocation->orderItem;
         $allocation->delete();
-        
+
         $orderItem->quantity_allocated = $orderItem->orderAllocations()->sum('quantity_allocated');
         $orderItem->save();
 
@@ -114,19 +115,59 @@ class OrderAllocationController extends Controller
 
     public function fulfill(Request $request, OrderAllocation $allocation): RedirectResponse
     {
-        $validated = $request->validate([
-            'quantity' => 'required|integer|min:1|max:' . $allocation->quantity_remaining,
-        ]);
+        $orderItem = $allocation->orderItem;
+        $isVariableWeight = $orderItem->isVariableWeight();
 
-        $success = $allocation->orderItem->fulfillAllocation($allocation, $validated['quantity']);
+        // Build validation rules dynamically
+        $rules = [
+            'quantity' => 'required|integer|min:1|max:'.$allocation->quantity_remaining,
+        ];
 
-        if (!$success) {
+        if ($isVariableWeight) {
+            $rules['actual_weight_kg'] = 'required|numeric|min:0.001';
+        }
+
+        $validated = $request->validate($rules);
+
+        $actualWeight = $validated['actual_weight_kg'] ?? null;
+
+        $success = $orderItem->fulfillAllocation(
+            $allocation,
+            $validated['quantity'],
+            $actualWeight
+        );
+
+        if (! $success) {
             return redirect()->back()
                 ->withErrors(['quantity' => 'Could not fulfill this quantity.']);
         }
 
+        $message = "Fulfilled {$validated['quantity']} units.";
+        if ($actualWeight) {
+            $message .= " Total weight: {$actualWeight}kg";
+        }
+
+        return redirect()->back()->with('success', $message);
+    }
+
+    public function unfulfill(Request $request, OrderAllocation $allocation): RedirectResponse
+    {
+        $validated = $request->validate([
+            'quantity' => 'required|integer|min:1|max:'.$allocation->quantity_fulfilled,
+        ]);
+
+        $success = $allocation->orderItem->unfulfillAllocation(
+            $allocation,
+            $validated['quantity']
+        );
+
+        if (! $success) {
+            return redirect()->back()
+                ->withErrors(['quantity' => 'Could not undo fulfillment for this quantity.']);
+        }
+
         return redirect()->back()
-            ->with('success', "Fulfilled {$validated['quantity']} units.");
+            ->with('success', "Undid fulfillment of {$validated['quantity']} units. Stock has been restored.");
     }
 
     public function autoAllocate(Order $order): RedirectResponse
@@ -136,7 +177,7 @@ class OrderAllocationController extends Controller
 
         foreach ($order->orderItems as $orderItem) {
             $remainingToAllocate = $orderItem->quantity_ordered - $orderItem->quantity_allocated;
-            
+
             if ($remainingToAllocate <= 0) {
                 continue; // Already fully allocated
             }
@@ -146,12 +187,14 @@ class OrderAllocationController extends Controller
                 ->where('product_variant_id', $orderItem->product_variant_id)
                 ->where('quantity_remaining', '>', 0)
                 ->whereHas('batch', function ($q) {
-                    $q->where('status', 'active');
+                    $q->where('status', 'active')
+                        ->where(function ($q) {
+                            $q->whereNull('expiry_date')
+                                ->orWhere('expiry_date', '>', now()->toDateString());
+                        });
                 })
                 ->get()
-                ->filter(function ($batchItem) {
-                    return $batchItem->isReadyToSell() && $batchItem->available_quantity > 0;
-                })
+                ->filter(fn ($batchItem) => $batchItem->isAvailableForAllocation())
                 ->sortBy('batch.production_date');
 
             foreach ($batchItems as $batchItem) {
@@ -160,10 +203,10 @@ class OrderAllocationController extends Controller
                 }
 
                 $quantityToAllocate = min($remainingToAllocate, $batchItem->available_quantity);
-                
+
                 if ($quantityToAllocate > 0) {
                     $allocation = $orderItem->allocateFromBatchItem($batchItem, $quantityToAllocate);
-                    
+
                     if ($allocation) {
                         $allocatedItems++;
                         $remainingToAllocate -= $quantityToAllocate;
@@ -178,9 +221,10 @@ class OrderAllocationController extends Controller
 
         if ($allocatedItems > 0) {
             $message = "Auto-allocated {$allocatedItems} order items.";
-            if (!empty($errors)) {
+            if (! empty($errors)) {
                 $message .= ' Some items could not be fully allocated.';
             }
+
             return redirect()->back()->with('success', $message);
         }
 

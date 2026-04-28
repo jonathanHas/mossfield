@@ -1,3 +1,135 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+    --bg: #FAF9F6;
+    --panel: #FFFFFF;
+    --sidebar: #F4F2EA;
+    --app-bg: #EEECE4;
+    --ink: #121311;
+    --ink-2: #3A3D36;
+    --muted: #6B6F65;
+    --faint: #A8ABA2;
+    --line: #E8E6DE;
+    --line-2: #F0EEE7;
+    --accent: oklch(0.50 0.09 150);
+    --accent-soft: oklch(0.96 0.02 150);
+    --accent-ink: oklch(0.35 0.08 150);
+    --warn: oklch(0.72 0.14 65);
+    --warn-soft: oklch(0.97 0.03 80);
+    --warn-soft-border: oklch(0.92 0.05 80);
+    --warn-ink: oklch(0.45 0.12 55);
+    --danger: oklch(0.58 0.17 25);
+    --danger-soft: oklch(0.97 0.02 25);
+    --info: oklch(0.55 0.08 235);
+    --info-soft: oklch(0.96 0.02 235);
+}
+
+@layer components {
+    .mf-panel {
+        @apply bg-white border border-[color:var(--line)] rounded-[10px] overflow-hidden;
+    }
+    .mf-panel-header {
+        @apply flex items-center gap-2.5 px-4 py-3 border-b border-[color:var(--line-2)];
+    }
+    .mf-btn-primary {
+        background: var(--ink);
+        color: var(--bg);
+        @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium border-0 cursor-pointer;
+    }
+    .mf-btn-secondary {
+        @apply inline-flex items-center gap-1.5 bg-white border border-[color:var(--line)] rounded-md px-[11px] py-1.5 text-[13px] font-medium text-[color:var(--ink)] cursor-pointer;
+    }
+    .mf-btn-ghost {
+        @apply inline-flex items-center gap-1.5 bg-transparent rounded-md px-2 py-1.5 text-[13px] text-[color:var(--ink-2)] cursor-pointer;
+    }
+    .mf-tag {
+        @apply inline-flex items-center gap-1 rounded px-[7px] py-[2px] text-[11px] font-medium whitespace-nowrap;
+    }
+    .mf-tag-neutral { background: var(--line-2); color: var(--ink-2); }
+    .mf-tag-accent  { background: var(--accent-soft); color: var(--accent-ink); }
+    .mf-tag-warn    { background: var(--warn-soft); color: var(--warn-ink); }
+    .mf-tag-danger  { background: var(--danger-soft); color: var(--danger); }
+    .mf-tag-info    { background: var(--info-soft); color: var(--info); }
+
+    .mf-btn-danger {
+        background: var(--danger);
+        color: #fff;
+        @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium border-0 cursor-pointer;
+    }
+
+    .mf-label {
+        @apply block text-[11.5px] font-medium uppercase mb-1;
+        color: var(--muted);
+        letter-spacing: 0.4px;
+    }
+    .mf-input,
+    .mf-select,
+    .mf-textarea {
+        @apply block w-full text-[13.5px] rounded-md bg-white px-3 py-[7px];
+        color: var(--ink);
+        border: 1px solid var(--line);
+    }
+    .mf-input:focus,
+    .mf-select:focus,
+    .mf-textarea:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+    .mf-textarea { @apply min-h-[88px]; }
+    .mf-checkbox {
+        @apply rounded;
+        border-color: var(--line);
+        color: var(--accent);
+    }
+    .mf-checkbox:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .mf-error {
+        @apply text-[12px] mt-1;
+        color: var(--danger);
+    }
+
+    .mf-flash {
+        @apply flex items-start gap-2.5 px-3.5 py-2.5 rounded-lg mb-4 text-[13px];
+        border: 1px solid;
+    }
+    .mf-flash-success {
+        background: var(--accent-soft);
+        border-color: oklch(0.88 0.06 150);
+        color: var(--accent-ink);
+    }
+    .mf-flash-error {
+        background: var(--danger-soft);
+        border-color: oklch(0.88 0.08 25);
+        color: var(--danger);
+    }
+    .mf-flash-warn {
+        background: var(--warn-soft);
+        border-color: var(--warn-soft-border);
+        color: var(--warn-ink);
+    }
+
+    .mf-th {
+        @apply px-4 py-2.5 text-left font-medium text-[11px] uppercase;
+        color: var(--muted);
+        letter-spacing: 0.5px;
+    }
+    .mf-td {
+        @apply px-4 py-3 text-[13px];
+        color: var(--ink);
+    }
+    .mf-tr-divide > tr + tr {
+        border-top: 1px solid var(--line-2);
+    }
+
+    .mf-link {
+        @apply font-medium;
+        color: var(--accent-ink);
+    }
+    .mf-link:hover { text-decoration: underline; }
+}

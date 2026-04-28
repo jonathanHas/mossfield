@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -11,6 +12,7 @@ class Product extends Model
         'name',
         'type',
         'description',
+        'image_path',
         'maturation_days',
         'is_active',
     ];
@@ -19,6 +21,13 @@ class Product extends Model
         'is_active' => 'boolean',
         'maturation_days' => 'integer',
     ];
+
+    protected function imageUrl(): Attribute
+    {
+        return Attribute::get(fn () => $this->image_path
+            ? '/storage/'.ltrim($this->image_path, '/')
+            : null);
+    }
 
     public function variants(): HasMany
     {

@@ -5,17 +5,24 @@ namespace App\Http\Controllers;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Product;
-use App\Models\ProductVariant;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 
 class BatchController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = Batch::with(['product', 'batchItems.productVariant']);
+        $this->authorize('viewAny', Batch::class);
+        $query = Batch::with([
+            'product',
+            'batchItems' => fn ($q) => $q->with('productVariant')
+                ->withCount('sourceCuttingLogs')
+                ->withSum([
+                    'orderAllocations as quantity_currently_allocated' => fn ($qa) => $qa->whereNull('fulfilled_at'),
+                ], DB::raw('quantity_allocated - quantity_fulfilled')),
+        ]);
 
         // Filter by product type
         if ($request->filled('type')) {
@@ -34,7 +41,7 @@ class BatchController extends Controller
             if ($request->maturation_status === 'ready') {
                 $query->where(function ($q) {
                     $q->whereNull('ready_date')
-                      ->orWhere('ready_date', '<=', now());
+                        ->orWhere('ready_date', '<=', now());
                 });
             } elseif ($request->maturation_status === 'maturing') {
                 $query->where('ready_date', '>', now());
@@ -48,18 +55,20 @@ class BatchController extends Controller
 
     public function create(): View
     {
+        $this->authorize('create', Batch::class);
         $products = Product::with('variants')->where('is_active', true)->get();
+
         return view('batches.create', compact('products'));
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorize('create', Batch::class);
         $validated = $request->validate([
             'product_id' => 'required|exists:products,id',
             'production_date' => 'required|date',
             'expiry_date' => 'nullable|date|after:production_date',
             'raw_milk_litres' => 'required|numeric|min:0.001',
-            'wheels_produced' => 'nullable|integer|min:1',
             'notes' => 'nullable|string',
             'batch_items' => 'required|array|min:1',
             'batch_items.*.variant_id' => 'required|exists:product_variants,id',
@@ -75,25 +84,22 @@ class BatchController extends Controller
             'batch_items.*.variant_id.required' => 'Product variant selection is required.',
         ]);
 
-        $batch = DB::transaction(function () use ($validated, $request) {
-            // Get the product to determine if it's cheese
+        $batch = DB::transaction(function () use ($validated) {
             $product = Product::find($validated['product_id']);
-            
-            // For cheese, validate that wheels_produced is provided
-            if ($product->type === 'cheese' && !$validated['wheels_produced']) {
-                throw new \Illuminate\Validation\ValidationException(
-                    validator($request->all(), []),
-                    ['wheels_produced' => 'Number of wheels produced is required for cheese products.']
-                );
-            }
 
-            // Create the batch
+            // For cheese, the form only collects wheel variants during initial production
+            // (vacuum packs are created later via cutting), so the total quantity equals
+            // the wheel count. See resources/views/batches/create.blade.php.
+            $wheelsProduced = $product->type === 'cheese'
+                ? array_sum(array_column($validated['batch_items'], 'quantity_produced'))
+                : null;
+
             $batch = Batch::create([
                 'product_id' => $validated['product_id'],
                 'production_date' => $validated['production_date'],
                 'expiry_date' => $validated['expiry_date'],
                 'raw_milk_litres' => $validated['raw_milk_litres'],
-                'wheels_produced' => $validated['wheels_produced'] ?? null,
+                'wheels_produced' => $wheelsProduced,
                 'notes' => $validated['notes'],
             ]);
 
@@ -112,25 +118,30 @@ class BatchController extends Controller
         });
 
         return redirect()->route('batches.show', $batch)
-            ->with('success', 'Batch ' . $batch->batch_code . ' created successfully! ' . 
-                   ($batch->wheels_produced ? $batch->wheels_produced . ' wheels produced.' : ''));
+            ->with('success', 'Batch '.$batch->batch_code.' created successfully! '.
+                   ($batch->wheels_produced ? $batch->wheels_produced.' wheels produced.' : ''));
     }
 
     public function show(Batch $batch): View
     {
+        $this->authorize('view', $batch);
         $batch->load(['product', 'batchItems.productVariant', 'cuttingLogs']);
+
         return view('batches.show', compact('batch'));
     }
 
     public function edit(Batch $batch): View
     {
+        $this->authorize('update', $batch);
         $batch->load(['batchItems.productVariant']);
         $products = Product::with('variants')->where('is_active', true)->get();
+
         return view('batches.edit', compact('batch', 'products'));
     }
 
     public function update(Request $request, Batch $batch): RedirectResponse
     {
+        $this->authorize('update', $batch);
         $validated = $request->validate([
             'expiry_date' => 'nullable|date|after:production_date',
             'notes' => 'nullable|string',
@@ -145,6 +156,7 @@ class BatchController extends Controller
 
     public function destroy(Batch $batch): RedirectResponse
     {
+        $this->authorize('delete', $batch);
         $batch->delete();
 
         return redirect()->route('batches.index')

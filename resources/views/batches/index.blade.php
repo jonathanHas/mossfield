@@ -1,174 +1,199 @@
 <x-app-layout>
-    <x-slot name="header">
-        <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                {{ __('Production Batches') }}
-            </h2>
-            <a href="{{ route('batches.create') }}" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                Create New Batch
-            </a>
-        </div>
-    </x-slot>
+    @php
+        $typeMeta = [
+            'milk'    => ['label' => 'Milk',    'tone' => 'info'],
+            'yoghurt' => ['label' => 'Yoghurt', 'tone' => 'accent'],
+            'cheese'  => ['label' => 'Cheese',  'tone' => 'warn'],
+        ];
 
-    <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
-            @if (session('success'))
-                <div class="mb-4 bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative" role="alert">
-                    <span class="block sm:inline">{{ session('success') }}</span>
-                </div>
-            @endif
+        $groupedBatches = $batches->getCollection()->groupBy(fn ($batch) => $batch->product->type);
+        $typeOrder = ['milk', 'yoghurt', 'cheese'];
+        $groupedBatches = $groupedBatches->sortBy(fn ($_, $type) => array_search($type, $typeOrder) === false ? 99 : array_search($type, $typeOrder));
 
-            <!-- Filters -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg mb-6">
-                <div class="p-6">
-                    <form method="GET" action="{{ route('batches.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        <!-- Product Type Filter -->
-                        <div>
-                            <label for="type" class="block text-sm font-medium text-gray-700 mb-1">Product Type</label>
-                            <select name="type" id="type" class="block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                                <option value="">All Types</option>
-                                <option value="milk" {{ request('type') === 'milk' ? 'selected' : '' }}>Milk</option>
-                                <option value="yoghurt" {{ request('type') === 'yoghurt' ? 'selected' : '' }}>Yoghurt</option>
-                                <option value="cheese" {{ request('type') === 'cheese' ? 'selected' : '' }}>Cheese</option>
-                            </select>
-                        </div>
+        $wheelStatsFor = function ($batch) {
+            $stats = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'cut' => 0, 'sold' => 0];
+            foreach ($batch->batchItems as $item) {
+                if (! str_contains(strtolower($item->productVariant->name), 'wheel')) {
+                    continue;
+                }
+                $produced = (int) $item->quantity_produced;
+                $cut = (int) ($item->source_cutting_logs_count ?? 0);
+                $sold = max(0, $produced - (int) $item->quantity_remaining - $cut);
+                $remaining = max(0, $produced - $cut - $sold);
+                $allocated = max(0, min($remaining, (int) ($item->quantity_currently_allocated ?? 0)));
+                $free = max(0, $remaining - $allocated);
+                $stats['produced'] += $produced;
+                $stats['free'] += $free;
+                $stats['allocated'] += $allocated;
+                $stats['cut'] += $cut;
+                $stats['sold'] += $sold;
+            }
+            return $stats;
+        };
+    @endphp
 
-                        <!-- Status Filter -->
-                        <div>
-                            <label for="status" class="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                            <select name="status" id="status" class="block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                                <option value="">All Statuses</option>
-                                <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
-                                <option value="sold_out" {{ request('status') === 'sold_out' ? 'selected' : '' }}>Sold Out</option>
-                                <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
-                            </select>
-                        </div>
+    <x-slot name="header">Batches</x-slot>
 
-                        <!-- Maturation Status Filter (for cheese) -->
-                        <div>
-                            <label for="maturation_status" class="block text-sm font-medium text-gray-700 mb-1">Maturation</label>
-                            <select name="maturation_status" id="maturation_status" class="block w-full border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-md shadow-sm text-sm">
-                                <option value="">All</option>
-                                <option value="ready" {{ request('maturation_status') === 'ready' ? 'selected' : '' }}>Ready to Sell</option>
-                                <option value="maturing" {{ request('maturation_status') === 'maturing' ? 'selected' : '' }}>Still Maturing</option>
-                            </select>
-                        </div>
-
-                        <!-- Filter Button -->
-                        <div class="flex items-end">
-                            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded text-sm w-full">
-                                Filter
-                            </button>
-                        </div>
-                    </form>
-                </div>
+    <div class="px-6 py-5">
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+            <div>
+                <h1 class="text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">Production batches</h1>
+                <div class="mt-0.5 text-[13px]" style="color: var(--muted);">Grouped by product type, with wheel & vac-pack status at a glance.</div>
             </div>
+            @can('create', App\Models\Batch::class)
+                <a href="{{ route('batches.create') }}" class="mf-btn-primary">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                    New batch
+                </a>
+            @endcan
+        </div>
 
-            <!-- Batches Table -->
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6 text-gray-900">
-                    @if($batches->count() > 0)
-                        <div class="overflow-x-auto">
-                            <table class="min-w-full divide-y divide-gray-200">
-                                <thead class="bg-gray-50">
-                                    <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Batch Code</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Production Date</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Raw Milk Used</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Ready Date</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock Remaining</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
-                                    @foreach($batches as $batch)
-                                        <tr class="hover:bg-gray-50">
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <div class="text-sm font-medium text-gray-900">{{ $batch->batch_code }}</div>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <div class="text-sm font-medium text-gray-900">{{ $batch->product->name }}</div>
-                                                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                                                    @if($batch->product->type === 'milk') bg-blue-100 text-blue-800
-                                                    @elseif($batch->product->type === 'yoghurt') bg-purple-100 text-purple-800
-                                                    @elseif($batch->product->type === 'cheese') bg-yellow-100 text-yellow-800
-                                                    @endif">
-                                                    {{ ucfirst($batch->product->type) }}
+        @if (session('success'))
+            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
+        @endif
+
+        <div class="mf-panel mb-4">
+            <form method="GET" action="{{ route('batches.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-3 p-4">
+                <div>
+                    <label for="type" class="mf-label">Type</label>
+                    <select name="type" id="type" class="mf-select">
+                        <option value="">All types</option>
+                        <option value="milk" {{ request('type') === 'milk' ? 'selected' : '' }}>Milk</option>
+                        <option value="yoghurt" {{ request('type') === 'yoghurt' ? 'selected' : '' }}>Yoghurt</option>
+                        <option value="cheese" {{ request('type') === 'cheese' ? 'selected' : '' }}>Cheese</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="status" class="mf-label">Status</label>
+                    <select name="status" id="status" class="mf-select">
+                        <option value="">All</option>
+                        <option value="active" {{ request('status') === 'active' ? 'selected' : '' }}>Active</option>
+                        <option value="sold_out" {{ request('status') === 'sold_out' ? 'selected' : '' }}>Sold out</option>
+                        <option value="expired" {{ request('status') === 'expired' ? 'selected' : '' }}>Expired</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="maturation_status" class="mf-label">Maturation</label>
+                    <select name="maturation_status" id="maturation_status" class="mf-select">
+                        <option value="">All</option>
+                        <option value="ready" {{ request('maturation_status') === 'ready' ? 'selected' : '' }}>Ready to sell</option>
+                        <option value="maturing" {{ request('maturation_status') === 'maturing' ? 'selected' : '' }}>Still maturing</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <button type="submit" class="mf-btn-secondary w-full justify-center">Filter</button>
+                </div>
+            </form>
+        </div>
+
+        @forelse ($groupedBatches as $type => $typeBatches)
+            @php
+                $meta = $typeMeta[$type] ?? ['label' => ucfirst($type), 'tone' => 'neutral'];
+                $batchCount = $typeBatches->count();
+                $itemCount = $typeBatches->sum(fn ($b) => $b->batchItems->count());
+
+                $subGroups = $type === 'cheese'
+                    ? $typeBatches->groupBy(fn ($b) => $b->product->name)->sortKeys()
+                    : collect([null => $typeBatches]);
+            @endphp
+
+            <details class="batch-group group mb-6" open>
+                <summary class="list-none cursor-pointer select-none">
+                    <div class="flex items-center gap-3 mb-3 pb-2" style="border-bottom: 1px solid var(--line);">
+                        <svg class="chevron transition-transform duration-200" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted);">
+                            <path d="M9 5l7 7-7 7" />
+                        </svg>
+                        <h2 class="text-[16px] font-display font-medium">{{ $meta['label'] }}</h2>
+                        <span class="mf-tag mf-tag-{{ $meta['tone'] }}">
+                            {{ $batchCount }} {{ Str::plural('batch', $batchCount) }} · {{ $itemCount }} {{ Str::plural('item', $itemCount) }}
+                        </span>
+                    </div>
+                </summary>
+
+                <div class="space-y-4">
+                    @foreach ($subGroups as $subLabel => $subBatches)
+                        @php
+                            $subBatchCount = $subBatches->count();
+                            $subWheelTotals = null;
+                            if ($type === 'cheese') {
+                                $subWheelTotals = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'cut' => 0, 'sold' => 0];
+                                foreach ($subBatches as $b) {
+                                    $s = $wheelStatsFor($b);
+                                    foreach ($subWheelTotals as $k => $v) {
+                                        $subWheelTotals[$k] += $s[$k];
+                                    }
+                                }
+                            }
+                        @endphp
+
+                        @if ($type === 'cheese')
+                            <details class="ml-2" open>
+                                <summary class="list-none cursor-pointer select-none">
+                                    <div class="flex items-center gap-2 flex-wrap mb-3 pb-1" style="border-bottom: 1px solid var(--line-2);">
+                                        <svg class="chevron transition-transform duration-200" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color: var(--muted);">
+                                            <path d="M9 5l7 7-7 7" />
+                                        </svg>
+                                        <h3 class="text-[14px] font-semibold">{{ $subLabel }}</h3>
+                                        <span class="mf-tag mf-tag-warn">{{ $subBatchCount }} {{ Str::plural('batch', $subBatchCount) }}</span>
+                                        @if ($subWheelTotals && $subWheelTotals['produced'] > 0)
+                                            <span class="inline-flex items-center gap-2 text-[12px] ml-2" style="color: var(--muted);">
+                                                <span class="inline-flex items-center gap-1" title="Free in stock">
+                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600"></span>
+                                                    {{ $subWheelTotals['free'] }}
                                                 </span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ $batch->production_date->format('d/m/Y') }}
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ number_format($batch->raw_milk_litres, 1) }}L
-                                                @if($batch->wheels_produced && $batch->product->type === 'cheese')
-                                                    <div class="text-xs text-gray-500">({{ $batch->wheels_produced }} wheels)</div>
-                                                @endif
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                @if($batch->ready_date)
-                                                    {{ $batch->ready_date->format('d/m/Y') }}
-                                                    @if(!$batch->isReadyToSell())
-                                                        <span class="text-orange-600 text-xs block">
-                                                            ({{ $batch->ready_date->diffForHumans() }})
-                                                        </span>
-                                                    @else
-                                                        <span class="text-green-600 text-xs block">Ready Now</span>
-                                                    @endif
-                                                @else
-                                                    <span class="text-green-600 text-sm">Ready Now</span>
-                                                @endif
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ $batch->remaining_stock }} units
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium
-                                                    @if($batch->status === 'active') bg-green-100 text-green-800
-                                                    @elseif($batch->status === 'sold_out') bg-red-100 text-red-800
-                                                    @else bg-gray-100 text-gray-800
-                                                    @endif">
-                                                    {{ ucfirst(str_replace('_', ' ', $batch->status)) }}
+                                                <span class="inline-flex items-center gap-1" title="Allocated to orders">
+                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 border border-amber-700"></span>
+                                                    {{ $subWheelTotals['allocated'] }}
                                                 </span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                                <a href="{{ route('batches.show', $batch) }}" class="text-indigo-600 hover:text-indigo-900 mr-3">View</a>
-                                                <a href="{{ route('batches.edit', $batch) }}" class="text-yellow-600 hover:text-yellow-900 mr-3">Edit</a>
-                                                <form action="{{ route('batches.destroy', $batch) }}" method="POST" class="inline">
-                                                    @csrf
-                                                    @method('DELETE')
-                                                    <button type="submit" class="text-red-600 hover:text-red-900" 
-                                                            onclick="return confirm('Are you sure?')">Delete</button>
-                                                </form>
-                                            </td>
-                                        </tr>
+                                                <span class="inline-flex items-center gap-1" title="Cut to vac packs">
+                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-600"></span>
+                                                    {{ $subWheelTotals['cut'] }}
+                                                </span>
+                                                <span class="inline-flex items-center gap-1" title="Whole wheels sold">
+                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-900 border border-black"></span>
+                                                    {{ $subWheelTotals['sold'] }}
+                                                </span>
+                                                <span style="color: var(--faint);">/ {{ $subWheelTotals['produced'] }} wheels</span>
+                                            </span>
+                                        @endif
+                                    </div>
+                                </summary>
+                                <div class="space-y-3">
+                                    @foreach ($subBatches as $batch)
+                                        @include('batches.partials.batch-card', ['batch' => $batch, 'tone' => $meta['tone']])
                                     @endforeach
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <!-- Pagination -->
-                        <div class="mt-6">
-                            {{ $batches->withQueryString()->links() }}
-                        </div>
-                    @else
-                        <div class="text-center py-8">
-                            <svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                            </svg>
-                            <h3 class="mt-2 text-sm font-medium text-gray-900">No batches found</h3>
-                            <p class="mt-1 text-sm text-gray-500">Get started by creating your first production batch.</p>
-                            <div class="mt-6">
-                                <a href="{{ route('batches.create') }}" class="inline-flex items-center px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700">
-                                    Create First Batch
-                                </a>
+                                </div>
+                            </details>
+                        @else
+                            <div class="space-y-3">
+                                @foreach ($subBatches as $batch)
+                                    @include('batches.partials.batch-card', ['batch' => $batch, 'tone' => $meta['tone']])
+                                @endforeach
                             </div>
-                        </div>
-                    @endif
+                        @endif
+                    @endforeach
                 </div>
+            </details>
+        @empty
+            <div class="mf-panel p-10 text-center">
+                <h3 class="text-[14px] font-semibold">No batches found</h3>
+                <p class="mt-1 text-[13px]" style="color: var(--muted);">Get started by creating your first production batch.</p>
+                @can('create', App\Models\Batch::class)
+                    <div class="mt-4">
+                        <a href="{{ route('batches.create') }}" class="mf-btn-primary">Create first batch</a>
+                    </div>
+                @endcan
             </div>
-        </div>
+        @endforelse
+
+        @if ($batches->hasPages())
+            <div>{{ $batches->withQueryString()->links() }}</div>
+        @endif
     </div>
+
+    <style>
+        details > summary { list-style: none; }
+        details > summary::-webkit-details-marker { display: none; }
+        details[open] > summary .chevron { transform: rotate(90deg); }
+    </style>
 </x-app-layout>

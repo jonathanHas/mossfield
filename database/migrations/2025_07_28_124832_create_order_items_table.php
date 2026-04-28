@@ -22,7 +22,7 @@ return new class extends Migration
             $table->decimal('line_total', 10, 2); // quantity_ordered * unit_price
             $table->text('notes')->nullable();
             $table->timestamps();
-            
+
             $table->index(['order_id', 'product_variant_id']);
         });
     }

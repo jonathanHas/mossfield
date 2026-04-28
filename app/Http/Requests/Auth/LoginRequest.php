@@ -42,9 +42,13 @@ class LoginRequest extends FormRequest
         $this->ensureIsNotRateLimited();
 
         $login = $this->string('login');
+        // Including is_active in the credentials array means deactivated users
+        // fail auth with the same generic "credentials" message — doesn't leak
+        // whether an account exists or is merely disabled.
         $credentials = [
             $this->getLoginField() => $login,
             'password' => $this->string('password'),
+            'is_active' => true,
         ];
 
         if (! Auth::attempt($credentials, $this->boolean('remember'))) {
@@ -64,7 +68,7 @@ class LoginRequest extends FormRequest
     public function getLoginField(): string
     {
         $login = $this->string('login');
-        
+
         return filter_var($login, FILTER_VALIDATE_EMAIL) ? 'email' : 'username';
     }
 

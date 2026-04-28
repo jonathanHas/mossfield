@@ -57,9 +57,22 @@ class BatchItem extends Model
         if ($this->quantity_remaining >= $quantity) {
             $this->quantity_remaining -= $quantity;
             $this->save();
+
             return true;
         }
+
         return false;
+    }
+
+    /**
+     * Restore stock that was previously fulfilled (undo fulfillment).
+     */
+    public function restoreStock(int $quantity): bool
+    {
+        $this->quantity_remaining += $quantity;
+        $this->save();
+
+        return true;
     }
 
     public function orderAllocations(): HasMany
@@ -73,7 +86,7 @@ class BatchItem extends Model
         $allocated = $this->orderAllocations()
             ->whereNull('fulfilled_at')
             ->sum('quantity_allocated');
-        
+
         return max(0, $this->quantity_remaining - $allocated);
     }
 
@@ -83,8 +96,15 @@ class BatchItem extends Model
         if ($this->batch->product->type === 'cheese' && $this->batch->ready_date) {
             return $this->batch->ready_date <= now()->toDateString();
         }
-        
+
         // Milk and yoghurt are ready immediately
         return true;
+    }
+
+    public function isAvailableForAllocation(): bool
+    {
+        return $this->isReadyToSell()
+            && ! $this->batch->isExpired()
+            && $this->available_quantity > 0;
     }
 }

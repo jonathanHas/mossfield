@@ -1,165 +1,148 @@
 <x-app-layout>
-    <x-slot name="header">
-        <div class="flex justify-between items-center">
-            <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-                {{ __('Create New Order') }}
-            </h2>
-            <a href="{{ route('orders.index') }}" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-                Back to Orders
-            </a>
+    <x-slot name="header">New order</x-slot>
+
+    <div class="px-6 py-5">
+        <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
+            <div>
+                <h1 class="text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">Create new order</h1>
+                <div class="mt-0.5 text-[13px]" style="color: var(--muted);">Pick a customer and add line items.</div>
+            </div>
+            <a href="{{ route('orders.index') }}" class="mf-btn-ghost">← All orders</a>
         </div>
-    </x-slot>
 
-    <div class="py-12">
-        <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
-            <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg">
-                <div class="p-6 text-gray-900">
-                    <form method="POST" action="{{ route('orders.store') }}" id="orderForm">
-                        @csrf
-                        
-                        <!-- Order Details -->
-                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                            <div>
-                                <x-input-label for="customer_id" :value="__('Customer')" />
-                                <select id="customer_id" name="customer_id" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                                    <option value="">Select Customer</option>
-                                    @foreach($customers as $customer)
-                                        <option value="{{ $customer->id }}" {{ old('customer_id') == $customer->id ? 'selected' : '' }}>
-                                            {{ $customer->name }}
-                                        </option>
-                                    @endforeach
-                                </select>
-                                <x-input-error :messages="$errors->get('customer_id')" class="mt-2" />
-                            </div>
+        <div class="mf-panel">
+            <form method="POST" action="{{ route('orders.store') }}" id="orderForm" class="p-5">
+                @csrf
 
-                            <div>
-                                <x-input-label for="order_date" :value="__('Order Date')" />
-                                <x-text-input id="order_date" name="order_date" type="date" class="mt-1 block w-full" 
-                                    :value="old('order_date', date('Y-m-d'))" required />
-                                <x-input-error :messages="$errors->get('order_date')" class="mt-2" />
-                            </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                    <div>
+                        <x-input-label for="customer_id" :value="__('Customer')" />
+                        <select id="customer_id" name="customer_id" class="mf-select" required>
+                            <option value="">Select customer</option>
+                            @foreach($customers as $customer)
+                                <option value="{{ $customer->id }}" {{ old('customer_id') == $customer->id ? 'selected' : '' }}>
+                                    {{ $customer->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <x-input-error :messages="$errors->get('customer_id')" class="mt-1" />
+                    </div>
 
-                            <div>
-                                <x-input-label for="delivery_date" :value="__('Delivery Date')" />
-                                <x-text-input id="delivery_date" name="delivery_date" type="date" class="mt-1 block w-full" 
-                                    :value="old('delivery_date')" />
-                                <x-input-error :messages="$errors->get('delivery_date')" class="mt-2" />
-                            </div>
+                    <div>
+                        <x-input-label for="order_date" :value="__('Order date')" />
+                        <x-text-input id="order_date" name="order_date" type="date"
+                            :value="old('order_date', date('Y-m-d'))" required />
+                        <x-input-error :messages="$errors->get('order_date')" class="mt-1" />
+                    </div>
 
-                            <div>
-                                <x-input-label for="delivery_address" :value="__('Delivery Address')" />
-                                <textarea id="delivery_address" name="delivery_address" rows="3" 
-                                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ old('delivery_address') }}</textarea>
-                                <x-input-error :messages="$errors->get('delivery_address')" class="mt-2" />
-                            </div>
-                        </div>
+                    <div>
+                        <x-input-label for="delivery_date" :value="__('Delivery date')" />
+                        <x-text-input id="delivery_date" name="delivery_date" type="date" :value="old('delivery_date')" />
+                        <x-input-error :messages="$errors->get('delivery_date')" class="mt-1" />
+                    </div>
 
-                        <div class="mb-6">
-                            <x-input-label for="notes" :value="__('Notes')" />
-                            <textarea id="notes" name="notes" rows="3" 
-                                class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">{{ old('notes') }}</textarea>
-                            <x-input-error :messages="$errors->get('notes')" class="mt-2" />
-                        </div>
+                    <div>
+                        <x-input-label for="delivery_address" :value="__('Delivery address')" />
+                        <textarea id="delivery_address" name="delivery_address" rows="3" class="mf-textarea">{{ old('delivery_address') }}</textarea>
+                        <x-input-error :messages="$errors->get('delivery_address')" class="mt-1" />
+                    </div>
+                </div>
 
-                        <!-- Order Items -->
-                        <div class="mb-6">
-                            <div class="flex justify-between items-center mb-4">
-                                <h3 class="text-lg font-medium text-gray-900">Order Items</h3>
-                                <button type="button" id="addItem" class="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded">
-                                    Add Item
-                                </button>
-                            </div>
+                <div class="mb-5">
+                    <x-input-label for="notes" :value="__('Notes')" />
+                    <textarea id="notes" name="notes" rows="3" class="mf-textarea">{{ old('notes') }}</textarea>
+                    <x-input-error :messages="$errors->get('notes')" class="mt-1" />
+                </div>
 
-                            <div id="orderItems" class="space-y-4">
-                                @if(old('items'))
-                                    @foreach(old('items') as $index => $item)
-                                        <div class="order-item bg-gray-50 p-4 rounded-lg relative">
-                                            <button type="button" class="remove-item absolute top-2 right-2 bg-red-500 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm">×</button>
-                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                                <div>
-                                                    <label class="block text-sm font-medium text-gray-700 mb-1">Product</label>
-                                                    <select name="items[{{ $index }}][product_variant_id]" class="product-select w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                                                        <option value="">Select Product</option>
-                                                        @foreach($productVariants as $productName => $variants)
-                                                            <optgroup label="{{ $productName }}">
-                                                                @foreach($variants as $variant)
-                                                                    <option value="{{ $variant->id }}" data-price="{{ $variant->base_price }}" 
-                                                                        {{ $item['product_variant_id'] == $variant->id ? 'selected' : '' }}>
-                                                                        {{ $variant->name }} (€{{ number_format($variant->base_price, 2) }})
-                                                                    </option>
-                                                                @endforeach
-                                                            </optgroup>
+                <div class="mb-5">
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="text-[14px] font-semibold">Order items</h3>
+                        <button type="button" id="addItem" class="mf-btn-secondary">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                            Add item
+                        </button>
+                    </div>
+
+                    <div id="orderItems" class="space-y-3">
+                        @if(old('items'))
+                            @foreach(old('items') as $index => $item)
+                                <div class="order-item relative rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--line);">
+                                    <button type="button" class="remove-item absolute top-2 right-2 grid place-items-center" style="width: 22px; height: 22px; border-radius: 11px; background: var(--line); color: var(--ink-2); font-size: 12px;">×</button>
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                        <div>
+                                            <label class="mf-label">Product</label>
+                                            <select name="items[{{ $index }}][product_variant_id]" class="product-select mf-select" required>
+                                                <option value="">Select product</option>
+                                                @foreach($productVariants as $productName => $variants)
+                                                    <optgroup label="{{ $productName }}">
+                                                        @foreach($variants as $variant)
+                                                            <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}"
+                                                                {{ $item['product_variant_id'] == $variant->id ? 'selected' : '' }}>
+                                                                {{ $variant->name }} ({{ $variant->price_label }})
+                                                            </option>
                                                         @endforeach
-                                                    </select>
-                                                </div>
-                                                <div>
-                                                    <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                                                    <input type="number" name="items[{{ $index }}][quantity]" min="1" 
-                                                        class="quantity-input w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" 
-                                                        value="{{ $item['quantity'] }}" required>
-                                                </div>
-                                                <div>
-                                                    <label class="block text-sm font-medium text-gray-700 mb-1">Line Total</label>
-                                                    <input type="text" class="line-total w-full rounded-md border-gray-300 bg-gray-100" readonly>
-                                                </div>
-                                            </div>
+                                                    </optgroup>
+                                                @endforeach
+                                            </select>
                                         </div>
-                                    @endforeach
-                                @else
-                                    <div class="order-item bg-gray-50 p-4 rounded-lg relative">
-                                        <button type="button" class="remove-item absolute top-2 right-2 bg-red-500 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm">×</button>
-                                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                            <div>
-                                                <label class="block text-sm font-medium text-gray-700 mb-1">Product</label>
-                                                <select name="items[0][product_variant_id]" class="product-select w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                                                    <option value="">Select Product</option>
-                                                    @foreach($productVariants as $productName => $variants)
-                                                        <optgroup label="{{ $productName }}">
-                                                            @foreach($variants as $variant)
-                                                                <option value="{{ $variant->id }}" data-price="{{ $variant->base_price }}">
-                                                                    {{ $variant->name }} (€{{ number_format($variant->base_price, 2) }})
-                                                                </option>
-                                                            @endforeach
-                                                        </optgroup>
-                                                    @endforeach
-                                                </select>
-                                            </div>
-                                            <div>
-                                                <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                                                <input type="number" name="items[0][quantity]" min="1" 
-                                                    class="quantity-input w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                                            </div>
-                                            <div>
-                                                <label class="block text-sm font-medium text-gray-700 mb-1">Line Total</label>
-                                                <input type="text" class="line-total w-full rounded-md border-gray-300 bg-gray-100" readonly>
-                                            </div>
+                                        <div>
+                                            <label class="mf-label">Quantity</label>
+                                            <input type="number" name="items[{{ $index }}][quantity]" min="1" class="quantity-input mf-input" value="{{ $item['quantity'] }}" required>
+                                        </div>
+                                        <div>
+                                            <label class="mf-label">Line total</label>
+                                            <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly>
                                         </div>
                                     </div>
-                                @endif
+                                </div>
+                            @endforeach
+                        @else
+                            <div class="order-item relative rounded-lg p-3" style="background: var(--bg); border: 1px solid var(--line);">
+                                <button type="button" class="remove-item absolute top-2 right-2 grid place-items-center" style="width: 22px; height: 22px; border-radius: 11px; background: var(--line); color: var(--ink-2); font-size: 12px;">×</button>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                    <div>
+                                        <label class="mf-label">Product</label>
+                                        <select name="items[0][product_variant_id]" class="product-select mf-select" required>
+                                            <option value="">Select product</option>
+                                            @foreach($productVariants as $productName => $variants)
+                                                <optgroup label="{{ $productName }}">
+                                                    @foreach($variants as $variant)
+                                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}">
+                                                            {{ $variant->name }} ({{ $variant->price_label }})
+                                                        </option>
+                                                    @endforeach
+                                                </optgroup>
+                                            @endforeach
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label class="mf-label">Quantity</label>
+                                        <input type="number" name="items[0][quantity]" min="1" class="quantity-input mf-input" required>
+                                    </div>
+                                    <div>
+                                        <label class="mf-label">Line total</label>
+                                        <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly>
+                                    </div>
+                                </div>
                             </div>
+                        @endif
+                    </div>
 
-                            <x-input-error :messages="$errors->get('items')" class="mt-2" />
-                        </div>
-
-                        <!-- Order Total -->
-                        <div class="mb-6 bg-gray-50 p-4 rounded-lg">
-                            <div class="flex justify-between items-center text-lg font-medium">
-                                <span>Order Total:</span>
-                                <span id="orderTotal">€0.00</span>
-                            </div>
-                        </div>
-
-                        <div class="flex items-center justify-end gap-4">
-                            <a href="{{ route('orders.index') }}" class="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-                                Cancel
-                            </a>
-                            <x-primary-button>
-                                {{ __('Create Order') }}
-                            </x-primary-button>
-                        </div>
-                    </form>
+                    <x-input-error :messages="$errors->get('items')" class="mt-2" />
                 </div>
-            </div>
+
+                <div class="mb-5 mf-panel">
+                    <div class="px-4 py-3 flex justify-between items-center">
+                        <span class="text-[13px] font-semibold">Order total</span>
+                        <span id="orderTotal" class="font-mono text-[18px] font-semibold">€0.00</span>
+                    </div>
+                </div>
+
+                <div class="flex items-center justify-end gap-2">
+                    <a href="{{ route('orders.index') }}" class="mf-btn-ghost">Cancel</a>
+                    <x-primary-button>{{ __('Create order') }}</x-primary-button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -176,19 +159,21 @@
 
         function createOrderItem(index) {
             const div = document.createElement('div');
-            div.className = 'order-item bg-gray-50 p-4 rounded-lg relative';
+            div.className = 'order-item relative rounded-lg p-3';
+            div.style.background = 'var(--bg)';
+            div.style.border = '1px solid var(--line)';
             div.innerHTML = `
-                <button type="button" class="remove-item absolute top-2 right-2 bg-red-500 hover:bg-red-700 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm">×</button>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button type="button" class="remove-item absolute top-2 right-2 grid place-items-center" style="width: 22px; height: 22px; border-radius: 11px; background: var(--line); color: var(--ink-2); font-size: 12px;">×</button>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Product</label>
-                        <select name="items[${index}][product_variant_id]" class="product-select w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                            <option value="">Select Product</option>
+                        <label class="mf-label">Product</label>
+                        <select name="items[${index}][product_variant_id]" class="product-select mf-select" required>
+                            <option value="">Select product</option>
                             @foreach($productVariants as $productName => $variants)
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
-                                        <option value="{{ $variant->id }}" data-price="{{ $variant->base_price }}">
-                                            {{ $variant->name }} (€{{ number_format($variant->base_price, 2) }})
+                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}">
+                                            {{ $variant->name }} ({{ $variant->price_label }})
                                         </option>
                                     @endforeach
                                 </optgroup>
@@ -196,18 +181,16 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
-                        <input type="number" name="items[${index}][quantity]" min="1" 
-                            class="quantity-input w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+                        <label class="mf-label">Quantity</label>
+                        <input type="number" name="items[${index}][quantity]" min="1" class="quantity-input mf-input" required>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-1">Line Total</label>
-                        <input type="text" class="line-total w-full rounded-md border-gray-300 bg-gray-100" readonly>
+                        <label class="mf-label">Line total</label>
+                        <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly>
                     </div>
                 </div>
             `;
 
-            // Add event listeners
             const removeBtn = div.querySelector('.remove-item');
             removeBtn.addEventListener('click', function() {
                 if (document.querySelectorAll('.order-item').length > 1) {
@@ -236,7 +219,7 @@
             const price = selectedOption ? parseFloat(selectedOption.dataset.price) : 0;
             const quantity = parseInt(quantityInput.value) || 0;
             const lineTotal = price * quantity;
-            
+
             lineTotalInput.value = '€' + lineTotal.toFixed(2);
             updateOrderTotal();
         }
@@ -246,7 +229,7 @@
             document.querySelectorAll('.order-item').forEach(function(item) {
                 const productSelect = item.querySelector('.product-select');
                 const quantityInput = item.querySelector('.quantity-input');
-                
+
                 if (productSelect.value && quantityInput.value) {
                     const selectedOption = productSelect.selectedOptions[0];
                     const price = parseFloat(selectedOption.dataset.price);
@@ -254,11 +237,10 @@
                     total += price * quantity;
                 }
             });
-            
+
             document.getElementById('orderTotal').textContent = '€' + total.toFixed(2);
         }
 
-        // Add event listeners to existing items
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.order-item').forEach(function(item) {
                 const removeBtn = item.querySelector('.remove-item');
@@ -281,7 +263,6 @@
                     updateLineTotal(productSelect, this, lineTotalInput);
                 });
 
-                // Calculate initial line total if values exist
                 if (productSelect.value && quantityInput.value) {
                     updateLineTotal(productSelect, quantityInput, lineTotalInput);
                 }

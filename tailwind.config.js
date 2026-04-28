@@ -12,7 +12,29 @@ export default {
     theme: {
         extend: {
             fontFamily: {
-                sans: ['Figtree', ...defaultTheme.fontFamily.sans],
+                sans: ['Inter', 'Figtree', ...defaultTheme.fontFamily.sans],
+                mono: ['"JetBrains Mono"', ...defaultTheme.fontFamily.mono],
+                display: ['Fraunces', ...defaultTheme.fontFamily.serif],
+            },
+            colors: {
+                ink: {
+                    DEFAULT: '#121311',
+                    2: '#3A3D36',
+                },
+                bone: {
+                    DEFAULT: '#FAF9F6',
+                    panel: '#FFFFFF',
+                    rail: '#F4F2EA',
+                    app: '#EEECE4',
+                },
+                line: {
+                    DEFAULT: '#E8E6DE',
+                    2: '#F0EEE7',
+                },
+                muted: {
+                    DEFAULT: '#6B6F65',
+                    faint: '#A8ABA2',
+                },
             },
         },
     },

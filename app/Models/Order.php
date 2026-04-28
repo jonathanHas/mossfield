@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -16,11 +15,12 @@ class Order extends Model
         'delivery_date',
         'status',
         'subtotal',
-        'tax_amount', 
+        'tax_amount',
         'total_amount',
         'payment_status',
         'delivery_address',
         'notes',
+        'mossorders_order_id',
     ];
 
     protected $casts = [
@@ -29,14 +29,15 @@ class Order extends Model
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
+        'mossorders_order_id' => 'integer',
     ];
 
     protected static function boot()
     {
         parent::boot();
-        
+
         static::creating(function ($order) {
-            if (!$order->order_number) {
+            if (! $order->order_number) {
                 $order->order_number = $order->generateOrderNumber();
             }
         });
@@ -57,29 +58,29 @@ class Order extends Model
         $date = $this->order_date ?? now();
         $dateString = $date->format('Ymd');
         $prefix = "ORD-{$dateString}-";
-        
+
         // Find the next sequence number for today
-        $lastOrder = self::where('order_number', 'like', $prefix . '%')
+        $lastOrder = self::where('order_number', 'like', $prefix.'%')
             ->orderBy('order_number', 'desc')
             ->first();
-            
+
         if ($lastOrder) {
             $lastSequence = (int) substr($lastOrder->order_number, -3);
             $nextSequence = $lastSequence + 1;
         } else {
             $nextSequence = 1;
         }
-        
-        return $prefix . str_pad($nextSequence, 3, '0', STR_PAD_LEFT);
+
+        return $prefix.str_pad($nextSequence, 3, '0', STR_PAD_LEFT);
     }
 
     public function calculateTotals(): void
     {
         $this->subtotal = $this->orderItems()->sum('line_total');
-        
+
         // Products are 0% VAT - only courier costs would have VAT
         $this->tax_amount = 0.00;
-        
+
         $this->total_amount = $this->subtotal + $this->tax_amount;
         $this->save();
     }
@@ -119,5 +120,10 @@ class Order extends Model
     public function canBeCancelled(): bool
     {
         return in_array($this->status, ['pending', 'confirmed']);
+    }
+
+    public function scopeFromMossorders($query)
+    {
+        return $query->whereNotNull('mossorders_order_id');
     }
 }

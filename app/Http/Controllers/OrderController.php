@@ -2,19 +2,20 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Order;
 use App\Models\Customer;
-use App\Models\ProductVariant;
+use App\Models\Order;
 use App\Models\OrderItem;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
+use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 
 class OrderController extends Controller
 {
     public function index(Request $request): View
     {
+        $this->authorize('viewAny', Order::class);
         $query = Order::with(['customer', 'orderItems.productVariant']);
 
         // Apply filters
@@ -36,14 +37,35 @@ class OrderController extends Controller
         return view('orders.index', compact('orders', 'customers'));
     }
 
-    public function show(Order $order): View
+    public function show(Request $request, Order $order): View
     {
+        $this->authorize('view', $order);
         $order->load(['customer', 'orderItems.productVariant.product']);
-        return view('orders.show', compact('order'));
+
+        $listFilters = array_filter($request->only(['status', 'payment_status', 'customer_id']), fn ($v) => $v !== null && $v !== '');
+
+        $listLimit = 50;
+        $listQuery = Order::with(['customer', 'orderItems.productVariant.product'])
+            ->orderBy('order_date', 'desc');
+
+        foreach ($listFilters as $field => $value) {
+            $listQuery->where($field, $value);
+        }
+
+        $listTotal = (clone $listQuery)->count();
+        $orderList = $listQuery->limit($listLimit)->get();
+
+        // Ensure the selected order is present in the list even when it falls outside the cap or filters.
+        if (! $orderList->contains('id', $order->id)) {
+            $orderList->prepend($order);
+        }
+
+        return view('orders.show', compact('order', 'orderList', 'listFilters', 'listTotal', 'listLimit'));
     }
 
     public function create(): View
     {
+        $this->authorize('create', Order::class);
         $customers = Customer::where('is_active', true)->orderBy('name')->get();
         $productVariants = ProductVariant::with('product')
             ->whereHas('product', function ($q) {
@@ -59,6 +81,7 @@ class OrderController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorize('create', Order::class);
         $validated = $request->validate([
             'customer_id' => 'required|exists:customers,id',
             'order_date' => 'required|date',
@@ -88,7 +111,7 @@ class OrderController extends Controller
             // Add order items
             foreach ($validated['items'] as $itemData) {
                 $variant = ProductVariant::find($itemData['product_variant_id']);
-                
+
                 OrderItem::create([
                     'order_id' => $order->id,
                     'product_variant_id' => $itemData['product_variant_id'],
@@ -104,19 +127,21 @@ class OrderController extends Controller
         });
 
         return redirect()->route('orders.show', $order)
-            ->with('success', 'Order ' . $order->order_number . ' created successfully!');
+            ->with('success', 'Order '.$order->order_number.' created successfully!');
     }
 
     public function edit(Order $order): View
     {
+        $this->authorize('update', $order);
         $order->load(['orderItems.productVariant']);
         $customers = Customer::where('is_active', true)->orderBy('name')->get();
-        
+
         return view('orders.edit', compact('order', 'customers'));
     }
 
     public function update(Request $request, Order $order): RedirectResponse
     {
+        $this->authorize('update', $order);
         $validated = $request->validate([
             'delivery_date' => 'nullable|date|after_or_equal:order_date',
             'status' => 'required|in:pending,confirmed,preparing,ready,dispatched,delivered,cancelled',

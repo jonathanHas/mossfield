@@ -6,17 +6,24 @@ use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseCuttingLog;
 use App\Models\ProductVariant;
-use Illuminate\Http\Request;
-use Illuminate\View\View;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\View\View;
 
 class CheeseCuttingController extends Controller
 {
     public function index(): View
     {
         // Get all cheese batches that are ready to cut with available whole wheels
-        $readyBatches = Batch::with(['product', 'batchItems.productVariant'])
+        $readyBatches = Batch::with([
+            'product',
+            'batchItems' => fn ($q) => $q->with('productVariant')
+                ->withCount('sourceCuttingLogs')
+                ->withSum([
+                    'orderAllocations as quantity_currently_allocated' => fn ($qa) => $qa->whereNull('fulfilled_at'),
+                ], DB::raw('quantity_allocated - quantity_fulfilled')),
+        ])
             ->whereHas('product', function ($q) {
                 $q->where('type', 'cheese');
             })
@@ -40,8 +47,8 @@ class CheeseCuttingController extends Controller
     public function create(BatchItem $batchItem): View
     {
         // Ensure this is a wheel from a cheese batch
-        if ($batchItem->batch->product->type !== 'cheese' || 
-            !str_contains(strtolower($batchItem->productVariant->name), 'wheel')) {
+        if ($batchItem->batch->product->type !== 'cheese' ||
+            ! str_contains(strtolower($batchItem->productVariant->name), 'wheel')) {
             abort(404, 'Only cheese wheels can be cut.');
         }
 
@@ -86,7 +93,7 @@ class CheeseCuttingController extends Controller
             // Update quantities
             $vacuumPackBatchItem->increment('quantity_produced', $validated['vacuum_packs_created']);
             $vacuumPackBatchItem->increment('quantity_remaining', $validated['vacuum_packs_created']);
-            
+
             // Reduce wheel count by 1
             $batchItem->decrement('quantity_remaining', 1);
 
@@ -102,6 +109,6 @@ class CheeseCuttingController extends Controller
         });
 
         return redirect()->route('cheese-cutting.index')
-            ->with('success', 'Cheese wheel cut successfully! Created ' . $validated['vacuum_packs_created'] . ' vacuum packs.');
+            ->with('success', 'Cheese wheel cut successfully! Created '.$validated['vacuum_packs_created'].' vacuum packs.');
     }
 }

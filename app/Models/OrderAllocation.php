@@ -12,6 +12,7 @@ class OrderAllocation extends Model
         'batch_item_id',
         'quantity_allocated',
         'quantity_fulfilled',
+        'actual_weight_kg',
         'allocated_at',
         'fulfilled_at',
         'notes',
@@ -20,6 +21,7 @@ class OrderAllocation extends Model
     protected $casts = [
         'quantity_allocated' => 'integer',
         'quantity_fulfilled' => 'integer',
+        'actual_weight_kg' => 'decimal:3',
         'allocated_at' => 'datetime',
         'fulfilled_at' => 'datetime',
     ];
@@ -42,5 +44,29 @@ class OrderAllocation extends Model
     public function isFullyFulfilled(): bool
     {
         return $this->quantity_fulfilled >= $this->quantity_allocated;
+    }
+
+    /**
+     * Check if this allocation requires weight entry at fulfillment.
+     */
+    public function requiresWeight(): bool
+    {
+        return $this->orderItem->productVariant->is_variable_weight ?? false;
+    }
+
+    /**
+     * Get the expected weight based on quantity and batch item unit weight.
+     */
+    public function getExpectedWeightAttribute(): ?float
+    {
+        if (! $this->requiresWeight()) {
+            return null;
+        }
+
+        $unitWeight = $this->batchItem->unit_weight_kg
+            ?? $this->orderItem->productVariant->weight_kg
+            ?? 0;
+
+        return $this->quantity_remaining * $unitWeight;
     }
 }
