@@ -27,12 +27,17 @@ PROD_PATH="${MOSSFIELD_PROD_PATH:-/var/www/mossfield}"
 BRANCH="${MOSSFIELD_BRANCH:-main}"
 ASSUME_YES=0
 DRY_RUN=0
+COMMIT_MSG=""
+INCLUDE_UNTRACKED=0
 REMOTE_ARGS=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     -y|--yes) ASSUME_YES=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
+    -m|--message) COMMIT_MSG="$2"; shift 2 ;;
+    --message=*) COMMIT_MSG="${1#*=}"; shift ;;
+    --include-untracked) INCLUDE_UNTRACKED=1; shift ;;
     --branch) BRANCH="$2"; REMOTE_ARGS+=("--branch=$2"); shift 2 ;;
     --branch=*) BRANCH="${1#*=}"; REMOTE_ARGS+=("$1"); shift ;;
     --maintenance|--skip-npm) REMOTE_ARGS+=("$1"); shift ;;
@@ -41,14 +46,16 @@ while [ $# -gt 0 ]; do
 Deploy mossfield to production.
 
 Usage:
-  deploy/bin/deploy [--yes] [--branch=<name>] [--maintenance] [--skip-npm] [--dry-run]
+  deploy/bin/deploy [-y] [-m "<msg>"] [--branch=<name>] [--maintenance] [--skip-npm] [--dry-run]
 
 Flags:
-  -y, --yes          Skip the confirmation prompt
-  --branch=<name>    Deploy a different branch (default: main)
-  --maintenance      Wrap the remote step in `php artisan down`/`up`
-  --skip-npm         Skip `npm ci && npm run build` on the remote
-  --dry-run          Run pre-flight checks, print summary, exit before push
+  -y, --yes              Skip the confirmation prompt
+  -m, --message=<msg>    Auto-commit dirty tracked files with this message
+  --include-untracked    Also stage untracked files (use with -m; default: tracked only)
+  --branch=<name>        Deploy a different branch (default: main)
+  --maintenance          Wrap the remote step in `php artisan down`/`up`
+  --skip-npm             Skip `npm ci && npm run build` on the remote
+  --dry-run              Run pre-flight checks, print summary, exit before push
 
 Environment:
   MOSSFIELD_PROD_HOST   SSH alias / host (default: mossfield-prod)
@@ -80,9 +87,26 @@ fail() { printf '✗ %s\n' "$*" >&2; exit 1; }
 
 step "Pre-flight checks"
 
-# 1. Working tree clean
+# 1a. Optional auto-commit of dirty tracked files
+if [ -n "$COMMIT_MSG" ]; then
+  if [ "$INCLUDE_UNTRACKED" -eq 1 ]; then
+    git add -A
+  else
+    git add -u
+  fi
+  if git diff --cached --quiet; then
+    echo "  ⓘ -m given but nothing to commit"
+  else
+    echo "  ⓘ committing staged changes:"
+    git diff --cached --stat | sed 's/^/    /'
+    git commit -m "$COMMIT_MSG"
+    echo "  ✓ auto-committed"
+  fi
+fi
+
+# 1b. Working tree clean
 if ! git diff --quiet || ! git diff --cached --quiet; then
-  fail "working tree dirty — commit or stash first (git status)"
+  fail "working tree dirty — commit or stash first, or use -m \"<msg>\" to auto-commit"
 fi
 echo "  ✓ working tree clean"
 
