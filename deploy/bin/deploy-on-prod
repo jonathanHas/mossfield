@@ -1,0 +1,149 @@
+#!/usr/bin/env bash
+#
+# Server-side redeploy script. Lives in the repo at deploy/bin/deploy-on-prod.
+# Invoked via SSH from deploy/bin/deploy, or run directly on the prod box:
+#
+#   sudo /var/www/mossfield/deploy/bin/deploy-on-prod
+#   sudo /var/www/mossfield/deploy/bin/deploy-on-prod --rollback-to abc1234
+#   sudo /var/www/mossfield/deploy/bin/deploy-on-prod --maintenance --skip-npm
+#
+# Mechanical translation of DEPLOYMENT.md §7.
+
+set -euo pipefail
+
+INSTALL_DIR="${MOSSFIELD_INSTALL_DIR:-/var/www/mossfield}"
+PHP_SERVICE="${MOSSFIELD_PHP_SERVICE:-php8.3-fpm}"
+BRANCH="main"
+ROLLBACK_TO=""
+MAINTENANCE=0
+SKIP_NPM=0
+WEB_USER="www-data"
+LOCK_FILE="/var/run/mossfield-deploy.lock"
+LOG_FILE="$INSTALL_DIR/storage/logs/deploys.log"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rollback-to) ROLLBACK_TO="$2"; shift 2 ;;
+    --rollback-to=*) ROLLBACK_TO="${1#*=}"; shift ;;
+    --branch) BRANCH="$2"; shift 2 ;;
+    --branch=*) BRANCH="${1#*=}"; shift ;;
+    --maintenance) MAINTENANCE=1; shift ;;
+    --skip-npm) SKIP_NPM=1; shift ;;
+    -h|--help)
+      cat <<'HELP'
+Server-side redeploy script. Lives at /var/www/mossfield/deploy/bin/deploy-on-prod.
+
+Usually invoked via SSH from the dev-side deploy/bin/deploy script, but can be
+run directly on the prod box:
+
+  sudo /var/www/mossfield/deploy/bin/deploy-on-prod
+  sudo /var/www/mossfield/deploy/bin/deploy-on-prod --rollback-to abc1234
+  sudo /var/www/mossfield/deploy/bin/deploy-on-prod --maintenance --skip-npm
+
+Flags:
+  --rollback-to <sha>   Restore code to the given commit (no DB rollback)
+  --branch=<name>       Branch to deploy (default: main)
+  --maintenance         Wrap in `php artisan down`/`up`
+  --skip-npm            Skip frontend rebuild
+
+Environment:
+  MOSSFIELD_INSTALL_DIR   Install path (default: /var/www/mossfield)
+  MOSSFIELD_PHP_SERVICE   PHP-FPM systemd unit (default: php8.3-fpm)
+
+Mechanical translation of DEPLOYMENT.md §7.
+HELP
+      exit 0
+      ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "deploy-on-prod must be run as root (it does systemctl reload)" >&2
+  exit 1
+fi
+
+# Lockfile guard — non-blocking flock so concurrent deploys fail fast
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+  echo "deploy already in progress (lock held: $LOCK_FILE)" >&2
+  exit 1
+fi
+
+cd "$INSTALL_DIR"
+
+START_TS=$(date -Iseconds)
+START_EPOCH=$(date +%s)
+PRE_SHA=$(sudo -u "$WEB_USER" git rev-parse HEAD)
+NEW_SHA="$PRE_SHA"
+
+# Append summary on exit, regardless of success/failure
+on_exit() {
+  local exit_code=$?
+  local end_epoch
+  end_epoch=$(date +%s)
+  local duration=$((end_epoch - START_EPOCH))
+  printf '%s pre=%s new=%s mode=%s duration=%ss exit=%s\n' \
+    "$START_TS" "${PRE_SHA:0:10}" "${NEW_SHA:0:10}" \
+    "$([ -n "$ROLLBACK_TO" ] && echo rollback || echo deploy)" \
+    "$duration" "$exit_code" \
+    | sudo -u "$WEB_USER" tee -a "$LOG_FILE" >/dev/null
+}
+trap on_exit EXIT
+
+step() { printf '\n==> %s\n' "$*"; }
+
+if [ -n "$ROLLBACK_TO" ]; then
+  step "Rolling back to $ROLLBACK_TO"
+  sudo -u "$WEB_USER" git fetch origin
+  sudo -u "$WEB_USER" git reset --hard "$ROLLBACK_TO"
+else
+  step "Pulling $BRANCH from origin"
+  sudo -u "$WEB_USER" git fetch origin
+  sudo -u "$WEB_USER" git checkout "$BRANCH"
+  sudo -u "$WEB_USER" git pull --ff-only origin "$BRANCH"
+fi
+
+NEW_SHA=$(sudo -u "$WEB_USER" git rev-parse HEAD)
+echo "    pre  = $PRE_SHA"
+echo "    new  = $NEW_SHA"
+
+step "composer install --no-dev"
+sudo -u "$WEB_USER" composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
+
+if [ "$SKIP_NPM" -eq 0 ]; then
+  step "npm ci && npm run build"
+  sudo -u "$WEB_USER" npm ci --no-audit --no-fund
+  sudo -u "$WEB_USER" npm run build
+else
+  echo "    (skipped — --skip-npm)"
+fi
+
+if [ "$MAINTENANCE" -eq 1 ] && [ -z "$ROLLBACK_TO" ]; then
+  step "artisan down"
+  sudo -u "$WEB_USER" php artisan down --render="errors::503" || true
+fi
+
+if [ -z "$ROLLBACK_TO" ]; then
+  step "artisan migrate --force"
+  sudo -u "$WEB_USER" php artisan migrate --force
+fi
+
+step "Rebuilding framework caches"
+sudo -u "$WEB_USER" php artisan config:cache
+sudo -u "$WEB_USER" php artisan route:cache
+sudo -u "$WEB_USER" php artisan view:cache
+
+step "systemctl reload $PHP_SERVICE"
+systemctl reload "$PHP_SERVICE"
+
+if [ "$MAINTENANCE" -eq 1 ] && [ -z "$ROLLBACK_TO" ]; then
+  step "artisan up"
+  sudo -u "$WEB_USER" php artisan up
+fi
+
+step "Done"
+echo "    deployed: $NEW_SHA"
+if [ -z "$ROLLBACK_TO" ] && [ "$PRE_SHA" != "$NEW_SHA" ]; then
+  echo "    rollback: sudo $0 --rollback-to ${PRE_SHA:0:10}"
+fi

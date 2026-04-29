@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+#
+# Deploy mossfield to production.
+# Run from the dev box. Pushes the current branch to GitHub, then SSHes to
+# the prod box and triggers deploy/bin/deploy-on-prod there.
+#
+# Usage:
+#   deploy/bin/deploy [--yes] [--branch=<name>] [--maintenance] [--skip-npm] [--dry-run]
+#
+# Environment overrides:
+#   MOSSFIELD_PROD_HOST   SSH alias / host (default: mossfield-prod)
+#   MOSSFIELD_BRANCH      Branch to deploy (default: main)
+#   MOSSFIELD_PROD_PATH   Install dir on prod (default: /var/www/mossfield)
+#
+# The SSH alias is expected to be configured in ~/.ssh/config with the right
+# user (root) and key, e.g.:
+#
+#   Host mossfield-prod
+#       HostName 1.2.3.4
+#       User root
+#       IdentityFile ~/.ssh/id_ed25519
+
+set -euo pipefail
+
+PROD_HOST="${MOSSFIELD_PROD_HOST:-mossfield-prod}"
+PROD_PATH="${MOSSFIELD_PROD_PATH:-/var/www/mossfield}"
+BRANCH="${MOSSFIELD_BRANCH:-main}"
+ASSUME_YES=0
+DRY_RUN=0
+REMOTE_ARGS=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -y|--yes) ASSUME_YES=1; shift ;;
+    --dry-run) DRY_RUN=1; shift ;;
+    --branch) BRANCH="$2"; REMOTE_ARGS+=("--branch=$2"); shift 2 ;;
+    --branch=*) BRANCH="${1#*=}"; REMOTE_ARGS+=("$1"); shift ;;
+    --maintenance|--skip-npm) REMOTE_ARGS+=("$1"); shift ;;
+    -h|--help)
+      cat <<'HELP'
+Deploy mossfield to production.
+
+Usage:
+  deploy/bin/deploy [--yes] [--branch=<name>] [--maintenance] [--skip-npm] [--dry-run]
+
+Flags:
+  -y, --yes          Skip the confirmation prompt
+  --branch=<name>    Deploy a different branch (default: main)
+  --maintenance      Wrap the remote step in `php artisan down`/`up`
+  --skip-npm         Skip `npm ci && npm run build` on the remote
+  --dry-run          Run pre-flight checks, print summary, exit before push
+
+Environment:
+  MOSSFIELD_PROD_HOST   SSH alias / host (default: mossfield-prod)
+  MOSSFIELD_BRANCH      Branch to deploy (default: main)
+  MOSSFIELD_PROD_PATH   Install dir on prod (default: /var/www/mossfield)
+
+The SSH alias is expected in ~/.ssh/config, e.g.:
+  Host mossfield-prod
+      HostName 1.2.3.4
+      User root
+      IdentityFile ~/.ssh/id_ed25519
+HELP
+      exit 0
+      ;;
+    *) echo "unknown arg: $1" >&2; exit 2 ;;
+  esac
+done
+
+# Locate repo root (script may be invoked from anywhere)
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$REPO_ROOT" ]; then
+  echo "✗ not in a git repo" >&2
+  exit 1
+fi
+cd "$REPO_ROOT"
+
+step() { printf '\n==> %s\n' "$*"; }
+fail() { printf '✗ %s\n' "$*" >&2; exit 1; }
+
+step "Pre-flight checks"
+
+# 1. Working tree clean
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  fail "working tree dirty — commit or stash first (git status)"
+fi
+echo "  ✓ working tree clean"
+
+# 2. On the right branch
+CUR_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$CUR_BRANCH" != "$BRANCH" ]; then
+  fail "currently on '$CUR_BRANCH', expected '$BRANCH' (use --branch=$CUR_BRANCH to override)"
+fi
+echo "  ✓ on $BRANCH"
+
+# 3. Remote in sync (or ahead)
+git fetch origin "$BRANCH" --quiet
+LOCAL_SHA=$(git rev-parse HEAD)
+REMOTE_SHA=$(git rev-parse "origin/$BRANCH")
+BEHIND=$(git rev-list --count "HEAD..origin/$BRANCH")
+AHEAD=$(git rev-list --count "origin/$BRANCH..HEAD")
+if [ "$BEHIND" -gt 0 ]; then
+  fail "local is $BEHIND commit(s) behind origin/$BRANCH — pull first"
+fi
+if [ "$AHEAD" -eq 0 ] && [ "$LOCAL_SHA" = "$REMOTE_SHA" ]; then
+  echo "  ⓘ no new commits — will redeploy current tip ($LOCAL_SHA)"
+else
+  echo "  ✓ $AHEAD commit(s) ahead of origin/$BRANCH"
+fi
+
+# 4. Prod reachable
+if ! ssh -q -o BatchMode=yes -o ConnectTimeout=5 "$PROD_HOST" exit 2>/dev/null; then
+  fail "cannot reach $PROD_HOST via SSH (check ~/.ssh/config and MOSSFIELD_PROD_HOST)"
+fi
+echo "  ✓ $PROD_HOST reachable"
+
+# 5. Show what's about to deploy
+step "Deploy summary"
+LOCAL_SUBJECT=$(git log -1 --pretty=%s)
+LOCAL_SHORT=$(git rev-parse --short HEAD)
+REMOTE_PROD_SHA=$(ssh "$PROD_HOST" "cd $PROD_PATH && sudo -u www-data git rev-parse HEAD" 2>/dev/null || echo "unknown")
+REMOTE_PROD_SHORT=${REMOTE_PROD_SHA:0:10}
+echo "  branch:   $BRANCH"
+echo "  prod is:  $REMOTE_PROD_SHORT"
+echo "  will be:  $LOCAL_SHORT — $LOCAL_SUBJECT"
+echo "  host:     $PROD_HOST"
+[ ${#REMOTE_ARGS[@]} -gt 0 ] && echo "  flags:    ${REMOTE_ARGS[*]}"
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo
+  echo "(dry run — no push, no SSH, exiting)"
+  exit 0
+fi
+
+# 6. Confirm
+if [ "$ASSUME_YES" -ne 1 ]; then
+  echo
+  read -r -p "Proceed? [y/N] " confirm
+  case "$confirm" in
+    y|Y|yes|YES) ;;
+    *) echo "aborted."; exit 1 ;;
+  esac
+fi
+
+# 7. Push
+step "Pushing to origin/$BRANCH"
+git push origin "$BRANCH"
+
+# 8. Trigger remote deploy
+step "Running deploy-on-prod"
+# Pass remote args verbatim. -t allocates a TTY so output streams nicely.
+ssh -t "$PROD_HOST" "sudo $PROD_PATH/deploy/bin/deploy-on-prod ${REMOTE_ARGS[*]:-}"
+
+step "Deploy complete"
+echo "  rollback if needed: ssh $PROD_HOST sudo $PROD_PATH/deploy/bin/deploy-on-prod --rollback-to ${REMOTE_PROD_SHORT}"
