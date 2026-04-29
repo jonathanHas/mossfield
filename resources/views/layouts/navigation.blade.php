@@ -140,9 +140,9 @@
 
     <!-- User block -->
     <div class="border-t flex items-center gap-2.5 px-3 py-3" style="border-color: var(--line);">
-        <x-dropdown align="left" width="48">
+        <x-dropdown align="top-start" width="48" class="w-full">
             <x-slot name="trigger">
-                <button type="button" class="flex items-center gap-2.5 w-full text-left">
+                <button type="button" class="flex items-center gap-2.5 w-full text-left cursor-pointer rounded-md px-1 py-1 hover:bg-white/60 focus:outline-none focus:bg-white/60 transition-colors">
                     <div
                         class="grid place-items-center font-semibold text-[12px]"
                         style="width: 28px; height: 28px; border-radius: 14px; background: var(--accent); color: #fff;"
