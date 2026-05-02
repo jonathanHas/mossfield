@@ -82,6 +82,13 @@ class OrderController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $this->authorize('create', Order::class);
+
+        $items = collect($request->input('items', []))
+            ->filter(fn ($item) => is_array($item) && ! empty($item['product_variant_id'] ?? null))
+            ->values()
+            ->all();
+        $request->merge(['items' => $items]);
+
         $validated = $request->validate([
             'customer_id' => 'required|exists:customers,id',
             'order_date' => 'required|date',

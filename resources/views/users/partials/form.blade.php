@@ -32,7 +32,18 @@
         <label for="password" class="mf-label">
             {{ $user ? 'New password (leave blank to keep current)' : 'Initial password' }}
         </label>
-        <input type="text" name="password" id="password" autocomplete="off" {{ $user ? '' : 'required' }} class="mf-input">
+        <div x-data="{ show: false }" class="relative">
+            <input :type="show ? 'text' : 'password'" name="password" id="password"
+                   autocomplete="new-password" {{ $user ? '' : 'required' }}
+                   class="mf-input pr-16">
+            <button type="button" @click="show = !show"
+                    class="absolute inset-y-0 right-0 px-3 text-[12px] font-medium"
+                    style="color: var(--muted);"
+                    x-text="show ? 'Hide' : 'Show'"
+                    :aria-label="show ? 'Hide password' : 'Show password'"
+                    :aria-pressed="show">
+            </button>
+        </div>
         <p class="text-[12px] mt-1" style="color: var(--muted);">Minimum 8 characters. Share this with the user in person; they can change it via Profile.</p>
     </div>
 

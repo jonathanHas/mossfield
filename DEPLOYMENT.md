@@ -59,6 +59,14 @@ find storage bootstrap/cache -type d -exec chmod 775 {} \;
 find storage bootstrap/cache -type f -exec chmod 664 {} \;
 ```
 
+### Public storage symlink
+
+```bash
+php artisan storage:link
+```
+
+Creates `public/storage` → `storage/app/public`. Without it, uploaded product images write to disk fine but render as broken `<img>` on the product index/show pages (the URL `/storage/products/...` resolves through this symlink). Idempotent — safe to re-run.
+
 ### Framework caches
 
 ```bash
@@ -233,17 +241,22 @@ The hourly run appends a `run summary` line. Dashboard freshness strip updates w
 
 ## 7. Upgrade / redeploy
 
+Routine path: from the dev box, `deploy/bin/deploy` (see `deploy/INSTALL.md` "Future redeploys" for the SSH alias / `ssh-add` setup it depends on). On the prod box that wraps `deploy/bin/deploy-on-prod`, which is a mechanical translation of the steps below.
+
+Manual fallback (also what to run if `deploy-on-prod` is broken):
+
 ```bash
 cd /var/www/mossfield
-git fetch --tags && git checkout <new-tag>
-composer install --no-dev --optimize-autoloader
-npm ci && npm run build
-php artisan migrate --force
-php artisan config:cache
-php artisan route:cache
-php artisan view:cache
+sudo -u www-data git fetch --tags && sudo -u www-data git checkout <new-tag>
+sudo -u www-data composer install --no-dev --optimize-autoloader
+sudo -u www-data npm ci && sudo -u www-data npm run build
+sudo -u www-data php artisan migrate --force
+sudo -u www-data php artisan storage:link
+sudo -u www-data php artisan config:cache
+sudo -u www-data php artisan route:cache
+sudo -u www-data php artisan view:cache
 # restart php-fpm or equivalent so opcache picks up new code
-sudo systemctl reload php8.2-fpm
+sudo systemctl reload php8.3-fpm
 ```
 
 If the upgrade introduces new env vars, diff `.env.example` against `.env` and add anything missing before restarting.

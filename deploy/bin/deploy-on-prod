@@ -129,6 +129,9 @@ if [ -z "$ROLLBACK_TO" ]; then
   sudo -u "$WEB_USER" php artisan migrate --force
 fi
 
+step "Ensuring public/storage symlink"
+sudo -u "$WEB_USER" php artisan storage:link
+
 step "Rebuilding framework caches"
 sudo -u "$WEB_USER" php artisan config:cache
 sudo -u "$WEB_USER" php artisan route:cache

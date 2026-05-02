@@ -243,6 +243,8 @@ sudo chown -R www-data:www-data storage bootstrap/cache
 sudo find storage bootstrap/cache -type d -exec chmod 775 {} \;
 sudo find storage bootstrap/cache -type f -exec chmod 664 {} \;
 
+sudo -u www-data php artisan storage:link
+
 sudo -u www-data php artisan config:cache
 sudo -u www-data php artisan route:cache
 sudo -u www-data php artisan view:cache
@@ -376,7 +378,30 @@ Verify: a curl to `/api/products` from the mossorders host returns 200; from any
 
 ## Future redeploys
 
-For upgrades, follow `DEPLOYMENT.md` §7. The short version:
+The routine path is `deploy/bin/deploy`, run from the dev box:
+
+```bash
+cd <repo-root>
+deploy/bin/deploy            # add -m "<msg>" to auto-commit dirty tracked files
+```
+
+It pushes the current branch to GitHub, then SSHes to the prod box and runs `deploy/bin/deploy-on-prod` (which handles git pull, composer, npm, migrate, cache rebuild, php-fpm reload). See the script's `--help` for flags (`--maintenance`, `--skip-npm`, `--branch=`, `--dry-run`).
+
+One-time dev-box setup before the first run:
+
+1. **SSH alias** in `~/.ssh/config` — the script defaults to host `mossfield-prod`:
+   ```
+   Host mossfield-prod
+       HostName <prod-host-or-ip>
+       User root
+       IdentityFile ~/.ssh/id_ed25519
+       IdentitiesOnly yes
+   ```
+   (Override the alias name with `MOSSFIELD_PROD_HOST=<other>` if you prefer.)
+2. **Load the SSH key into ssh-agent** if it has a passphrase: `ssh-add ~/.ssh/id_ed25519`. The script's pre-flight reachability check uses `BatchMode=yes` and will fail otherwise, even if interactive SSH would work.
+3. **Prod box authorized_keys** must include the dev box's public key under `/root/.ssh/authorized_keys`.
+
+Manual fallback (when the script can't be used) — same steps `deploy-on-prod` runs:
 
 ```bash
 cd /var/www/mossfield
@@ -384,6 +409,7 @@ sudo -u www-data git fetch --tags && sudo -u www-data git checkout <new-tag>
 sudo -u www-data composer install --no-dev --optimize-autoloader
 sudo -u www-data npm ci && sudo -u www-data npm run build
 sudo -u www-data php artisan migrate --force
+sudo -u www-data php artisan storage:link
 sudo -u www-data php artisan config:cache
 sudo -u www-data php artisan route:cache
 sudo -u www-data php artisan view:cache

@@ -19,6 +19,12 @@
 #       HostName 1.2.3.4
 #       User root
 #       IdentityFile ~/.ssh/id_ed25519
+#       IdentitiesOnly yes
+#
+# If your private key has a passphrase, run `ssh-add ~/.ssh/id_ed25519` once
+# per shell session before invoking this script — the pre-flight reachability
+# check uses BatchMode=yes and will fail without an unlocked agent, even if
+# interactive SSH to the same host works.
 
 set -euo pipefail
 
@@ -134,7 +140,7 @@ fi
 
 # 4. Prod reachable
 if ! ssh -q -o BatchMode=yes -o ConnectTimeout=5 "$PROD_HOST" exit 2>/dev/null; then
-  fail "cannot reach $PROD_HOST via SSH (check ~/.ssh/config and MOSSFIELD_PROD_HOST)"
+  fail "cannot reach $PROD_HOST via SSH — check ~/.ssh/config alias / MOSSFIELD_PROD_HOST, and run \`ssh-add\` if your key has a passphrase"
 fi
 echo "  ✓ $PROD_HOST reachable"
 

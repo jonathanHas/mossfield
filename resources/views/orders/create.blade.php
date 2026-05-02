@@ -55,13 +55,7 @@
                 </div>
 
                 <div class="mb-5">
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="text-[14px] font-semibold">Order items</h3>
-                        <button type="button" id="addItem" class="mf-btn-secondary">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
-                            Add item
-                        </button>
-                    </div>
+                    <h3 class="text-[14px] font-semibold mb-3">Order items</h3>
 
                     <div id="orderItems" class="space-y-3">
                         @if(old('items'))
@@ -71,7 +65,7 @@
                                     <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                         <div>
                                             <label class="mf-label">Product</label>
-                                            <select name="items[{{ $index }}][product_variant_id]" class="product-select mf-select" required>
+                                            <select name="items[{{ $index }}][product_variant_id]" class="product-select mf-select">
                                                 <option value="">Select product</option>
                                                 @foreach($productVariants as $productName => $variants)
                                                     <optgroup label="{{ $productName }}">
@@ -87,7 +81,7 @@
                                         </div>
                                         <div>
                                             <label class="mf-label">Quantity</label>
-                                            <input type="number" name="items[{{ $index }}][quantity]" min="1" class="quantity-input mf-input" value="{{ $item['quantity'] }}" required>
+                                            <input type="number" name="items[{{ $index }}][quantity]" min="1" class="quantity-input mf-input" value="{{ $item['quantity'] }}">
                                         </div>
                                         <div>
                                             <label class="mf-label">Line total</label>
@@ -102,7 +96,7 @@
                                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                                     <div>
                                         <label class="mf-label">Product</label>
-                                        <select name="items[0][product_variant_id]" class="product-select mf-select" required>
+                                        <select name="items[0][product_variant_id]" class="product-select mf-select">
                                             <option value="">Select product</option>
                                             @foreach($productVariants as $productName => $variants)
                                                 <optgroup label="{{ $productName }}">
@@ -117,7 +111,7 @@
                                     </div>
                                     <div>
                                         <label class="mf-label">Quantity</label>
-                                        <input type="number" name="items[0][quantity]" min="1" class="quantity-input mf-input" required>
+                                        <input type="number" name="items[0][quantity]" min="1" class="quantity-input mf-input">
                                     </div>
                                     <div>
                                         <label class="mf-label">Line total</label>
@@ -149,13 +143,18 @@
     <script>
         let itemIndex = {{ old('items') ? count(old('items')) : 1 }};
 
-        document.getElementById('addItem').addEventListener('click', function() {
+        function appendEmptyItem() {
             const orderItems = document.getElementById('orderItems');
             const newItem = createOrderItem(itemIndex);
             orderItems.appendChild(newItem);
             itemIndex++;
             updateOrderTotal();
-        });
+        }
+
+        function isLastItem(itemEl) {
+            const items = document.querySelectorAll('#orderItems .order-item');
+            return items.length > 0 && items[items.length - 1] === itemEl;
+        }
 
         function createOrderItem(index) {
             const div = document.createElement('div');
@@ -167,7 +166,7 @@
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div>
                         <label class="mf-label">Product</label>
-                        <select name="items[${index}][product_variant_id]" class="product-select mf-select" required>
+                        <select name="items[${index}][product_variant_id]" class="product-select mf-select">
                             <option value="">Select product</option>
                             @foreach($productVariants as $productName => $variants)
                                 <optgroup label="{{ $productName }}">
@@ -182,7 +181,7 @@
                     </div>
                     <div>
                         <label class="mf-label">Quantity</label>
-                        <input type="number" name="items[${index}][quantity]" min="1" class="quantity-input mf-input" required>
+                        <input type="number" name="items[${index}][quantity]" min="1" class="quantity-input mf-input">
                     </div>
                     <div>
                         <label class="mf-label">Line total</label>
@@ -193,10 +192,9 @@
 
             const removeBtn = div.querySelector('.remove-item');
             removeBtn.addEventListener('click', function() {
-                if (document.querySelectorAll('.order-item').length > 1) {
-                    div.remove();
-                    updateOrderTotal();
-                }
+                div.remove();
+                updateOrderTotal();
+                ensureTrailingEmptyItem();
             });
 
             const productSelect = div.querySelector('.product-select');
@@ -205,6 +203,9 @@
 
             productSelect.addEventListener('change', function() {
                 updateLineTotal(this, quantityInput, lineTotalInput);
+                if (this.value && isLastItem(div)) {
+                    appendEmptyItem();
+                }
             });
 
             quantityInput.addEventListener('input', function() {
@@ -212,6 +213,18 @@
             });
 
             return div;
+        }
+
+        function ensureTrailingEmptyItem() {
+            const items = document.querySelectorAll('#orderItems .order-item');
+            if (items.length === 0) {
+                appendEmptyItem();
+                return;
+            }
+            const last = items[items.length - 1];
+            if (last.querySelector('.product-select').value) {
+                appendEmptyItem();
+            }
         }
 
         function updateLineTotal(productSelect, quantityInput, lineTotalInput) {
@@ -249,14 +262,16 @@
                 const lineTotalInput = item.querySelector('.line-total');
 
                 removeBtn.addEventListener('click', function() {
-                    if (document.querySelectorAll('.order-item').length > 1) {
-                        item.remove();
-                        updateOrderTotal();
-                    }
+                    item.remove();
+                    updateOrderTotal();
+                    ensureTrailingEmptyItem();
                 });
 
                 productSelect.addEventListener('change', function() {
                     updateLineTotal(this, quantityInput, lineTotalInput);
+                    if (this.value && isLastItem(item)) {
+                        appendEmptyItem();
+                    }
                 });
 
                 quantityInput.addEventListener('input', function() {
@@ -268,6 +283,7 @@
                 }
             });
 
+            ensureTrailingEmptyItem();
             updateOrderTotal();
         });
     </script>
