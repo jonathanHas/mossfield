@@ -72,7 +72,7 @@ class OrderAllocationConcurrencyTest extends TestCase
         $second = $orderItemB->allocateFromBatchItem($this->batchItem->fresh(), 5);
 
         $this->assertNull($second, 'Second allocation must be rejected — only 2 available.');
-        $this->assertSame(1, $orderItemB->orderAllocations()->count());
+        $this->assertSame(0, $orderItemB->orderAllocations()->count(), 'Rejected allocation must create no row.');
         $this->assertSame(0, (int) $orderItemB->orderAllocations()->sum('quantity_allocated'));
     }
 

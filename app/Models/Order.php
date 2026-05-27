@@ -18,6 +18,8 @@ class Order extends Model
         'tax_amount',
         'total_amount',
         'payment_status',
+        'dispatched_at',
+        'delivered_at',
         'delivery_address',
         'notes',
         'mossorders_order_id',
@@ -26,6 +28,8 @@ class Order extends Model
     protected $casts = [
         'order_date' => 'date',
         'delivery_date' => 'date',
+        'dispatched_at' => 'datetime',
+        'delivered_at' => 'datetime',
         'subtotal' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
@@ -76,7 +80,11 @@ class Order extends Model
 
     public function calculateTotals(): void
     {
-        $this->subtotal = $this->orderItems()->sum('line_total');
+        // Use each line's invoiceable total — the actual fulfilled value (e.g.
+        // recorded weight × €/kg) once fulfilled, otherwise the estimate — so an
+        // order's total reflects what's actually being shipped, not the nominal
+        // estimate. Computed in PHP because invoiceable_total isn't a column.
+        $this->subtotal = round($this->orderItems()->get()->sum(fn ($item) => $item->invoiceable_total), 2);
 
         // Products are 0% VAT - only courier costs would have VAT
         $this->tax_amount = 0.00;
@@ -117,9 +125,36 @@ class Order extends Model
         });
     }
 
+    public function isFullyFulfilled(): bool
+    {
+        return $this->orderItems->isNotEmpty()
+            && $this->orderItems->every(function ($item) {
+                return $item->quantity_fulfilled >= $item->quantity_ordered;
+            });
+    }
+
     public function canBeCancelled(): bool
     {
-        return in_array($this->status, ['pending', 'confirmed']);
+        // Anything not yet shipped can be cancelled; cancelling returns reserved
+        // and picked stock to its batch (see OrderController::update()).
+        return in_array($this->status, ['pending', 'confirmed', 'preparing', 'ready']);
+    }
+
+    /**
+     * Keep the ready/preparing boundary in sync after items or fulfilment
+     * change: a ready order with unpicked work drops to preparing, and a
+     * fully-picked preparing order advances to ready. Intentionally one-
+     * directional around that boundary — never demotes preparing → confirmed.
+     */
+    public function reconcilePickingStatus(): void
+    {
+        $this->load('orderItems');
+
+        if ($this->status === 'ready' && ! $this->isFullyFulfilled()) {
+            $this->update(['status' => 'preparing']);
+        } elseif ($this->status === 'preparing' && $this->isFullyFulfilled()) {
+            $this->update(['status' => 'ready']);
+        }
     }
 
     public function scopeFromMossorders($query)

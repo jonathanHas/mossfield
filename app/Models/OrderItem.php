@@ -165,6 +165,16 @@ class OrderItem extends Model
     }
 
     /**
+     * Whether weight is captured as a single total at fulfilment (e.g. vacuum
+     * packs) instead of per-unit (e.g. cheese wheels). Only meaningful when
+     * isVariableWeight() is true.
+     */
+    public function isBulkWeighed(): bool
+    {
+        return $this->productVariant->is_bulk_weighed ?? false;
+    }
+
+    /**
      * Check if this order item is priced by weight.
      */
     public function isPricedByWeight(): bool
@@ -185,11 +195,17 @@ class OrderItem extends Model
     }
 
     /**
-     * Get the invoiceable total (fulfilled_total if available, otherwise line_total).
+     * The amount to display/charge for this line: the actual fulfilled total
+     * (recorded weight × unit price for weight-priced items) once the line is
+     * FULLY fulfilled, otherwise the pre-fulfilment estimate (line_total, which
+     * covers the whole ordered quantity). Using the fulfilled total only when
+     * complete avoids understating a partially-picked line.
      */
     public function getInvoiceableTotalAttribute(): float
     {
-        return $this->fulfilled_total ?? $this->line_total;
+        return $this->isFullyFulfilled() && $this->fulfilled_total > 0
+            ? (float) $this->fulfilled_total
+            : (float) $this->line_total;
     }
 
     /**
@@ -232,6 +248,94 @@ class OrderItem extends Model
             $this->save();
 
             return true;
+        });
+    }
+
+    /**
+     * Release up to $units of committed quantity from this line, unwinding
+     * allocations. Reserved-but-unfulfilled units are released first (just a
+     * soft reservation — no stock change); fulfilled units are unwound last via
+     * unfulfillAllocation(), which restores BatchItem.quantity_remaining. This
+     * is what edit-quantity and remove-line use so the FK cascade never strands
+     * picked stock. Returns the number of units actually released (capped at the
+     * line's total committed quantity).
+     */
+    public function releaseUnits(int $units): int
+    {
+        if ($units <= 0) {
+            return 0;
+        }
+
+        return DB::transaction(function () use ($units) {
+            $remaining = $units;
+
+            // Pass 1 — release reserved (unfulfilled) units: no stock movement.
+            $allocations = $this->orderAllocations()
+                ->orderByDesc('id')
+                ->lockForUpdate()
+                ->get();
+
+            foreach ($allocations as $alloc) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                $reserved = $alloc->quantity_allocated - $alloc->quantity_fulfilled;
+                if ($reserved <= 0) {
+                    continue;
+                }
+
+                $take = min($reserved, $remaining);
+
+                if ($alloc->quantity_fulfilled === 0 && $take === $alloc->quantity_allocated) {
+                    $alloc->delete();
+                } else {
+                    $alloc->quantity_allocated -= $take;
+                    $alloc->save();
+                }
+
+                $remaining -= $take;
+            }
+
+            // Pass 2 — unwind fulfilled units: restores batch stock.
+            if ($remaining > 0) {
+                $fulfilledAllocations = $this->orderAllocations()
+                    ->where('quantity_fulfilled', '>', 0)
+                    ->orderByDesc('id')
+                    ->get();
+
+                foreach ($fulfilledAllocations as $alloc) {
+                    if ($remaining <= 0) {
+                        break;
+                    }
+
+                    $take = min($alloc->quantity_fulfilled, $remaining);
+
+                    if (! $this->unfulfillAllocation($alloc, $take)) {
+                        throw new \RuntimeException("Failed to unfulfil allocation {$alloc->id}.");
+                    }
+
+                    $alloc->refresh();
+                    if ($alloc->quantity_fulfilled === 0) {
+                        $alloc->delete();
+                    } else {
+                        // Drop the reservation freed alongside the unfulfilled units.
+                        $alloc->quantity_allocated = max($alloc->quantity_fulfilled, $alloc->quantity_allocated - $take);
+                        $alloc->save();
+                    }
+
+                    $remaining -= $take;
+                }
+            }
+
+            // Roll up the line's counters from the surviving allocations.
+            $this->quantity_allocated = (int) $this->orderAllocations()->sum('quantity_allocated');
+            $this->quantity_fulfilled = (int) $this->orderAllocations()->sum('quantity_fulfilled');
+            $this->weight_fulfilled_kg = $this->orderAllocations()->sum('actual_weight_kg');
+            $this->recalculateFulfilledTotal();
+            $this->save();
+
+            return $units - $remaining;
         });
     }
 }

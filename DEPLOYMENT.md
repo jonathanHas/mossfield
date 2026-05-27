@@ -156,6 +156,7 @@ Run these **in order** on a new production install. Each is idempotent and safe 
 `php artisan migrate --force` in §2 already runs everything pending, including:
 - `2026_04_20_120000_backfill_email_verified_at_for_existing_users` — marks any `NULL email_verified_at` rows as verified so existing accounts aren't locked out after `MustVerifyEmail` was added.
 - `2026_04_20_120500_encrypt_customer_pii` — encrypts `phone`, `address`, `city`, `postal_code`, `notes` on every `customers` row. **Idempotent** — the cast tolerates pre-migration plaintext and this backfill is safe to re-run.
+- `2026_05_25_120100_enable_variable_weight_on_cheese_variants` — flags every `type='cheese'` variant `is_variable_weight` (per-unit for wheels, `is_bulk_weighed` for packs) so weights can be captured at fulfilment. Does **not** change prices. **Pricing is a manual follow-up:** for each cheese variant that should sell by weight, edit it (`/products/{product}/variants/{variant}/edit`) → tick **Priced by weight** → set `base_price` as **€/kg**. Until then weight is recorded but invoicing stays per-unit. Note `unit_price` is locked per order line at creation, so any orders placed before this change keep their old per-unit price and would need a manual reprice.
 
 **If you are migrating an existing production DB for the first time:** back it up first. `mysqldump -u mossfield -p mossfield > mossfield-preencrypt-$(date +%Y%m%d).sql`. The migration has a best-effort `down()` but rolling encryption back should assume "restore the dump".
 

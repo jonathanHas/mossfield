@@ -89,6 +89,13 @@
                                 <span class="block text-[12px]" style="color: var(--muted);">Base price is per kg. Uncheck for fixed unit pricing.</span>
                             </span>
                         </label>
+                        <label class="flex items-start">
+                            <input type="checkbox" name="is_bulk_weighed" value="1" {{ old('is_bulk_weighed', $source?->is_bulk_weighed) ? 'checked' : '' }} class="mt-0.5 mf-checkbox">
+                            <span class="ml-2">
+                                <span class="text-[13px] font-medium">Weigh in bulk (single total)</span>
+                                <span class="block text-[12px]" style="color: var(--muted);">Enter one total weight at fulfilment instead of per-unit (e.g. vacuum packs). Only used when Variable weight is on.</span>
+                            </span>
+                        </label>
                     </div>
                 </div>
 
@@ -99,6 +106,14 @@
                         <input type="number" name="base_price" id="base_price" value="{{ old('base_price', $source?->base_price) }}" required step="0.01" min="0" class="mf-input pl-7" placeholder="0.00">
                     </div>
                     @error('base_price') <p class="mf-error">{{ $message }}</p> @enderror
+                </div>
+
+                <div class="mb-4">
+                    <label for="case_size" class="mf-label">Units per case</label>
+                    <input type="number" name="case_size" id="case_size" value="{{ old('case_size', $source?->case_size) }}" step="1" min="1" max="9999" class="mf-input"
+                           placeholder="e.g., 16">
+                    @error('case_size') <p class="mf-error">{{ $message }}</p> @enderror
+                    <p class="text-[12px] mt-1" style="color: var(--muted);">How many units in one shipping case (e.g. 16 for 1L bottles, 6 for yoghurt tubs). Leave blank if sold individually.</p>
                 </div>
 
                 <div class="mb-5">

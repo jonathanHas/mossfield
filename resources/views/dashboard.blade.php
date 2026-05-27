@@ -212,7 +212,7 @@
                                                 </td>
                                                 <td class="px-4 py-3 text-right">
                                                     <a
-                                                        href="{{ route('order-allocations.show', $order) }}"
+                                                        href="{{ route('orders.show', $order) }}"
                                                         class="mf-btn-secondary text-[12px] px-2.5 py-1"
                                                     >Allocate →</a>
                                                 </td>

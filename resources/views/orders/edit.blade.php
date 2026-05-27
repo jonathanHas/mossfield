@@ -112,7 +112,7 @@
                         </table>
                     </div>
                     <p class="text-[12px] mt-2" style="color: var(--muted);">
-                        Order items can't be modified after creation. Create a new order if items need to change.
+                        Add items from the <a href="{{ route('orders.show', $order) }}" class="mf-link">order page</a>. Existing lines can't be edited or removed here yet.
                     </p>
                 </div>
 

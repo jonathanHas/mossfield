@@ -18,7 +18,9 @@ class ProductVariant extends Model
         'weight_kg',
         'is_variable_weight',
         'is_priced_by_weight',
+        'is_bulk_weighed',
         'base_price',
+        'case_size',
         'is_active',
     ];
 
@@ -26,7 +28,9 @@ class ProductVariant extends Model
         'weight_kg' => 'decimal:3',
         'is_variable_weight' => 'boolean',
         'is_priced_by_weight' => 'boolean',
+        'is_bulk_weighed' => 'boolean',
         'base_price' => 'decimal:2',
+        'case_size' => 'integer',
         'is_active' => 'boolean',
     ];
 
@@ -98,5 +102,10 @@ class ProductVariant extends Model
     public function getEstimatedUnitPriceAttribute(): float
     {
         return $this->calculatePrice(1);
+    }
+
+    public function getEffectiveCaseSizeAttribute(): int
+    {
+        return max(1, (int) ($this->case_size ?? 1));
     }
 }

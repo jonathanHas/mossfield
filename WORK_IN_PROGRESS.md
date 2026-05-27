@@ -2,7 +2,7 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-04-27
+**Last Updated**: 2026-05-25
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
 
@@ -28,7 +28,7 @@ When fulfilling cheese wheels (variable weight items), the UI should show:
 - Only "Total: kg" shows with no input fields above it
 
 ### Files Involved
-- `resources/views/order-allocations/show.blade.php` (lines 159-199)
+- `resources/views/orders/partials/allocation-items.blade.php` (the variable-weight Fulfill form — was `order-allocations/show.blade.php` before allocation was folded inline on 2026-05-25)
   - Contains the form with Blade `@for` loops to render weight inputs
   - JavaScript functions `updateWeightInputs()` and `updateTotal()` at bottom
 - `app/Http/Controllers/OrderAllocationController.php`
@@ -64,6 +64,88 @@ curl -s "http://mossfield.local/order-allocations/12" | grep -A5 "weight-row"
 
 ## Recently Completed Features
 
+### Order Totals Reflect Actual Fulfilled Weight (2026-05-25)
+
+For weight-priced items, the order page showed the **estimate** (`line_total`, nominal weight) even after fulfilment recorded the real weight — most visibly on dispatched/delivered orders (read-only items table) and the order totals.
+
+- `OrderItem::invoiceable_total` now returns the **fulfilled total** (recorded weight × `unit_price`) when a line is **fully fulfilled** (and > 0), else the estimate. (Only when fully fulfilled, so a partially-picked line isn't understated.)
+- `Order::calculateTotals()` sums `invoiceable_total` (was `line_total`), so stored `subtotal`/`total_amount` reflect actuals once picked. `OrderAllocationController::fulfill()`/`unfulfill()` re-run it; existing orders were recomputed once.
+- Read-only items table + allocation-block header show `invoiceable_total` with a `kg` hint for weight-priced lines.
+- **Known caveat**: `unit_price` is locked per line at order creation. Orders created **before** a variant was switched to €/kg keep the old per-unit `unit_price` (e.g. €35), so their weight totals are off until repriced. New orders capture the current rate. (Not auto-fixed — repricing history is a deliberate action.)
+- Tests: `OrderFulfillmentWeightTest` extended — order total reflects fulfilled weight; dispatched order shows actual value + kg, not the estimate.
+
+### Weigh Cheese at Fulfilment — Capture Enabled + Bulk Mode for Packs (2026-05-25)
+
+Variable-weight fulfilment existed in code but was invisible: the weight-entry UI is gated on `is_variable_weight`, and **no cheese variant had it set** (the seeder never did), so cheese lines only showed a plain quantity "Fulfill". Plus packs needed a different entry style (one total vs per-unit).
+
+- **Enabled weight capture on cheese**: data migration `2026_05_25_120100_enable_variable_weight_on_cheese_variants` sets `is_variable_weight=true` on all cheese variants (and `is_bulk_weighed=true` on packs); seeder updated to match for fresh installs. (Ran on dev DB.)
+- **New `product_variants.is_bulk_weighed`** (migration `..._120000`): for variable-weight items, picks the entry style — per-unit (wheels) vs single total (vacuum packs). Added to `ProductVariant` fillable/cast, `ProductVariantRequest`, and both variant forms ("Weigh in bulk (single total)" checkbox).
+- **Fulfilment form** (`orders/partials/allocation-items.blade.php`) branches on `OrderItem::isBulkWeighed()`: per-unit (`weights[]` + running-total JS, unchanged) vs a single "Total weight (kg)" box. Both post one `actual_weight_kg`; `OrderAllocationController::fulfill()` is unchanged.
+- **Pricing left to the operator** (decision: price by €/kg, but current prices are per-unit): the migration does **not** touch `is_priced_by_weight`/`base_price`. To switch a cheese variant to €/kg, edit it → tick "Priced by weight" → set the €/kg base price. Suggested rates (price ÷ nominal kg): Farmhouse Wheel €14/kg, Farmhouse Pack €18/kg, Garlic&Basil Wheel €20/kg, Garlic&Basil Pack €25/kg. Until then weight is recorded but invoicing stays per-unit.
+- Future: a mobile factory fulfilment page will reuse this flag/data model.
+- Tests: `tests/Feature/OrderFulfillmentWeightTest.php` (6) — bulk weight-priced fulfil, per-unit fulfil, UI branch per style, form persistence, seeder flags.
+
+### Status Integrity on Pick-Undo + Cancel Now Returns All Stock (2026-05-25)
+
+Found via a stuck order (ready, but 0 allocated/0 fulfilled, still showing "ready for dispatch"). Root cause: `OrderAllocationController::deallocate()` and `unfulfill()` never re-checked order status, so undoing a pick left a "ready" order falsely ready. Fixed + tightened the cancel flow:
+
+- **`deallocate()` and `unfulfill()` now call `Order::reconcilePickingStatus()`** — undoing a pick drops a `ready` order back to `preparing`.
+- **Cancel returns all stock**: `OrderController::update()`'s cancel branch now calls `OrderItem::releaseUnits()` per line, restoring **both** reserved and picked units (previously fulfilled allocations were retained, stranding picked stock — this supersedes the "Cancelling an Order Releases Unfulfilled Allocations" entry below).
+- **`Order::canBeCancelled()` widened** to `pending|confirmed|preparing|ready` so not-yet-shipped orders (incl. ready) can be cancelled; the show-page Cancel button follows it.
+- **Removing the only line cancels the order** (keeps the line as history, returns stock) instead of being blocked — so single-line stuck orders have an exit. The per-line Remove button now shows on the last line too, with a "Remove (cancels order)" confirm.
+- Tests: `unfulfilling/deallocating drops a ready order back to preparing` (OrderAllocationStatusTransitionsTest), `cancelling a ready order returns picked stock` (OrderTransitionsTest), `removing the only line cancels the order and restores stock` (OrderItemEditTest).
+
+### Edit & Remove Order Items, with Stock Unwind (2026-05-25)
+
+Lines on an existing order can now have their quantity changed or be removed entirely — and, critically, the picked stock is returned to its batch. Previously the `order_allocations.order_item_id` FK was `onDelete('cascade')`, so deleting an item hard-deleted its allocations **without** restoring `BatchItem.quantity_remaining` (stranded stock). That gap is now closed.
+
+- **`OrderItem::releaseUnits(int $units)`** (new) unwinds committed quantity reserved-first (no stock change) then fulfilled-last via the existing `unfulfillAllocation()` (restores `quantity_remaining`); rolls up the line's counters; transaction-safe.
+- **`OrderController::updateItem()`** (`PATCH /orders/{order}/items/{orderItem}`): increase just raises `quantity_ordered` (picker shows the shortfall); decrease calls `releaseUnits(old − new)`. **`destroyItem()`** (`DELETE …`): `releaseUnits(quantity_allocated)` then delete; refuses to remove the only line (cancel instead).
+- **`Order::reconcilePickingStatus()`** (new) is now the canonical ready⇄preparing rule (ready+unpicked → preparing; preparing+fully-picked → ready), reused by add/edit/remove. One-directional — never demotes to confirmed.
+- **Guards**: office/admin only (`authorize('update')`, factory 403); blocked on dispatched/delivered/cancelled.
+- **UI**: per-line "Qty + Update" and "Remove line" controls in the inline allocation partial (confirmed/preparing/ready) and the read-only items table (pending), gated `@can('update')` + `$canAddItems`; remove confirms that picked stock will be returned.
+- New tests in `tests/Feature/OrderItemEditTest.php` (9): reduce-reserved (no stock change), reduce-below-fulfilled (stock restored), increase reverts ready→preparing, remove unfulfilled/fulfilled lines (exact stock restore), remove-unpicked-line flips preparing→ready, can't-remove-last-line, factory 403, dispatched blocked.
+
+### Add Items to an Existing Order (2026-05-25)
+
+Order items used to be frozen after creation (`orders/edit.blade.php` said so explicitly, and there was no route to add one). Now they can be added from the order detail page — including to an already-picked **ready** order — via `POST /orders/{order}/items` (`orders.items.store` → `OrderController::storeItem()`).
+
+- **Merge-by-variant**: adding a product already on the order bumps that line's `quantity_ordered` (no duplicate row); a new product creates a line with `unit_price = base_price`. `Order::calculateTotals()` re-runs either way.
+- **Ready → Preparing**: adding unpicked work to a `ready` order reverts it to `preparing`; fulfilling the new line flips it back to `ready` via the existing `markPickingComplete()`. Because allocation is now inline on the order page, the added line's stock picker shows immediately.
+- **Guards**: office/admin only (`authorize('update')`; factory 403); blocked on `dispatched`/`delivered`/`cancelled` (error flash, no change).
+- **UI**: an "Add item" panel on `orders/show.blade.php` (product `<select>` grouped via the new shared `OrderController::activeVariantsGrouped()` + quantity), gated `@can('update', $order)` and shown only on open statuses. `orders/edit.blade.php`'s stale "items can't be modified" note now points at the order page; editing/removing existing lines is still not supported.
+- New tests in `tests/Feature/OrderAddItemTest.php` (6): new-item-on-ready reverts to preparing, merge bumps the line, confirmed stays confirmed, factory 403, dispatched rejects, and the form shows on open / hides on delivered.
+
+### Stock Allocation Folded Into the Order Detail Page (2026-05-25)
+
+The picking/allocation UI is now rendered **inline on `/orders/{order}`** instead of on the separate full-width `/order-allocations/{order}` page. That separate page dropped the master-detail sibling sidebar and the Order-information / Customer cards, so moving from "Confirmed" to "Picking/Ready" lost all the surrounding order context — the merge keeps the sidebar, cards, and status stepper visible throughout. (This closes the "bigger merge worth a separate decision" note that used to be in the Order Show master-detail entry.)
+
+- **Conditional render** in `resources/views/orders/show.blade.php`: when `order.status ∈ {confirmed, preparing, ready}` the "Order items" panel is replaced by `@include('orders.partials.allocation-items')`; other statuses keep the plain read-only items table. The subtotal/tax/total summary moved into its own panel and renders in both branches (`@can('see-financials')`).
+- **New partial** `resources/views/orders/partials/allocation-items.blade.php` — the per-item block (progress bar, current-allocations table, Fulfill/Remove/Undo forms, variable-weight per-unit weight inputs + the `updateWeightInputs`/`updateTotal` JS, available-stock picker, Auto allocate). **Every interactive form is gated `@can('update', $order)`** so factory users see the same data read-only.
+- **New trait** `app/Http/Controllers/Concerns/BuildsAllocationData.php` (mirrors `BuildsProductList`): `buildAvailableBatchItems(Order)` extracted from `OrderAllocationController::show()` and reused by `OrderController::show()`, which now only builds it when the rich block will render AND the user can update the order.
+- **`OrderAllocationController::show()` now redirects to `orders.show`** (old route kept for bookmarks/worklist/dashboard). The write actions (`allocate`/`deallocate`/`fulfill`/`unfulfill`/`autoAllocate`) switched from `redirect()->back()` to `redirect()->route('orders.show', $order)`. The standalone `order-allocations/show.blade.php` view was deleted; the worklist `index` stays and its rows + the dashboard "Allocate →" link now point at `orders.show`.
+- New tests in `tests/Feature/OrderShowAllocationInlineTest.php` (5): office sees the inline forms on a confirmed order, factory sees read-only, pending shows the plain table, ready keeps the Undo controls, and the old route redirects.
+
+### Cancelling an Order Releases Unfulfilled Allocations (2026-05-22)
+
+Previously, transitioning an order's status to `cancelled` via `OrderController::update()` left every `OrderAllocation` row in place — the reserved units kept showing as "allocated" on `/stock` and never returned to the available pool. Fixed by wrapping the status write in a DB transaction and, on the `* → cancelled` transition, deleting every allocation with `quantity_fulfilled = 0` then recomputing each `order_item.quantity_allocated` from the surviving rows (same rule as `OrderAllocationController::deallocate()`).
+
+- ~~Allocations with `quantity_fulfilled > 0` are deliberately left in place~~ **(superseded 2026-05-25 — cancel now returns ALL stock via `releaseUnits`; see the status-integrity entry above).**
+- Stock value on `/stock` automatically rebounds because `StockOverviewService` no longer sees the cancelled order's allocations offsetting `quantity_remaining`.
+- New test `test_cancelling_an_order_releases_unfulfilled_allocations` in `tests/Feature/OrderTransitionsTest.php` covers the happy path: 10-unit allocation, cancel via `PUT /orders/{order}`, assert allocation row gone, order item's `quantity_allocated = 0`, batch's `quantity_remaining` unchanged.
+
+### Stock Overview — Per-Batch Rows with Sold Counts (2026-05-22)
+
+Restructured `/stock` so every (variant, batch) pair gets its own row instead of aggregating across batches for a variant. Sold units are now surfaced for milk and yoghurt the same way they were for cheese.
+
+- **`StockOverviewService` data shape**:
+  - `buildSimpleCard()` (milk + yoghurt) groups by `product_variant_id|batch_id` instead of `product_variant_id`. Each row carries a single `batch_code` (string), a per-batch `expiry`/`expiry_warn`, and segments `{ available, allocated, sold }`. `total` is now `quantity_produced` (matches cheese), `sold = produced − remaining`, `available = remaining − allocated`. Rows are sorted by variant name then production date (ASC, FIFO).
+  - `buildCheeseCard()` does the same `variant|batch` grouping for wheels and packs; each row gets `batch_code`. Wheel cut/sold math (`source_cutting_logs_count`-driven) was already per batch_item, so the per-row breakdown is naturally correct.
+  - New `variant_count` key on the simple cards so the subtitle ("N variants · M active batches") counts distinct variants even though `variants` now contains row-per-batch entries.
+- **Components** — `case-blocks` (milk), `case-pictograph` (yoghurt), and `cheese-row` (cheese) all take a single `batchCode` string prop now and render it in monospace under the label. State order extended to include `sold` so milk/yoghurt grids paint sold cases with `--state-sold` (the near-black already in `resources/css/stock.css`), and the side stat block adds a `sold` column.
+- **View** — `resources/views/stock/overview.blade.php` reads `$milk['variant_count']` / `$yoghurt['variant_count']` for the subtitle counts and passes `batch-code` (singular) to each row component.
+- Tests in `tests/Feature/StockOverviewTest.php` still pass — the existing assertions don't probe the row shape, just that the page renders and shows the variant name.
+
 ### Product Show + Edit — Master-Detail Layout (2026-04-27)
 
 Same pattern as the orders master-detail (shipped earlier today), now applied to `/products/{product}` (show) and `/products/{product}/edit`. The `/products` index is unchanged — drilling in via **View** or **Edit** is what flips you into the new layout.
@@ -84,7 +166,7 @@ Same pattern as the orders master-detail (shipped earlier today), now applied to
 - **Filter passthrough** — `orders/index.blade.php` row links forward active filters into the show URL via `array_merge($rowFilters, ['order' => $order->id])`, so the master pane on the show screen matches what the user was looking at on the index.
 - **Sibling list rows** show order number, customer name, top-3 item summary (`2× Cheese · 1× Yoghurt …`), status tag, total (gated on `see-financials`), and a relative timestamp. Active row gets a left accent bar + soft background.
 - **Mobile** — list pane is `hidden lg:flex`; below `lg` the detail renders alone with a "← All orders" button (which itself preserves filters back to the index).
-- **Allocation panel from the mockup is intentionally not pulled in** — `Manage allocation →` still routes to `/order-allocations/{order}`. Folding allocation into this screen is a bigger merge worth a separate decision.
+- **Allocation panel now folded into this screen** (2026-05-25) — the picking UI renders inline here; `Manage allocation →` was removed and `/order-allocations/{order}` redirects back to this page. See "Stock Allocation Folded Into the Order Detail Page" above.
 
 ### Batches & Cheese-Cutting UI Redesign (2026-04-22)
 

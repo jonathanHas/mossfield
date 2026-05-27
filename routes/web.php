@@ -83,6 +83,11 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::resource('products', ProductController::class);
     Route::resource('batches', BatchController::class);
     Route::resource('orders', \App\Http\Controllers\OrderController::class);
+    Route::post('/orders/{order}/dispatch', [\App\Http\Controllers\OrderController::class, 'markDispatched'])->name('orders.dispatch');
+    Route::post('/orders/{order}/deliver', [\App\Http\Controllers\OrderController::class, 'markDelivered'])->name('orders.deliver');
+    Route::post('/orders/{order}/items', [\App\Http\Controllers\OrderController::class, 'storeItem'])->name('orders.items.store');
+    Route::patch('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'updateItem'])->name('orders.items.update');
+    Route::delete('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'destroyItem'])->name('orders.items.destroy');
 
     Route::get('/cheese-cutting', [\App\Http\Controllers\CheeseCuttingController::class, 'index'])->name('cheese-cutting.index');
     Route::get('/stock', [\App\Http\Controllers\StockController::class, 'index'])->name('stock.index');

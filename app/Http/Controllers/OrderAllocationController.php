@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\BuildsAllocationData;
 use App\Models\BatchItem;
 use App\Models\Order;
 use App\Models\OrderAllocation;
@@ -12,6 +13,8 @@ use Illuminate\View\View;
 
 class OrderAllocationController extends Controller
 {
+    use BuildsAllocationData;
+
     public function index(Request $request): View
     {
         $query = Order::with(['customer', 'orderItems.productVariant', 'orderItems.orderAllocations'])
@@ -40,33 +43,14 @@ class OrderAllocationController extends Controller
         return view('order-allocations.index', compact('orders'));
     }
 
-    public function show(Order $order): View
+    /**
+     * The allocation UI now lives inline on the order detail page; this route
+     * is kept so existing bookmarks, the worklist, and the dashboard continue
+     * to resolve. Redirect to the unified order view.
+     */
+    public function show(Order $order): RedirectResponse
     {
-        $order->load([
-            'customer',
-            'orderItems.productVariant.product',
-            'orderItems.orderAllocations.batchItem.batch',
-        ]);
-
-        // Get available batch items for each order item
-        $availableBatchItems = [];
-        foreach ($order->orderItems as $orderItem) {
-            $availableBatchItems[$orderItem->id] = BatchItem::with(['batch', 'productVariant'])
-                ->where('product_variant_id', $orderItem->product_variant_id)
-                ->where('quantity_remaining', '>', 0)
-                ->whereHas('batch', function ($q) {
-                    $q->where('status', 'active')
-                        ->where(function ($q) {
-                            $q->whereNull('expiry_date')
-                                ->orWhere('expiry_date', '>', now()->toDateString());
-                        });
-                })
-                ->get()
-                ->filter(fn ($batchItem) => $batchItem->isAvailableForAllocation())
-                ->sortBy('batch.production_date');
-        }
-
-        return view('order-allocations.show', compact('order', 'availableBatchItems'));
+        return redirect()->route('orders.show', $order);
     }
 
     public function allocate(Request $request, OrderItem $orderItem): RedirectResponse
@@ -77,39 +61,47 @@ class OrderAllocationController extends Controller
         ]);
 
         $batchItem = BatchItem::findOrFail($validated['batch_item_id']);
+        $order = $orderItem->order;
 
         // Verify the batch item is for the correct product variant
         if ($batchItem->product_variant_id !== $orderItem->product_variant_id) {
-            return redirect()->back()
+            return redirect()->route('orders.show', $order)
                 ->withErrors(['batch_item_id' => 'Selected batch item does not match the order item product.']);
         }
 
         $allocation = $orderItem->allocateFromBatchItem($batchItem, $validated['quantity']);
 
         if (! $allocation) {
-            return redirect()->back()
+            return redirect()->route('orders.show', $order)
                 ->withErrors(['quantity' => 'Cannot allocate this quantity. Check available stock and order limits.']);
         }
 
-        return redirect()->back()
+        $this->markPickingStarted($order);
+
+        return redirect()->route('orders.show', $order)
             ->with('success', "Allocated {$validated['quantity']} units from batch {$batchItem->batch->batch_code}.");
     }
 
     public function deallocate(OrderAllocation $allocation): RedirectResponse
     {
+        $orderItem = $allocation->orderItem;
+        $order = $orderItem->order;
+
         if ($allocation->quantity_fulfilled > 0) {
-            return redirect()->back()
+            return redirect()->route('orders.show', $order)
                 ->withErrors(['allocation' => 'Cannot deallocate - some items have already been fulfilled.']);
         }
 
         // Update order item allocated quantity
-        $orderItem = $allocation->orderItem;
         $allocation->delete();
 
         $orderItem->quantity_allocated = $orderItem->orderAllocations()->sum('quantity_allocated');
         $orderItem->save();
 
-        return redirect()->back()
+        // Undoing a pick can drop a "ready" order back to "preparing".
+        $order->reconcilePickingStatus();
+
+        return redirect()->route('orders.show', $order)
             ->with('success', 'Allocation removed successfully.');
     }
 
@@ -130,6 +122,7 @@ class OrderAllocationController extends Controller
         $validated = $request->validate($rules);
 
         $actualWeight = $validated['actual_weight_kg'] ?? null;
+        $order = $orderItem->order;
 
         $success = $orderItem->fulfillAllocation(
             $allocation,
@@ -138,7 +131,7 @@ class OrderAllocationController extends Controller
         );
 
         if (! $success) {
-            return redirect()->back()
+            return redirect()->route('orders.show', $order)
                 ->withErrors(['quantity' => 'Could not fulfill this quantity.']);
         }
 
@@ -147,7 +140,13 @@ class OrderAllocationController extends Controller
             $message .= " Total weight: {$actualWeight}kg";
         }
 
-        return redirect()->back()->with('success', $message);
+        // Recorded weight may change the line value (weight-priced items), so
+        // refresh the order total to the actual fulfilled amount.
+        $order->calculateTotals();
+
+        $this->markPickingComplete($order);
+
+        return redirect()->route('orders.show', $order)->with('success', $message);
     }
 
     public function unfulfill(Request $request, OrderAllocation $allocation): RedirectResponse
@@ -156,17 +155,25 @@ class OrderAllocationController extends Controller
             'quantity' => 'required|integer|min:1|max:'.$allocation->quantity_fulfilled,
         ]);
 
+        $order = $allocation->orderItem->order;
+
         $success = $allocation->orderItem->unfulfillAllocation(
             $allocation,
             $validated['quantity']
         );
 
         if (! $success) {
-            return redirect()->back()
+            return redirect()->route('orders.show', $order)
                 ->withErrors(['quantity' => 'Could not undo fulfillment for this quantity.']);
         }
 
-        return redirect()->back()
+        // Reverting a pick changes the fulfilled value back toward the estimate.
+        $order->calculateTotals();
+
+        // A no-longer-fully-picked order drops from "ready" back to "preparing".
+        $order->reconcilePickingStatus();
+
+        return redirect()->route('orders.show', $order)
             ->with('success', "Undid fulfillment of {$validated['quantity']} units. Stock has been restored.");
     }
 
@@ -220,15 +227,47 @@ class OrderAllocationController extends Controller
         }
 
         if ($allocatedItems > 0) {
+            $this->markPickingStarted($order);
+
             $message = "Auto-allocated {$allocatedItems} order items.";
             if (! empty($errors)) {
                 $message .= ' Some items could not be fully allocated.';
             }
 
-            return redirect()->back()->with('success', $message);
+            return redirect()->route('orders.show', $order)->with('success', $message);
         }
 
-        return redirect()->back()
+        return redirect()->route('orders.show', $order)
             ->withErrors(['auto_allocate' => 'No items could be allocated. Check stock availability.']);
+    }
+
+    /**
+     * Bump a confirmed order to "preparing" once any stock has been allocated.
+     * Keeps the order detail's status stepper in sync with reality so the
+     * user doesn't have to manually flip status via the edit form.
+     */
+    private function markPickingStarted(Order $order): void
+    {
+        if ($order->status === 'confirmed') {
+            $order->update(['status' => 'preparing']);
+        }
+    }
+
+    /**
+     * When every item on a preparing order has been fully fulfilled, flip
+     * it to "ready" so the dispatch CTA becomes available without a manual
+     * status edit.
+     */
+    private function markPickingComplete(Order $order): void
+    {
+        if ($order->status !== 'preparing') {
+            return;
+        }
+
+        $order->load('orderItems');
+
+        if ($order->isFullyFulfilled()) {
+            $order->update(['status' => 'ready']);
+        }
     }
 }

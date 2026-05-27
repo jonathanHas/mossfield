@@ -76,7 +76,7 @@
                             @endphp
                             <tr style="border-top: 1px solid var(--line-2);">
                                 <td class="mf-td font-mono text-[12.5px]">
-                                    <a href="{{ route('order-allocations.show', $order) }}" class="mf-link">{{ $order->order_number }}</a>
+                                    <a href="{{ route('orders.show', $order) }}" class="mf-link">{{ $order->order_number }}</a>
                                 </td>
                                 <td class="mf-td">{{ $order->customer->name }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d/m/Y') }}</td>
@@ -89,9 +89,7 @@
                                 </td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $totalAllocated }}/{{ $totalItems }}</td>
                                 <td class="mf-td text-right">
-                                    <a href="{{ route('order-allocations.show', $order) }}" class="mf-link">Manage</a>
-                                    <span style="color: var(--faint);"> · </span>
-                                    <a href="{{ route('orders.show', $order) }}" class="mf-link">View</a>
+                                    <a href="{{ route('orders.show', $order) }}" class="mf-link">Open →</a>
                                 </td>
                             </tr>
                         @empty

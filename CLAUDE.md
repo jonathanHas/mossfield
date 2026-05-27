@@ -12,85 +12,53 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a Laravel 12 application for Mossfield Organic Farm - a dairy producer that bottles milk, produces cheese, and makes yoghurt. The application aims to provide full batch traceability, order management, and invoicing capabilities.
+Laravel 12 app for Mossfield Organic Farm — a dairy producer (bottles milk, makes cheese and yoghurt) — providing batch traceability, order management, and invoicing.
 
 **Tech Stack:**
 - **Framework**: Laravel 12 with PHP 8.2+
 - **Frontend**: Blade templates with Tailwind CSS and Alpine.js
 - **Build System**: Vite for asset compilation
 - **Database**: SQLite (default) with Eloquent ORM
-- **Authentication**: Laravel Breeze with email verification (supports username OR email login)
+- **Authentication**: Laravel Breeze (supports username OR email login)
 - **Testing**: PHPUnit with Feature and Unit test suites
 
 ## Development Commands
 
 ### Starting Development
 ```bash
-# Install PHP dependencies
 composer install
-
-# Install Node.js dependencies
 npm install
-
-# Copy environment file (if needed)
-cp .env.example .env
-
-# Generate application key
+cp .env.example .env          # if needed
 php artisan key:generate
-
-# Create database file and run migrations
-touch database/database.sqlite
-php artisan migrate
-
-# Start development server (includes server, queue, logs, and Vite)
-composer run dev
+touch database/database.sqlite && php artisan migrate
+composer run dev              # server + queue + logs + Vite
 ```
 
 ### Individual Services
 ```bash
-# PHP development server
-php artisan serve
-
-# Vite development server for assets
-npm run dev
-
-# Queue worker
-php artisan queue:listen --tries=1
-
-# Log viewer
-php artisan pail --timeout=0
+php artisan serve                  # PHP dev server
+npm run dev                        # Vite assets
+php artisan queue:listen --tries=1 # queue worker
+php artisan pail --timeout=0       # log viewer
 ```
 
 ### Building for Production
 ```bash
-# Build frontend assets
-npm run build
-
-# Optimize Laravel for production
-php artisan optimize
+npm run build        # build frontend assets
+php artisan optimize # optimize Laravel
 ```
 
 ### Testing
 ```bash
-# Run all tests
-composer run test
-# OR
-php artisan test
-
-# Run specific test suite
+composer run test            # or: php artisan test
 php artisan test --testsuite=Feature
 php artisan test --testsuite=Unit
-
-# Run specific test file
 php artisan test tests/Feature/ExampleTest.php
 ```
 
 ### Code Quality
 ```bash
-# Laravel Pint (code formatter)
-./vendor/bin/pint
-
-# Clear caches
+./vendor/bin/pint            # code formatter
 php artisan cache:clear
 php artisan config:clear
 php artisan route:clear
@@ -101,76 +69,57 @@ php artisan view:clear
 
 ### Directory Structure
 - `app/Http/Controllers/` - HTTP controllers including Auth controllers from Breeze
-- `app/Models/` - Eloquent models (User model included)
+- `app/Models/` - Eloquent models
 - `app/View/Components/` - Blade components (AppLayout, GuestLayout)
 - `resources/views/` - Blade templates with auth views and dashboard
-- `resources/js/` - JavaScript files (Alpine.js setup)
-- `resources/css/` - CSS files (Tailwind CSS)
+- `resources/js/` - JavaScript (Alpine.js setup)
+- `resources/css/` - CSS (Tailwind)
 - `routes/` - Route definitions (web.php, auth.php)
 - `database/migrations/` - Database migrations
 - `tests/` - PHPUnit tests (Feature and Unit)
 
 ### Key Components
-- **Authentication**: Laravel Breeze provides login, registration, password reset, and email verification
-- **User Management**: Profile editing and account deletion functionality
-- **Database**: Uses SQLite by default with standard Laravel migrations
-- **Frontend**: Server-side rendered Blade templates with Tailwind CSS styling
-- **Asset Pipeline**: Vite handles CSS and JavaScript compilation with hot reloading
+- **Authentication**: Laravel Breeze (login, password reset; registration/verification disabled — see below)
+- **User Management**: Profile editing and account deletion
+- **Frontend**: Server-side rendered Blade + Tailwind, Vite asset pipeline with HMR
 
 ### Configuration
-- Database configured for SQLite in `.env`
-- Vite configuration in `vite.config.js` handles asset compilation
-- Tailwind CSS configured in `tailwind.config.js` with forms plugin
-- PHPUnit configured in `phpunit.xml` with SQLite in-memory testing database
+- Database configured for SQLite in `.env`; asset compilation in `vite.config.js`
+- Tailwind in `tailwind.config.js` (forms plugin); PHPUnit in `phpunit.xml` (SQLite in-memory test DB)
 
 ## Database
 
-The application uses SQLite by default. The database file is located at `database/database.sqlite`.
+SQLite by default (`database/database.sqlite`).
 
 ### Common Database Operations
 ```bash
-# Create new migration
 php artisan make:migration create_example_table
-
-# Run migrations
 php artisan migrate
-
-# Rollback migrations
 php artisan migrate:rollback
-
-# Seed database
 php artisan db:seed
-
-# Access database directly
-php artisan tinker
+php artisan tinker          # access database directly
 ```
 
 ## Frontend Development
 
-The frontend uses Blade templates with Tailwind CSS and Alpine.js:
-- Tailwind CSS for styling with forms plugin
-- Alpine.js for interactive components
-- Vite for asset building and hot reloading
-- Blade components for reusable UI elements
+Blade templates with Tailwind CSS (forms plugin), Alpine.js for interactivity, and Vite for asset building/HMR. Reusable UI via Blade components.
 
 ### Asset Files
-- `resources/css/app.css` - Main CSS file
-- `resources/js/app.js` - Main JavaScript file with Alpine.js
-- `resources/js/bootstrap.js` - Bootstrap configuration with Axios
+- `resources/css/app.css` - Main CSS
+- `resources/js/app.js` - Main JS (Alpine.js)
+- `resources/js/bootstrap.js` - Bootstrap config with Axios
 
 ## Authentication Flow
 
 Based on Laravel Breeze, modified for a closed operator/factory/driver system:
-- Login/logout (supports username OR email — email is optional)
-- Password reset flow (email users only — degrades gracefully for email-less accounts)
+- Login/logout (username OR email — email is optional)
+- Password reset (email users only — degrades gracefully for email-less accounts)
 - Profile management (edit profile, change password, delete account)
 - **Self-registration is disabled** — admin creates users via `/users`
 - **Email verification is disabled** — factory and driver users often have no work email
 
 ### Username Authentication
-The application supports flexible login using either username or email:
-- Login form accepts "Username or Email"
-- `LoginRequest::getLoginField()` switches on `filter_var(..., FILTER_VALIDATE_EMAIL)`
+- Login form accepts "Username or Email"; `LoginRequest::getLoginField()` switches on `filter_var(..., FILTER_VALIDATE_EMAIL)`
 - `email` is nullable on `users`; `username` is the primary identifier
 - Inactive users (`is_active = false`) are rejected at login with the standard `auth.failed` message — no info leak about whether the account exists
 
@@ -184,45 +133,33 @@ The application supports flexible login using either username or email:
 | `factory_test` | factory | *(none)* | Packing-floor view; no email on purpose |
 | `driver_test` | driver | *(none)* | Deny-all baseline until manifest ships |
 
-Seeder refuses to run in production. All authentication routes are in `routes/auth.php` (controllers in `app/Http/Controllers/Auth/`) — the `register` and `verification.*` routes have been removed from that file but the unused controller classes remain in place.
+Seeder refuses to run in production. All auth routes are in `routes/auth.php` (controllers in `app/Http/Controllers/Auth/`) — the `register` and `verification.*` routes are removed but the unused controller classes remain.
 
 ## Database Connections
 
 ### Primary Database
-- SQLite by default (`database/database.sqlite`)
-- Configuration in `config/database.php`
+SQLite by default (`database/database.sqlite`); config in `config/database.php`.
 
 ### POS Database (Placeholder)
-A commented-out `pos` connection is configured for future uniCenta integration:
-- Located in `config/database.php`
-- Uncomment and set environment variables when ready
-- Designed for read-only access to POS data
-- Usage: `DB::connection('pos')->table('products')->get()`
+A commented-out read-only `pos` connection in `config/database.php` for future uniCenta integration — uncomment and set env vars when ready. Usage: `DB::connection('pos')->table('products')->get()`.
 
 ## External Integrations
 
 ### Mossorders Online Portal Integration
 
-The office system supports linking customers to external Mossorders user accounts.
+Links office customers to external Mossorders user accounts.
 
 **Customer Model Fields**:
-- `mossorders_user_id` (nullable, unique) - Links office customer to Mossorders user account
-- Each Mossorders user can map to at most one office customer
-- Deleting a Mossorders user does not cascade (preserves office data integrity)
+- `mossorders_user_id` (nullable, unique) - Links office customer to a Mossorders user; each Mossorders user maps to at most one office customer. Deleting a Mossorders user does not cascade (preserves office data integrity).
 
 **Helper Method**:
 ```php
 $customer->hasOnlineAccount()  // Returns true if linked to Mossorders
 ```
 
-**Database**:
-- Migration: `2025_11_22_163725_add_mossorders_user_id_to_customers_table.php`
-- Unique index: `customers_mossorders_user_unique`
+**Database**: Migration `2025_11_22_163725_add_mossorders_user_id_to_customers_table.php`; unique index `customers_mossorders_user_unique`.
 
-**Usage**:
-- This field is a preparation for future integration workflows
-- Allows API endpoints or admin tools to establish customer-user mappings
-- Supports scenarios where office customers want online ordering access
+**Usage**: preparation for future integration — lets API endpoints/admin tools establish customer-user mappings for online ordering access.
 
 ## Security Posture
 
@@ -244,7 +181,7 @@ The sync integration has been hardened across three phases. The operator-facing 
 - If you add new outbound sync targets, extend the same guard.
 
 ### PII encryption (`Customer` model)
-- `phone`, `address`, `city`, `postal_code`, `notes` use the `App\Casts\EncryptedNullable` cast. Written values are encrypted, reads fall back to plaintext for pre-migration rows and log a warning.
+- `phone`, `address`, `city`, `postal_code`, `notes` use the `App\Casts\EncryptedNullable` cast. Written values are encrypted; reads fall back to plaintext for pre-migration rows and log a warning.
 - **Never add a `where('phone', ...)` or similar query** on encrypted columns — the ciphertext differs per-write. Query by `name`, `email`, or `mossorders_user_id` instead.
 - When adding a new PII column, apply the same cast. If it needs to be searchable, add a separate `_hash` blind-index column.
 
@@ -260,330 +197,245 @@ All sync services chain `->withOptions(['verify' => true])->connectTimeout(5)->t
 Hourly sync registered in `routes/console.php`, gated on `config('services.sync.enabled')` (env `SYNC_SCHEDULE_ENABLED`, default false). `emailOutputOnFailure` is wired when `SYNC_ALERT_EMAIL` is set.
 
 ### Roles & authorization
-- `App\Enums\UserRole` — `admin | office | factory | driver`. Required on every user (column `users.role`). Also: `users.is_active` boolean (default true); inactive users are rejected at login by filtering the Auth::attempt credentials array.
-- Policies live in `app/Policies/` and are registered in `app/Providers/AuthServiceProvider.php`. `BasePolicy` implements the CRUD baseline (`admin` via `before()` → all, `office` → full CRUD, `factory` → `viewAny`/`view` only, `driver` → deny-all). `UserPolicy` is admin-only on every ability. Add per-model policies by extending `BasePolicy`; override only if the model needs narrower rules.
+- `App\Enums\UserRole` — `admin | office | factory | driver`. Required on every user (`users.role`). Also `users.is_active` (default true); inactive users are rejected at login by filtering the `Auth::attempt` credentials array.
+- Policies live in `app/Policies/`, registered in `app/Providers/AuthServiceProvider.php`. `BasePolicy` is the CRUD baseline (`admin` via `before()` → all, `office` → full CRUD, `factory` → `viewAny`/`view` only, `driver` → deny-all). `UserPolicy` is admin-only. Add per-model policies by extending `BasePolicy`; override only for narrower rules.
 - **Controllers enforce writes via `$this->authorize('ability', $model)`** at the top of each action — `authorizeResource()` doesn't work in Laravel 12 because the new base `Controller` is a POPO without a `middleware()` method. Add explicit `authorize` calls in any new write action.
 - Column-level `see-financials` gate in `AuthServiceProvider::boot()` (admin/office only). Used in order blades (`@can('see-financials') ... @endcan`) to hide unit prices, line totals, subtotals, tax, and totals from factory users who share the `/orders` read screens.
 - **Last active admin is protected** — `User::isLastActiveAdmin()` returns true if demoting/deactivating/deleting this user would leave zero active admins. Called from `UserController::update/destroy/deactivate` and `ProfileController::destroy`. Block with a flash error on hit; never allow it through.
-- **Session invalidation** on role change + deactivation — `User::logOutEverywhere()` deletes rows from the database `sessions` table where `user_id = $this->id`. Requires `SESSION_DRIVER=database` (default). Don't skip this step when changing role or flipping `is_active` to false — elevated cookies would otherwise outlive the change.
-- **Role-gated nav** in `resources/views/layouts/navigation.blade.php` — shared `@php` block at top defines `$canSeeCustomers`/etc., wraps both desktop and responsive link lists. Nav visibility is separate from policy access (nav gates discovery, policy gates access — they can diverge, e.g. factory CAN view Customer model in-line but has no Customers nav link).
+- **Session invalidation** on role change + deactivation — `User::logOutEverywhere()` deletes rows from the database `sessions` table where `user_id = $this->id`. Requires `SESSION_DRIVER=database` (default). Don't skip this when changing role or flipping `is_active` to false — elevated cookies would otherwise outlive the change.
+- **Role-gated nav** in `resources/views/layouts/navigation.blade.php` — shared `@php` block defines `$canSeeCustomers`/etc., wrapping both desktop and responsive link lists. Nav visibility is separate from policy access (nav gates discovery, policy gates access — they can diverge, e.g. factory CAN view Customer model inline but has no Customers nav link).
 
 ### Seeders
-`AdminUserSeeder` refuses to run in production. Password overridable via `ADMIN_SEED_PASSWORD`. In addition to the admin user, it seeds `office_test`, `factory_test` (no email), and `driver_test` (no email) for local role testing.
+`AdminUserSeeder` refuses to run in production. Password overridable via `ADMIN_SEED_PASSWORD`. Besides `admin`, it seeds `office_test`, `factory_test` (no email), and `driver_test` (no email) for local role testing.
 
 ## Troubleshooting
 
 ### Storage Permission Issues
-If you encounter "Permission denied" errors for `storage/framework/views/`:
+"Permission denied" errors for `storage/framework/views/` happen when Laravel runs under different users (web server vs CLI). Fix:
 
 ```bash
-# Clear compiled views and caches
 php artisan view:clear
 php artisan config:clear
 php artisan route:clear
-
-# Fix storage permissions
-chmod -R 775 storage/
-chmod -R 775 bootstrap/cache/
+chmod -R 775 storage/ bootstrap/cache/
 ```
-
-This typically happens when Laravel runs under different users (web server vs CLI).
 
 ## Business Context
 
-Mossfield Organic Farm produces three main product types:
+Mossfield Organic Farm produces three product types:
 1. **Milk**: 1L and 2L bottles (batch code: Mddmmyy)
 2. **Yoghurt**: 250g and 500g tubs (batch code: Yddmmyy)
-3. **Cheese**: Multiple varieties - Farmhouse, Garlic & Basil, Tomato & Herb, Cumin Seed, Mature (batch code: Gddmmyy)
-   - Produced as wheels, later cut into vacuum packs
-   - Requires maturation tracking
-   - Each vacuum pack must be traceable to original wheel
+3. **Cheese**: Farmhouse, Garlic & Basil, Tomato & Herb, Cumin Seed, Mature (batch code: Gddmmyy)
+   - Produced as wheels, later cut into vacuum packs; requires maturation tracking; each vacuum pack must be traceable to its original wheel.
 
 ## Implemented Features
 
 ### ✅ **Core Production & Batch Management**
-- **Batch Traceability**: Complete tracking with automated batch code generation
-- **Product Management**: Products with full CRUD operations
-- **Product Variant Management**: Complete CRUD for product variants (sizes, packaging types)
-  - Create, edit, and delete variants for any product
-  - Track weight, price, and active status per variant
-  - Nested resource routes: `/products/{product}/variants/*`
-- **Cheese Cutting System**: Convert wheels to vacuum packs with full traceability
-- **Stock Overview**: Real-time stock levels and valuations
-- **Grouped Batch Browser** (`/batches`): Batches grouped by product type (Milk / Yoghurt / Cheese) and, within Cheese, sub-grouped by variety. Three-level collapsible hierarchy (type → variety → batch) using native `<details>`/`<summary>`. Each batch card renders an at-a-glance status strip in its always-visible header: one small circle per wheel produced (**yellow** = remaining, **grey** = cut, **black** = sold as whole wheel) plus a 128px stacked mini-bar for vacuum packs (yellow=remaining, black=sold). Same layout is applied on `/cheese-cutting` with the "Cut Wheel" action surfaced inside each batch's expanded body.
+- **Batch Traceability**: tracking with automated batch code generation
+- **Product Management**: products with full CRUD
+- **Product Variant Management**: full CRUD for variants (sizes, packaging) — weight, price, active status per variant; nested routes `/products/{product}/variants/*`
+- **Cheese Cutting System**: convert wheels to vacuum packs with full traceability
+- **Stock Overview**: real-time stock levels and valuations
+- **Grouped Batch Browser** (`/batches`): three-level collapsible hierarchy (type → cheese variety → batch) via native `<details>`/`<summary>`. Each batch card header shows an at-a-glance status strip: one circle per wheel produced (**yellow**=remaining, **grey**=cut, **black**=sold whole) plus a 128px stacked mini-bar for vacuum packs (yellow=remaining, black=sold). Same layout on `/cheese-cutting`, with the "Cut Wheel" action inside each expanded body.
 
-### ✅ **Advanced Stock Visualization**
-- **Multi-View System**: Three distinct views for stock management
-  - **Timeline View**: Gantt-style 6-month production planning
-  - **Calendar View**: Month/week grid with batch details
-  - **Table View**: Traditional detailed tabular format
-- **Smart Sorting**: By ready date, cheese type, batch code, or quantity
-- **Visual Indicators**: Progress bars, urgency alerts, and color coding
-- **Mobile Responsive**: Optimized for all screen sizes
+### ✅ **Stock Overview (`/stock`)**
+- **Per-type cards** (milk, yoghurt, cheese) each rendered by a dedicated row component (`x-stock.case-blocks`, `x-stock.case-pictograph`, `x-stock.cheese-row`).
+- **Row-per-(variant, batch)**: `StockOverviewService` groups items by `product_variant_id|batch_id` so each row tags its own `batch_code` and per-batch `expiry`. Rows sort by variant name then production date (FIFO).
+- **Sold visibility**: milk/yoghurt mirror cheese — `total` is `quantity_produced`, segments break into `available / allocated / sold` (`sold = produced − remaining`); sold cases render with `--state-sold`.
+- **Cheese wheels**: `available / allocated / cut / sold` breakdown; `cut` comes from `source_cutting_logs_count` per batch_item.
+- **Active filter**: only batches with `status = 'active'` AND `(expiry_date IS NULL OR expiry_date >= today)` contribute; closed/expired fall off automatically.
+- **Total value**: top-of-page euro figure summed from `productVariant->calculatePrice(available_quantity)` so weight-priced cheese is valued correctly.
 
 ### ✅ **Customer & Order Management**
-- **Customer CRUD**: Complete customer management system
-  - Create, view, edit, and delete customers
-  - Search and filter (by name, email, status, online account)
-  - Track credit limits, payment terms, and outstanding balances
-  - Full address management (street, city, postal code, country)
-  - Link to Mossorders online portal via `mossorders_user_id`
-  - View customer order history and online account status
-- **Order Processing**: Complete workflow from pending to fulfilled
-- **Stock Allocation**: Advanced FIFO allocation with real-time availability
-- **Auto-Allocation**: Intelligent automatic stock assignment
-- **Variable Weight Fulfillment**: Weight-based fulfillment for cheese products
-  - Individual weight entry per unit (e.g., each cheese wheel)
-  - Weight-based pricing (€/kg) for variable-weight items
-  - Running total calculation during fulfillment
-  - Fulfilled totals based on actual weight vs. estimated
-  - Pre-fulfillment `line_total` is also weight-aware: `qty × weight_kg × unit_price` for weight-priced items (set in `OrderItem::boot()`); `fulfilled_total` overrides this once actual weights are known
-- **Undo Fulfillment**: Ability to reverse fulfillments and restore stock
-- **Online Orders UI**: Web interface at `/online-orders` to preview and import orders from Mossorders portal
+- **Customer CRUD**: create/view/edit/delete; search & filter (name, email, status, online account); credit limits, payment terms, outstanding balances; full address; Mossorders link via `mossorders_user_id`; order history.
+- **Order Processing**: full workflow from pending to fulfilled
+- **Stock Allocation**: FIFO allocation with real-time availability; **Auto-Allocation** for automatic assignment
+- **Variable Weight Fulfillment** (cheese): per-unit weight entry with running total, weight-based pricing (€/kg), fulfilled totals from actual vs estimated weight. Pre-fulfillment `line_total` is weight-aware (`qty × weight_kg × unit_price` for weight-priced items, set in `OrderItem::boot()`); `fulfilled_total` overrides once actual weights are known.
+- **Undo Fulfillment**: reverse fulfillments and restore stock
+- **Online Orders UI** (`/online-orders`): preview and import orders from the Mossorders portal
 
 ### ✅ **Business Intelligence**
-- **Maturation Timeline**: Visual representation of cheese aging process
-- **Expiry Tracking**: Automated alerts for items nearing expiry dates
-- **Stock Valuation**: Real-time calculation of stock values
-- **Production Planning**: Visual 6-month production overview
-
-### 📊 **Stock Timeline Views**
-
-The system provides three specialized views for stock management:
-
-#### 🗓️ **Timeline View** (Primary)
-- **Gantt-style layout** with batch codes on left, timeline on right
-- **6-month visibility** (24 weeks) with responsive column limits
-- **Month headers** spanning across their respective weeks
-- **Visual symbols**:
-  - `▶` Production start (green)
-  - `■` Ready date (color-coded by urgency)
-  - `●●●` Quantity indicators (~10 units each)
-  - Progress bars showing maturation span
-- **Smart sorting**: Ready date, cheese type, batch code, quantity
-- **Visual grouping** when sorted by cheese type
-- **Responsive design**: 12 weeks (desktop), 8 weeks (tablet), 6 weeks (mobile)
-
-#### 📅 **Calendar View**
-- **Month/week grid** with detailed batch cards
-- **Progress indicators** and countdown timers
-- **Color-coded cheese types** with visual legend
-
-#### 📊 **Table View**
-- **Traditional tabular** format with sortable columns
-- **Progress bars** and expiry warnings
-- **Detailed batch information** and links
+- **Maturation Timeline**: cheese aging visualization
+- **Expiry Tracking**: alerts for items nearing expiry
+- **Stock Valuation**: real-time stock values
+- **Production Planning**: 6-month production overview
 
 ### 🔄 **API Integration & Mossorders Sync**
-- **Product Export API**: Read-only API endpoint for external services
-  - Endpoint: `GET /api/products`
-  - Authentication: Bearer token (`OFFICE_API_TOKEN`)
-  - Returns flattened product variants with stock availability
-  - Supports incremental sync with `updated_since` parameter
-  - Currency: All prices in euros (€)
-  - Each variant payload includes `is_priced_by_weight` so the consumer (mossorders) can render `€/kg` labels and compute weight-based estimates
-
-- **Mossorders Order Import**: Bidirectional integration with online portal
-  - **Preview Command**: `php artisan mossfield:preview-online-orders [--since=]`
-    - Read-only preview of orders from Mossorders API
-    - Displays order data without importing
-  - **Import Command**: `php artisan mossfield:import-online-orders [--since=]`
-    - Imports online orders into office system
-    - Maps to customers via `customers.mossorders_user_id`
-    - Idempotent (safe to run multiple times)
-    - Auto-generates office order numbers
-    - Tracks source via `orders.mossorders_order_id`
-    - Customer `notes` from the online order are preserved (read from the API payload; falls back to `"Imported from Mossorders order …"` when absent). The web-based importer in `OnlineOrdersController` uses the same fallback.
-  - **Configuration**: Set `MOSSORDERS_BASE_URL` and `MOSSORDERS_API_TOKEN` in `.env`
+- **Product Export API** — `GET /api/products`, Bearer token (`OFFICE_API_TOKEN`). Returns flattened variants with stock availability; incremental sync via `updated_since`; prices in euros. Each payload includes `is_priced_by_weight` so mossorders can render `€/kg` labels and weight-based estimates.
+- **Mossorders Order Import** — commands `php artisan mossfield:preview-online-orders [--since=]` (read-only) and `mossfield:import-online-orders [--since=]`. Import maps to customers via `customers.mossorders_user_id`, is idempotent, auto-generates office order numbers, and tracks source via `orders.mossorders_order_id`. Customer `notes` from the online order are preserved (falls back to `"Imported from Mossorders order …"` when absent — same fallback in `OnlineOrdersController`). Configure `MOSSORDERS_BASE_URL` and `MOSSORDERS_API_TOKEN`.
 
 ### 🔄 **Future Enhancements**
-- **Invoice Generation**: Generate invoices per order with configurable pricing
-- **Customer Portal**: Allow customers to view orders and download invoices
-- **Advanced Reporting**: Production reports and analytics
-- **Integration Options**: POS system integration (uniCenta ready)
+- Invoice generation per order; customer portal; advanced reporting; POS integration (uniCenta ready)
 
 ## Product & Variant Structure
 
 ### Products
-Products are the main categories (e.g., "Mossfield Organic Milk", "Mossfield Farmhouse Cheese").
+Main categories (e.g. "Mossfield Organic Milk", "Mossfield Farmhouse Cheese").
 
-**Key Fields**:
-- `name` - Product name
-- `type` - milk, yoghurt, or cheese
-- `maturation_days` - For cheese only (e.g., 90 days)
-- `is_active` - Active status
+**Key Fields**: `name`; `type` (milk/yoghurt/cheese); `maturation_days` (cheese only); `is_active`.
 
 ### Product Variants
-Variants represent specific sizes/packaging of products (e.g., "1L Bottle", "Whole Wheel", "Vacuum Pack").
+Specific sizes/packaging (e.g. "1L Bottle", "Whole Wheel", "Vacuum Pack").
 
 **Key Fields**:
-- `product_id` - Parent product reference
-- `name` - Variant name (e.g., "1L Bottle", "Vacuum Pack")
-- `size` - Size descriptor (e.g., "1L", "wheel", "pack")
-- `unit` - Unit type (e.g., "bottle", "wheel", "pack")
+- `product_id` - Parent product
+- `name`, `size`, `unit` - e.g. "Vacuum Pack" / "pack" / "pack"
 - `weight_kg` - Weight in kilograms (decimal)
 - `base_price` - Price in euros (€)
-- `is_variable_weight` - Boolean: whether weight varies per unit (e.g., cheese wheels)
-- `is_priced_by_weight` - Boolean: whether pricing is per kg (€/kg)
+- `is_variable_weight` - Boolean: weight entered at fulfillment (cheese wheels & packs)
+- `is_priced_by_weight` - Boolean: priced per kg (€/kg)
+- `is_bulk_weighed` - Boolean: when variable-weight, the entry style — `false` = per-unit weights (wheels), `true` = one total weight for the line (vacuum packs)
 - `is_active` - Variant availability
 
 **Variable Weight Products**:
-- Cheese wheels are variable weight (each wheel weighs differently)
-- Fixed products (milk bottles, standard vacuum packs) have consistent weights
-- Variable weight items require individual weight entry at fulfillment
-- Price displayed as €X.XX/kg for weight-priced items
+- Cheese is variable weight (weighed at fulfillment); all cheese variants are flagged `is_variable_weight` (data migration `2026_05_25_120100_enable_variable_weight_on_cheese_variants`; seeder sets it on fresh installs). Milk/yoghurt are fixed.
+- **Two entry styles** (per variant, via `is_bulk_weighed`): wheels → a weight per unit (#1, #2, #3… with a running total); vacuum packs → a single "Total weight (kg)" box (per-pack entry is impractical at scale). Both submit one `actual_weight_kg`; the fulfil controller/model are identical for both.
+- `is_priced_by_weight` is independent and **operator-set per variant** — until ticked (with a €/kg `base_price`), weight is recorded but invoicing stays per-unit. When on, `fulfilled_total = weight_fulfilled_kg × unit_price`.
+- Price displayed as €X.XX/kg for weight-priced items.
 
 ### Pricing Display Helpers
 The `ProductVariant` model centralises all price formatting and estimation. Always use these accessors instead of hand-formatting `base_price`:
 
 - `$variant->price_label` — `"€12.50/kg"` for weight-priced variants, `"€3.50"` otherwise
-- `$variant->estimated_unit_price` — per-unit price estimate (uses nominal `weight_kg` when priced by weight); use this for cart line totals and `data-price` attributes
+- `$variant->estimated_unit_price` — per-unit price estimate (uses nominal `weight_kg` when priced by weight); use for cart line totals and `data-price` attributes
 - `$variant->calculatePrice($quantity, $weightKg = null)` — weight-aware total; pass an actual weight to override the nominal estimate
 
 `OrderItem::boot()::saving` uses the same logic when computing `line_total`. `StockController` valuations use `calculatePrice()` to avoid the N×base_price overstatement on weight-priced cheese.
 
+**Estimate vs actual on orders** — `OrderItem.line_total` is the pre-fulfilment **estimate** (nominal weight); once a line is **fully fulfilled**, `OrderItem.fulfilled_total` holds the **actual** (recorded weight × `unit_price`). `OrderItem::invoiceable_total` returns the fulfilled total when fully fulfilled (and > 0) else the estimate, and `Order::calculateTotals()` sums `invoiceable_total` — so an order's stored `subtotal`/`total_amount` reflect actual fulfilled weight once picked. `OrderAllocationController::fulfill()`/`unfulfill()` re-run `calculateTotals()`. Order views show `invoiceable_total` with a `kg` hint for weight-priced lines. **Note:** `unit_price` is locked per line at order-creation from the then-current `base_price`; if a variant's pricing mode/rate changes later (e.g. per-unit → €/kg), pre-existing orders keep the old `unit_price` and need a manual reprice.
+
 ### Products Master-Detail View
-`/products` is the grouped-card index; `/products/{product}` (show), `/products/{product}/edit`, `/products/{product}/variants/create`, and `/products/{product}/variants/{variant}/edit` are all master-detail — sibling products in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected page content on the right.
+`/products` is the grouped-card index; `/products/{product}` (show), `…/edit`, `…/variants/create`, and `…/variants/{variant}/edit` are all master-detail — sibling products in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected content on the right.
 
 - **Shared list-builder**: `app/Http/Controllers/Concerns/BuildsProductList` trait. `ProductController::show/edit` and `ProductVariantController::create/edit` all `use BuildsProductList` and call `$this->buildProductList($request, $product)` to populate `$productList`, `$listFilters`, `$listTotal`, `$listLimit`. **Don't drop these from the views** — the shared sidebar partial requires them.
-- **Sidebar partial**: `resources/views/products/_sibling_list.blade.php`. Consumes `$mode` (`'show'` or `'edit'`) — sibling product rows link via `route('products.'.$mode, …)`. Variant pages pass `$mode = 'show'` (sibling clicks land on that product's show page; users pick a variant to edit from there).
-- **Variant nesting in sidebar**: pass `$showActiveVariants = true` and (optionally) `$activeVariant = $variant` to expand the *active* product's row with its variant list inline. Variant pages (`variants/create.blade.php`, `variants/edit.blade.php`) opt in; product show/edit pages don't.
-- `ProductController::update()` redirects to `products.show`, not `products.index`. `destroy()` still redirects to index. `ProductVariantController` store/update/destroy still redirect to `products.show`, which lands on the master-detail.
+- **Sidebar partial**: `resources/views/products/_sibling_list.blade.php`. Consumes `$mode` (`'show'`/`'edit'`) — sibling rows link via `route('products.'.$mode, …)`. Variant pages pass `$mode = 'show'`.
+- **Variant nesting in sidebar**: pass `$showActiveVariants = true` and (optionally) `$activeVariant = $variant` to expand the active product's row with its variant list inline. Variant pages opt in; product show/edit don't.
+- `ProductController::update()` redirects to `products.show`, not `products.index`; `destroy()` redirects to index. `ProductVariantController` store/update/destroy redirect to `products.show`.
 - Sidebar groups by `$typeOrder = ['milk','yoghurt','cheese']` (matches `ProductController::index()` line 16 and the trait) — keep the three locations in sync if a new product type is added.
 
 ### Controllers
-- **ProductController** - CRUD operations for products
-  - `index()` and `show()` eager-load variants with `withSum('batchItems as total_stock', ...)` to avoid N+1 on stock display
-- **ProductVariantController** - CRUD operations for variants (nested under products)
-  - Routes: `products.variants.create`, `products.variants.store`, `products.variants.edit`, `products.variants.update`, `products.variants.destroy`
-  - Views: `resources/views/products/variants/create.blade.php`, `resources/views/products/variants/edit.blade.php`
-  - `create()` accepts `?from={variantId}` to prefill the form when duplicating an existing variant; the source is exposed to the view as `$source`
-- **BatchController** - Batch CRUD + grouped browser at `/batches`
-  - `index()` eager-loads `batchItems` with `withCount('sourceCuttingLogs')` so the wheel visualization's "cut" count is one query per page, not N+1
-  - View composes three nested `<details>` levels (type → cheese variety → batch) and defers each batch card to `resources/views/batches/partials/batch-card.blade.php`
-- **CheeseCuttingController** - Same eager-load pattern on `index()`; view at `resources/views/cheese-cutting/index.blade.php` uses `resources/views/cheese-cutting/partials/batch-card.blade.php`, which keeps the header wheel/pack visuals but swaps in per-wheel **Cut Wheel** action buttons in the expanded body
+- **ProductController** — CRUD; `index()`/`show()` eager-load variants with `withSum('batchItems as total_stock', ...)` to avoid N+1 on stock display.
+- **ProductVariantController** — CRUD for variants (nested under products). Routes `products.variants.{create,store,edit,update,destroy}`; views `resources/views/products/variants/{create,edit}.blade.php`. `create()` accepts `?from={variantId}` to prefill from an existing variant (exposed as `$source`).
+- **BatchController** — Batch CRUD + grouped browser at `/batches`. `index()` eager-loads `batchItems` with `withCount('sourceCuttingLogs')` so the "cut" count is one query, not N+1. View composes three nested `<details>` levels, deferring each card to `resources/views/batches/partials/batch-card.blade.php`.
+- **CheeseCuttingController** — same eager-load pattern on `index()`; view at `resources/views/cheese-cutting/index.blade.php` uses `partials/batch-card.blade.php` with per-wheel **Cut Wheel** buttons in the expanded body.
 
 ### Wheel & Vac-Pack Visualization (shared logic)
 Cheese batches render an at-a-glance status strip in the card header:
-- **Wheels**: one circle per unit of `quantity_produced`. Colors derived as `cut = source_cutting_logs_count` (requires the `withCount` above), `sold = produced − remaining − cut`, `remaining = produced − cut − sold`. Always clamped to `max(0, …)` to survive counter drift.
-- **Vac packs**: a 128px stacked bar (`w-32 h-2`) with yellow=remaining / black=sold segments proportional to `quantity_produced`. One row per non-wheel cheese batch item with `produced > 0`. Chosen over per-pack markers because vac-pack counts can reach the hundreds.
-- The same classification (`str_contains(strtolower($variant->name), 'wheel')`) is used in `CheeseCuttingController::store()` — keep them aligned when renaming variants.
-- Each cheese sub-group header on `/batches` and `/cheese-cutting` also shows aggregate remaining/cut/sold totals so the summary stays visible even when all batches underneath are collapsed.
+- **Wheels**: one circle per unit of `quantity_produced`. `cut = source_cutting_logs_count` (requires the `withCount` above), `sold = produced − remaining − cut`, `remaining = produced − cut − sold`. Always clamped to `max(0, …)` to survive counter drift.
+- **Vac packs**: a 128px stacked bar (`w-32 h-2`) with yellow=remaining / black=sold proportional to `quantity_produced`. One row per non-wheel cheese batch item with `produced > 0` (per-pack markers impractical — counts reach hundreds).
+- Same classification (`str_contains(strtolower($variant->name), 'wheel')`) is used in `CheeseCuttingController::store()` — keep aligned when renaming variants.
+- Each cheese sub-group header on `/batches` and `/cheese-cutting` also shows aggregate remaining/cut/sold totals so the summary stays visible when batches are collapsed.
 
 ### Validation
-Both controllers delegate to FormRequests (`app/Http/Requests/ProductRequest.php`, `app/Http/Requests/ProductVariantRequest.php`):
+Both controllers delegate to FormRequests (`app/Http/Requests/ProductRequest.php`, `ProductVariantRequest.php`):
 
-- Product names are unique (`unique:products,name`)
-- Variant names are unique within their product (`unique:product_variants,name` scoped to `product_id`)
-- `maturation_days` is required when `type=cheese`
-- `weight_kg` is required for variants unless `is_variable_weight=true` AND `is_priced_by_weight=false` (i.e. weight is needed whenever it's load-bearing for pricing)
-- `base_price` minimum is 0.01 to prevent free variants
-- Checkbox booleans are coerced via `prepareForValidation()` so unchecked values become `false` instead of being dropped from the payload
+- Product names unique (`unique:products,name`); variant names unique within their product (`unique:product_variants,name` scoped to `product_id`)
+- `maturation_days` required when `type=cheese`
+- `weight_kg` required unless `is_variable_weight=true` AND `is_priced_by_weight=false` (weight is needed whenever it's load-bearing for pricing)
+- `base_price` minimum 0.01 (no free variants)
+- Checkbox booleans coerced via `prepareForValidation()` so unchecked values become `false` instead of being dropped
 
 ## Customer Structure
 
 ### Customers
-Customers represent buyers who place orders through the office system or online portal.
+Buyers placing orders through the office system or online portal.
 
-**Key Fields**:
-- `name` - Customer name
-- `email` - Email address (unique)
-- `phone` - Contact phone number (optional)
-- `address`, `city`, `postal_code`, `country` - Full address details
-- `credit_limit` - Maximum outstanding balance (decimal, in euros)
-- `payment_terms` - enum: `immediate`, `net_7`, `net_14`, `net_30`
-- `is_active` - Active status (boolean)
-- `notes` - Internal notes (optional)
-- `mossorders_user_id` - Link to Mossorders online portal user (nullable, unique)
+**Key Fields**: `name`; `email` (unique); `phone` (optional); `address`/`city`/`postal_code`/`country`; `credit_limit` (€); `payment_terms` (enum: `immediate`, `net_7`, `net_14`, `net_30`); `is_active`; `notes`; `mossorders_user_id` (nullable, unique).
 
-**Helper Methods**:
-- `hasOnlineAccount()` - Returns true if linked to Mossorders portal
-- `getOutstandingBalanceAttribute()` - Calculates total unpaid orders
-- `canPlaceOrder(float $orderAmount)` - Checks credit limit availability
+**Helper Methods**: `hasOnlineAccount()`; `getOutstandingBalanceAttribute()`; `canPlaceOrder(float $orderAmount)`.
 
-**Controller**:
-- **CustomerController** - Full CRUD operations
-  - Routes: `customers.index`, `customers.create`, `customers.store`, `customers.show`, `customers.edit`, `customers.update`, `customers.destroy`
-  - Views: `resources/views/customers/` (index, create, edit, show)
-  - Features: Search/filter, order history, online account status
+**Controller**: `CustomerController` — full CRUD. Routes `customers.{index,create,store,show,edit,update,destroy}`; views in `resources/views/customers/`. Features: search/filter, order history, online account status.
 
 ## Order Structure
 
 ### Orders
-Orders track customer purchases and their fulfillment status.
+Track customer purchases and fulfillment status.
 
-**Key Fields**:
-- `order_number` - Auto-generated (format: ORD-YYYYMMDD-XXX)
-- `customer_id` - Foreign key to customers
-- `order_date`, `delivery_date` - Order and delivery dates
-- `status` - enum: `pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `delivered`, `cancelled`
-- `payment_status` - enum: `pending`, `paid`, `partial`, `overdue`
-- `subtotal`, `tax_amount`, `total_amount` - Financial totals (decimals, in euros)
-- `delivery_address` - Optional override of customer default address
-- `notes` - Order notes
-- `mossorders_order_id` - Link to Mossorders online order (nullable, unique)
+**Key Fields**: `order_number` (auto, `ORD-YYYYMMDD-XXX`); `customer_id`; `order_date`/`delivery_date`; `status` (enum: `pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `delivered`, `cancelled`); `payment_status` (enum: `pending`, `paid`, `partial`, `overdue`); `subtotal`/`tax_amount`/`total_amount` (€); `delivery_address` (optional override); `notes`; `mossorders_order_id` (nullable, unique).
 
-**Helper Methods**:
-- `scopeFromMossorders($query)` - Scope to filter imported online orders
-- `isFullyAllocated()` - Checks if all items have stock allocated
-- `canBeCancelled()` - Checks if order can be cancelled
+**Helper Methods**: `scopeFromMossorders($query)`; `isFullyAllocated()`; `canBeCancelled()`.
 
 ### Currency
 All prices throughout the application are displayed in euros (€).
 
 ### Orders Master-Detail View
-`/orders` is a paginated table; `/orders/{order}` is a master-detail layout — sibling orders in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected order detail on the right.
+`/orders` is a paginated table; `/orders/{order}` is master-detail — sibling orders in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected order detail on the right.
 
-- `OrderController::show(Request $request, Order $order)` accepts the same filters as `index()` (`status`, `payment_status`, `customer_id`) via query string, fetches up to 50 sibling orders matching them, and force-includes the selected order in the list even when outside the cap. View receives `$orderList`, `$listFilters`, `$listTotal`, `$listLimit`. **Don't drop these from `show()`** — the blade depends on them and degrades to an empty list otherwise.
+- `OrderController::show(Request $request, Order $order)` accepts the same filters as `index()` (`status`, `payment_status`, `customer_id`) via query string, fetches up to 50 matching sibling orders, and force-includes the selected order even when outside the cap. View receives `$orderList`, `$listFilters`, `$listTotal`, `$listLimit`. **Don't drop these from `show()`** — the blade depends on them and degrades to an empty list otherwise.
 - `orders/index.blade.php` rows link via `route('orders.show', array_merge($rowFilters, ['order' => $order->id]))` so filter state flows into the master pane. Apply the same pattern from any new entry point that should preserve filter context.
 
 ## Order Allocation & Fulfillment
 
 ### Allocation Flow
-1. **Order Created** → Status: pending
-2. **Order Confirmed** → Available for allocation
-3. **Stock Allocated** → Links order items to specific batch items (FIFO)
-4. **Fulfillment** → Reduces actual batch stock, records weights for variable items
-5. **Order Completed** → All items fulfilled
+1. **Order Created** → pending
+2. **Order Confirmed** → available for allocation
+3. **Stock Allocated** → links order items to specific batch items (FIFO)
+4. **Fulfillment** → reduces actual batch stock, records weights for variable items
+5. **Order Completed** → all items fulfilled
+
+### Inline Allocation on the Order Detail Page
+The allocation/picking UI is rendered **inline on `/orders/{order}`** — there is no longer a separate full-width allocation page (it dropped the master-detail sidebar + info/customer cards, disorienting mid-workflow). The "Order items" panel is swapped for the rich allocation block when `order.status ∈ {confirmed, preparing, ready}`; other statuses show the plain read-only items table. The financial subtotal/tax/total summary lives in its own panel, rendered in both branches (gated by `@can('see-financials')`).
+
+- **Partial**: `resources/views/orders/partials/allocation-items.blade.php` holds the per-item block (progress bar, current-allocations table with Fulfill/Remove/Undo forms, variable-weight per-unit weight inputs + JS, available-stock picker) and the "Auto allocate" button (header, `confirmed`/`preparing` only). **Every interactive form is gated `@can('update', $order)`** so factory (view-only) sees the same counts/tables read-only with no forms. The weight `<script>` is inside the partial (included once).
+- **Data**: `OrderController::show()` eager-loads `orderItems.orderAllocations.batchItem.batch` and builds `$availableBatchItems` **only** when status is in the picking set AND `$request->user()->can('update', $order)`. The builder is the shared `App\Http\Controllers\Concerns\BuildsAllocationData` trait (`buildAvailableBatchItems()`), used by both `OrderController` and `OrderAllocationController` — mirrors the `BuildsProductList` pattern.
+- **Action routes unchanged** (`allocate`/`deallocate`/`fulfill`/`unfulfill`/`auto-allocate`); they now `redirect()->route('orders.show', $order)` (was `back()`) so the user stays on the unified page without a referer dependency.
+- The old `GET /order-allocations/{order}` route is kept but **redirects to `orders.show`** (bookmarks/worklist/dashboard). The `order-allocations.index` worklist stays; its rows and the dashboard "Allocate →" link point straight at `orders.show`.
+
+### Adding Items to an Existing Order
+Items are no longer frozen after creation. `OrderController::storeItem()` (route `POST /orders/{order}/items`, name `orders.items.store`) adds a line to an open order. Office/admin only (`$this->authorize('update', $order)`; factory 403). Allowed while status ∈ `{pending, confirmed, preparing, ready}`; **blocked** on `{dispatched, delivered, cancelled}` (returns to `orders.show` with an error flash).
+
+- **Merge-by-variant**: if the posted `product_variant_id` is already a line, its `quantity_ordered` is incremented (the `OrderItem::boot() saving` hook recomputes `line_total`); otherwise a new line is created with `unit_price = variant->base_price` (mirrors `store()`). `Order::calculateTotals()` re-runs after either path.
+- **Ready → Preparing**: adding unpicked work to a `ready` order reverts it to `preparing`. Fulfilling that line flips it back to `ready` via `OrderAllocationController::markPickingComplete()`. Other statuses unchanged.
+- **UI**: an "Add item" panel on `orders/show.blade.php` (gated `@can('update', $order)` + `$canAddItems`) — a product `<select>` (grouped via `OrderController::activeVariantsGrouped()`, shared with `create()`) + quantity. `show()` only passes `$productVariants` when the user can update and the status is open. Because allocation is inline, the added line's stock picker appears immediately for `{confirmed, preparing, ready}`.
+- `orders/edit.blade.php` still does **not** edit/remove existing lines — all item mutation happens on the show page.
+
+### Editing & Removing Order Items (stock unwind)
+`PATCH /orders/{order}/items/{orderItem}` (`orders.items.update` → `updateItem()`) changes a line's quantity; `DELETE` (`orders.items.destroy` → `destroyItem()`) removes a line. Same gating as add (office/admin via `authorize('update')`; blocked on `{dispatched, delivered, cancelled}`; `abort_if` belongs-to guard).
+
+- **`OrderItem::releaseUnits(int $units)`** is the shared unwind helper: it releases committed quantity **reserved-first** (just lowers `quantity_allocated` / deletes the row — no stock change) then **fulfilled-last** via `unfulfillAllocation()` (which `increment`s `BatchItem.quantity_remaining` — restoring picked stock). It rolls up the line's counters and is transaction-safe (LIFO by allocation id; `unfulfillAllocation`'s own transaction nests as a savepoint).
+- **Increase**: `updateItem` raises `quantity_ordered` (the `OrderItem::boot() saving` hook recomputes `line_total`); the inline picker shows the shortfall. **Decrease**: `releaseUnits(old − new)` then set the new qty. **Remove**: `releaseUnits(quantity_allocated)` (returns all reserved+picked stock) then delete — this is why the FK `onDelete('cascade')` no longer strands `quantity_remaining`.
+- **`Order::reconcilePickingStatus()`** runs after every edit/remove/deallocate/unfulfill (the canonical ready⇄preparing rule): `ready` + not-fully-fulfilled → `preparing`; `preparing` + fully-fulfilled → `ready`. One-directional around that boundary — never demotes `preparing → confirmed`. (So increasing a line on a ready order reverts it to preparing; undoing a pick un-sticks a wrongly-"ready" order; removing the last unpicked line from a preparing order advances it to ready.) **`OrderAllocationController::deallocate()` and `unfulfill()` both call it** — without that, undoing a pick left an order claiming "ready for dispatch" with nothing allocated.
+- **Last line**: an order can't go empty, so removing its only line **cancels the order** (keeps the line as history, returns any stock) rather than deleting it.
+- **UI**: per-line "Qty + Update" and "Remove" controls live in the inline allocation partial (confirmed/preparing/ready) and in the read-only items table (pending), gated `@can('update', $order)` + `$canAddItems`. The Remove confirm/label switches to "Remove (cancels order)" when it's the only line.
+
+### Cancellation Returns All Stock
+`OrderController::update()` wraps the status write in a DB transaction; on the `* → cancelled` transition it calls `OrderItem::releaseUnits($item->quantity_allocated)` for every line — returning **both** reserved units (drops the reservation) **and** picked units (restores `BatchItem.quantity_remaining`). `Order::canBeCancelled()` allows cancelling any not-yet-shipped order (`pending|confirmed|preparing|ready`); the Cancel button on `orders/show.blade.php` is driven by it. (Earlier behaviour deliberately *retained* fulfilled allocations on cancel — changed so cancelling never strands picked stock, matching line removal; removing the last line routes through the same cancel.) Keep any new cancel paths consistent — restore stock via `releaseUnits`.
 
 ### Order Allocations Table
-Tracks the link between order items and batch items:
+Links order items to batch items:
 - `order_item_id` - Which order item this allocation is for
 - `batch_item_id` - Which batch the stock comes from
-- `quantity_allocated` - How many units reserved
-- `quantity_fulfilled` - How many units actually picked/shipped
-- `actual_weight_kg` - Actual weight recorded at fulfillment (for variable weight items)
-- `allocated_at` - When allocation was created
-- `fulfilled_at` - When fulfillment was completed
+- `quantity_allocated` / `quantity_fulfilled` - Units reserved / actually picked
+- `actual_weight_kg` - Weight recorded at fulfillment (variable-weight items)
+- `allocated_at` / `fulfilled_at` - Timestamps
 
 ### Variable Weight Fulfillment
 For cheese wheels and other variable-weight products:
 
-**Database Fields**:
-- `product_variants.is_variable_weight` - Marks variant as requiring weight entry
-- `product_variants.is_priced_by_weight` - Marks variant as €/kg pricing
-- `order_allocations.actual_weight_kg` - Stores actual weight at fulfillment
-- `order_items.weight_fulfilled_kg` - Total weight fulfilled for the line item
-- `order_items.fulfilled_total` - Calculated total based on actual weight
+**Database Fields**: `product_variants.is_variable_weight` (requires weight entry), `product_variants.is_bulk_weighed` (per-unit vs single total), `product_variants.is_priced_by_weight` (€/kg pricing), `order_allocations.actual_weight_kg`, `order_items.weight_fulfilled_kg`, `order_items.fulfilled_total`.
 
-**UI Behavior** (`/order-allocations/{order}`):
-- Variable weight items show "Variable Weight" badge
-- Fulfillment form shows individual weight inputs for each unit (#1, #2, #3...)
-- Running total calculated as weights are entered
-- Price shown as €X.XX/kg with estimated vs fulfilled totals
+**UI Behavior** (inline on `/orders/{order}` — see "Inline Allocation on the Order Detail Page"):
+- Variable weight items show a "Variable Weight" badge.
+- **Per-unit** (`!is_bulk_weighed`, e.g. wheels): one weight input per unit (#1, #2, #3…) with a running total summed client-side into the hidden `actual_weight_kg` (JS `updateWeightInputs`/`updateTotal`).
+- **Bulk** (`is_bulk_weighed`, e.g. vacuum packs): a single "Total weight (kg)" input posted directly as `actual_weight_kg` — no per-unit rows, no JS. `OrderItem::isBulkWeighed()` selects the branch in `orders/partials/allocation-items.blade.php`.
+- `OrderAllocationController::fulfill()` is unchanged — it validates `actual_weight_kg` (required for any `is_variable_weight` item) for both styles.
+- Price shown as €X.XX/kg with estimated vs fulfilled totals (only when `is_priced_by_weight`).
 
 **Controller**: `OrderAllocationController`
-- `show()` - Display order with available stock and current allocations
-- `allocate()` - Reserve stock from a batch item
-- `deallocate()` - Remove an allocation (if not fulfilled)
-- `fulfill()` - Mark allocated items as picked, record weights
-- `unfulfill()` - Undo fulfillment, restore stock to batch
-- `autoAllocate()` - Automatically allocate using FIFO
+- `show()` - **redirects to `orders.show`** (allocation UI is now inline)
+- `allocate()` - reserve stock from a batch item
+- `deallocate()` - remove an allocation (if not fulfilled)
+- `fulfill()` - mark allocated items as picked, record weights
+- `unfulfill()` - undo fulfillment, restore stock to batch
+- `autoAllocate()` - auto-allocate using FIFO
+- `index()` - worklist of orders needing allocation (still its own page)
+
+All write actions `redirect()->route('orders.show', $order)`.
 
 ### Routes
 ```php
-GET  /order-allocations                    # List orders needing allocation
-GET  /order-allocations/{order}            # Show order allocation page
+GET  /order-allocations                    # Worklist of orders needing allocation
+GET  /order-allocations/{order}            # Redirects → orders.show (allocation UI is inline)
 POST /order-allocations/{orderItem}/allocate    # Allocate stock
 DELETE /order-allocations/{allocation}     # Remove allocation
 POST /order-allocations/{allocation}/fulfill    # Fulfill allocation
@@ -594,17 +446,13 @@ POST /order-allocations/{order}/auto-allocate   # Auto-allocate order
 ## Online Orders Integration
 
 ### Web Interface
-- **URL**: `/online-orders`
-- **Navigation**: "Online Orders" link in main navigation
-- **Features**:
-  - Preview orders from Mossorders before importing
-  - Import selected orders into office system
-  - View import status and history
+- **URL**: `/online-orders`; nav link "Online Orders"
+- **Features**: preview orders from Mossorders before importing, import selected orders, view import status/history
 
 ### Controller: `OnlineOrdersController`
-- `index()` - Main online orders dashboard
-- `preview()` - Fetch and display orders from Mossorders API
-- `import()` - Import orders into local database
+- `index()` - dashboard
+- `preview()` - fetch and display orders from the Mossorders API
+- `import()` - import orders into the local database
 
 ### Configuration
 ```env

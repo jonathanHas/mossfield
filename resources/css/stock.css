@@ -1,0 +1,79 @@
+/* Stock-overview visualization tokens.
+   State palette mirrors STATE map in the Claude Design handoff (stock-viz.jsx).
+   Reuses the warm app palette (--accent, --warn, --danger) where possible. */
+
+:root {
+    --state-available: var(--accent);
+    --state-allocated: var(--warn);
+    --state-reserved: #C9C5B8;
+    --state-damaged: var(--danger);
+    --state-empty: var(--line-2);
+    --state-cut: #9CA3AF;
+    --state-sold: #1F1D17;
+
+    /* Product-family tones for chip tags (cool blue for milk, warm gold for yoghurt). */
+    --milk: oklch(0.65 0.10 230);
+    --milk-soft: oklch(0.96 0.03 230);
+    --milk-ink: oklch(0.40 0.10 230);
+    --yog: oklch(0.75 0.10 90);
+    --yog-soft: oklch(0.97 0.04 90);
+    --yog-ink: oklch(0.45 0.10 90);
+}
+
+@layer components {
+    .mf-tag-milk { background: var(--milk-soft); color: var(--milk-ink); }
+    .mf-tag-yog  { background: var(--yog-soft);  color: var(--yog-ink); }
+
+    /* Case-block grid for milk variants. Column count is set inline so it can adapt to viewport. */
+    .stock-case-grid {
+        display: grid;
+        gap: 3px;
+    }
+    .stock-case-grid > .stock-case {
+        aspect-ratio: 1.5 / 1;
+        border-radius: 2px;
+        background: var(--state-empty);
+    }
+    .stock-case-grid > .stock-case--empty {
+        border: 1px solid var(--line);
+        background: transparent;
+    }
+
+    /* Pictograph row for yoghurt variants (1 SVG icon = 1 case of 6). */
+    .stock-pictograph {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+        align-items: flex-end;
+    }
+
+    /* Cheese row of state-colored circles (1 dot = 1 wheel/pack). */
+    .stock-cheese-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        align-items: center;
+    }
+    .stock-cheese-dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 9999px;
+    }
+
+    /* Segment count column (uppercase label + big mono number colored by state). */
+    .stock-segments {
+        display: flex;
+        gap: 14px;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+    .stock-segments__label {
+        color: var(--muted);
+        text-transform: uppercase;
+        font-size: 10px;
+        letter-spacing: 0.4px;
+    }
+    .stock-segments__value {
+        font-weight: 700;
+        font-size: 14px;
+    }
+}

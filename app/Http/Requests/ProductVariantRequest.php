@@ -26,11 +26,13 @@ class ProductVariantRequest extends FormRequest
             'unit' => 'required|string|max:255',
             'weight_kg' => 'nullable|numeric|min:0',
             'base_price' => 'required|numeric|min:0.01',
+            'case_size' => 'nullable|integer|min:1|max:9999',
             'image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:8192',
             'remove_image' => 'sometimes|boolean',
             'is_active' => 'boolean',
             'is_variable_weight' => 'boolean',
             'is_priced_by_weight' => 'boolean',
+            'is_bulk_weighed' => 'boolean',
         ];
     }
 
@@ -47,6 +49,7 @@ class ProductVariantRequest extends FormRequest
             'is_active' => $this->boolean('is_active'),
             'is_variable_weight' => $this->boolean('is_variable_weight'),
             'is_priced_by_weight' => $this->boolean('is_priced_by_weight'),
+            'is_bulk_weighed' => $this->boolean('is_bulk_weighed'),
         ]);
     }
 }

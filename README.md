@@ -21,11 +21,10 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
 - **Currency**: All prices displayed in euros (€)
 
 ### 📦 **Advanced Stock Management**
-- **Multi-View Stock Overview**: Timeline, Calendar, and Table views
-- **Gantt-Style Timeline**: Visual 6-month production planning view
-- **Smart Sorting**: Sort by ready date, cheese type, batch code, or quantity
-- **Expiry Tracking**: Automated alerts for items nearing expiry
-- **Color-Coded Types**: Visual distinction between cheese varieties
+- **Stock Overview (`/stock`)**: Per-product-type cards (milk · yoghurt · cheese) with one row per (variant, batch). Each row tags its own batch code, expiry, and breakdown by state: `available / allocated / sold` for milk and yoghurt, plus `cut` on cheese wheels. Sold cases are rendered in the case grids alongside available/allocated so the full produced batch stays visible.
+- **Stock Value**: Live euro total at the top of the page, computed from `available_quantity × calculatePrice()` (weight-aware for €/kg cheese).
+- **Expiry Tracking**: Per-batch expiry tag on every row; "warn" tone within 5 days of expiry.
+- **Active-Only Filter**: Only batches with `status = 'active'` and an unexpired `expiry_date` contribute to the overview — closed/expired batches drop off automatically.
 
 ### 🛒 **Customer & Order Management**
 - **Customer CRUD**: Complete customer management system
@@ -42,11 +41,13 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
   - Tracks order source (office vs online)
 - **Stock Allocation**: Advanced FIFO allocation with availability tracking
 - **Auto-Allocation**: Intelligent automatic stock assignment
-- **Variable Weight Fulfillment**: Weight-based fulfillment for cheese
-  - Individual weight entry per unit (each cheese wheel)
-  - Weight-based pricing (€/kg) calculation
-  - Actual vs estimated totals tracking
-- **Undo Fulfillment**: Reverse fulfillments and restore stock to batches
+- **Variable Weight Fulfillment**: Weight captured at fulfillment for cheese (flagged per variant via `is_variable_weight`)
+  - Two entry styles (per variant via `is_bulk_weighed`): **per-unit** weights for wheels (#1, #2, #3… with a running total) or a single **total weight** for the line for vacuum packs
+  - Weight-based pricing (€/kg) when `is_priced_by_weight` is set on the variant
+  - **Order totals reflect the actual fulfilled weight** once a line is fully picked (`invoiceable_total`/`calculateTotals`); estimate (nominal weight) shown until then. `unit_price` is locked per line at order time, so orders predating a pricing-mode change need a manual reprice.
+- **Undo Fulfillment**: Reverse fulfillments and restore stock to batches (also reverts a "ready" order back to "preparing")
+- **Add / Edit / Remove Order Lines**: Lines can be added, re-quantified, or removed on an existing order (even one already picked). Shrinking or removing a line unwinds its allocations and returns reserved + picked units to their batches; removing an order's only line cancels the order.
+- **Cancel Returns All Stock**: Transitioning an order to `cancelled` returns both reserved and picked units to their batches (`OrderItem::releaseUnits`) — cancelling never strands stock. Any not-yet-shipped order (`pending`/`confirmed`/`preparing`/`ready`) can be cancelled.
 
 ### 💼 **Business Intelligence**
 - **Visual Timeline**: See production flow across months and weeks
@@ -290,35 +291,23 @@ Mossfield Organic Farm produces three main product categories:
    - Produced as wheels, later cut into vacuum packs
    - Full traceability from wheel to individual pack
 
-### Stock Timeline Views
+### Stock Overview
 
-The system provides three distinct views for managing maturing stock:
+`/stock` renders one card per product type (milk, yoghurt, cheese), built by `App\Services\StockOverviewService`:
 
-#### 🗓️ **Timeline View** (Default)
-- **Gantt-style layout** showing 6 months of production planning
-- **Batch codes** on the left with visual quantity indicators (●●●)
-- **Month headers** spanning across their respective weeks
-- **Visual symbols**: ▶ (production start), ■ (ready date), progress bars
-- **Color-coded** by cheese type with urgency indicators
-- **Sorting options**: Ready date, cheese type, batch code, quantity
-
-#### 📅 **Calendar View**
-- **Month/week grid** with batches organized by ready dates
-- **Weekly subdivisions** with progress indicators
-- **Detailed batch cards** with countdown timers
-
-#### 📊 **Table View**
-- **Traditional tabular** format with full batch details
-- **Progress bars** and expiry warnings
-- **Sortable columns** for detailed analysis
+- **Row per (variant, batch)** — each line in the milk and yoghurt cards is a single batch of a single variant. Each cheese wheel and pack row is likewise per-batch. The batch code is shown in mono under the variant label.
+- **Segments** — milk and yoghurt rows split each row's produced units into `available / allocated / sold` (sold derived from `quantity_produced − quantity_remaining`). Cheese wheels additionally show `cut`. Sold cases render in the case grid using `--state-sold`.
+- **Per-batch expiry** — every row shows its own expiry tag; tone flips to `warn` within 5 days of expiry.
+- **Active filter** — only batches with `status = 'active'` AND `(expiry_date IS NULL OR expiry_date >= today)` contribute. Closed or expired batches drop off automatically.
+- **Stock value** — top-of-page euro total summed from `productVariant->calculatePrice(available_quantity)`, weight-aware for €/kg cheese.
 
 ### Key Workflows
 
 1. **Production** → Create batches with automatic code generation
 2. **Maturation** → Track cheese aging with visual timeline
 3. **Cutting** → Convert wheels to vacuum packs (cheese only)
-4. **Orders** → Customer orders with stock allocation
-5. **Fulfillment** → FIFO allocation with individual weight entry for cheese
+4. **Orders** → Customer orders with stock allocation (managed inline on the order page)
+5. **Fulfillment** → FIFO allocation with weight entry for cheese (per-unit for wheels, single total for vacuum packs)
 6. **Online Orders** → Preview and import orders from Mossorders portal
 
 ## Built With Laravel

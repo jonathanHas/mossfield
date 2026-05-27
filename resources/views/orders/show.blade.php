@@ -2,13 +2,6 @@
     <x-slot name="header">Order {{ $order->order_number }}</x-slot>
 
     @php
-        $statusTone = match($order->status) {
-            'pending' => 'warn',
-            'confirmed', 'preparing' => 'info',
-            'ready', 'dispatched', 'delivered' => 'accent',
-            'cancelled' => 'danger',
-            default => 'neutral',
-        };
         $payTone = match($order->payment_status) {
             'paid' => 'accent',
             'partial' => 'info',
@@ -20,6 +13,19 @@
         $listTotal = $listTotal ?? $orderList->count();
         $listLimit = $listLimit ?? 50;
         $hasFilters = ! empty($listFilters);
+        $availableBatchItems = $availableBatchItems ?? [];
+        // Picking statuses render the inline allocation block; others show read-only rows.
+        $showAllocation = in_array($order->status, ['confirmed', 'preparing', 'ready'], true);
+        $productVariants = $productVariants ?? collect();
+        // Items can be added/edited while the order is still open (pending → ready).
+        $canAddItems = ! in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true);
+        // Status transition hidden fields shared by the PATCH forms below.
+        $statusFields = [
+            'payment_status' => $order->payment_status,
+            'delivery_date' => $order->delivery_date?->format('Y-m-d'),
+            'delivery_address' => $order->delivery_address,
+            'notes' => $order->notes,
+        ];
     @endphp
 
     <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
@@ -88,179 +94,302 @@
             @endif
         </aside>
 
-        <main class="px-6 py-5">
-            <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
-                <div>
-                    <div class="text-[12px] font-mono" style="color: var(--muted);">{{ $order->order_date->format('l, j F Y') }}</div>
-                    <h1 class="mt-0.5 text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">
-                        Order <span class="font-mono text-[20px]">{{ $order->order_number }}</span>
-                    </h1>
-                    <div class="mt-1 flex items-center gap-2">
-                        <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span>
-                        <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <a href="{{ route('orders.index', $listFilters) }}" class="mf-btn-ghost lg:hidden">← All orders</a>
-                    @can('update', $order)
-                        <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
-                    @endcan
-                </div>
-            </div>
+        <main class="px-6 py-8">
+            <div class="mx-auto max-w-[920px]">
+                @if (session('success'))
+                    <div class="mf-flash mf-flash-success mb-4">{{ session('success') }}</div>
+                @endif
+                @if (session('error'))
+                    <div class="mf-flash mf-flash-error mb-4">{{ session('error') }}</div>
+                @endif
 
-            <div class="grid gap-4 grid-cols-1 xl:grid-cols-2 mb-4">
-                <div class="mf-panel">
-                    <div class="mf-panel-header">
-                        <div class="text-[13px] font-semibold">Order information</div>
-                    </div>
-                    <dl class="px-4 py-3 text-[13px] grid grid-cols-[140px_1fr] gap-y-2">
-                        <dt style="color: var(--muted);">Order number</dt>
-                        <dd class="font-mono">{{ $order->order_number }}</dd>
-                        <dt style="color: var(--muted);">Order date</dt>
-                        <dd class="font-mono">{{ $order->order_date->format('d/m/Y') }}</dd>
-                        <dt style="color: var(--muted);">Delivery date</dt>
-                        <dd class="font-mono">{{ $order->delivery_date ? $order->delivery_date->format('d/m/Y') : '—' }}</dd>
-                        <dt style="color: var(--muted);">Status</dt>
-                        <dd><span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span></dd>
-                        <dt style="color: var(--muted);">Payment</dt>
-                        <dd><span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span></dd>
-                    </dl>
+                {{-- Breadcrumb --}}
+                <div class="text-[12px] mb-3.5 flex items-center gap-1.5" style="color: var(--muted);">
+                    <a href="{{ route('orders.index', $listFilters) }}" style="color: var(--muted); text-decoration: none;">Orders</a>
+                    <span style="opacity: .5;">›</span>
+                    <span style="color: var(--ink);">{{ $order->order_number }}</span>
                 </div>
 
-                <div class="mf-panel">
-                    <div class="mf-panel-header">
-                        <div class="text-[13px] font-semibold">Customer</div>
-                    </div>
-                    <dl class="px-4 py-3 text-[13px] grid grid-cols-[140px_1fr] gap-y-2">
-                        <dt style="color: var(--muted);">Name</dt>
-                        <dd>{{ $order->customer->name }}</dd>
-                        <dt style="color: var(--muted);">Email</dt>
-                        <dd>{{ $order->customer->email ?: '—' }}</dd>
-                        <dt style="color: var(--muted);">Phone</dt>
-                        <dd>{{ $order->customer->phone ?: '—' }}</dd>
-                        <dt style="color: var(--muted);">Address</dt>
-                        <dd>{{ $order->customer->address ?: '—' }}</dd>
-                        @if($order->delivery_address)
-                            <dt style="color: var(--muted);">Delivery to</dt>
-                            <dd>{{ $order->delivery_address }}</dd>
+                {{-- Header --}}
+                <div class="flex items-start justify-between gap-6 mb-7">
+                    <div class="min-w-0">
+                        <h1 class="text-[24px] font-semibold font-mono" style="letter-spacing: -0.02em;">{{ $order->order_number }}</h1>
+                        <div class="mt-1.5 text-[13px]" style="color: var(--muted);">
+                            <span style="color: var(--ink-2); font-weight: 500;">{{ $order->customer->name }}</span>
+                            · ordered {{ $order->order_date->format('j M') }}
+                            @if($order->delivery_date)
+                                · deliver {{ $order->delivery_date->format('j M') }}
+                            @endif
+                        </div>
+                        @if($order->status === 'cancelled')
+                            <span class="mf-tag mf-tag-danger mt-2">Cancelled</span>
                         @endif
-                    </dl>
-                </div>
-            </div>
-
-            @if($order->notes)
-                <div class="mf-flash mf-flash-warn mb-4">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
-                    </svg>
-                    <div><b>Notes:</b> {{ $order->notes }}</div>
-                </div>
-            @endif
-
-            <div class="mf-panel mb-4">
-                <div class="mf-panel-header">
-                    <div class="text-[13px] font-semibold">Order items</div>
-                </div>
-                <div class="overflow-x-auto">
-                    <table class="w-full border-collapse text-[13px]">
-                        <thead>
-                            <tr>
-                                <th class="mf-th">Product</th>
-                                @can('see-financials')
-                                    <th class="mf-th">Unit price</th>
-                                @endcan
-                                <th class="mf-th">Ordered</th>
-                                <th class="mf-th">Allocated</th>
-                                <th class="mf-th">Fulfilled</th>
-                                @can('see-financials')
-                                    <th class="mf-th text-right">Line total</th>
-                                @endcan
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach($order->orderItems as $item)
-                                <tr style="border-top: 1px solid var(--line-2);">
-                                    <td class="mf-td">
-                                        <div class="font-medium">{{ $item->productVariant->product->name }}</div>
-                                        <div class="text-[11.5px] mt-0.5" style="color: var(--muted);">{{ $item->productVariant->name }}</div>
-                                    </td>
-                                    @can('see-financials')
-                                        <td class="mf-td font-mono">€{{ number_format($item->unit_price, 2) }}{{ $item->isPricedByWeight() ? '/kg' : '' }}</td>
-                                    @endcan
-                                    <td class="mf-td font-mono">{{ $item->quantity_ordered }}</td>
-                                    <td class="mf-td font-mono">{{ $item->quantity_allocated ?? 0 }}</td>
-                                    <td class="mf-td font-mono">{{ $item->quantity_fulfilled ?? 0 }}</td>
-                                    @can('see-financials')
-                                        <td class="mf-td font-mono font-medium text-right">€{{ number_format($item->line_total, 2) }}</td>
-                                    @endcan
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+                    </div>
+                    <div class="flex items-center gap-2 flex-shrink-0">
+                        <a href="{{ route('orders.index', $listFilters) }}" class="mf-btn-ghost lg:hidden">← All</a>
+                        @can('update', $order)
+                            <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
+                            @if($order->status === 'pending')
+                                <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
+                                    @csrf @method('PATCH')
+                                    <input type="hidden" name="status" value="confirmed">
+                                    @foreach($statusFields as $name => $value)
+                                        <input type="hidden" name="{{ $name }}" value="{{ $value }}">
+                                    @endforeach
+                                    <button type="submit" class="mf-btn-primary"
+                                        onclick="return confirm('Confirm this order and make it available for stock allocation?')">
+                                        Confirm order
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+                                    </button>
+                                </form>
+                            @elseif($order->status === 'ready')
+                                <form method="POST" action="{{ route('orders.dispatch', $order) }}" class="inline">
+                                    @csrf
+                                    <button type="submit" class="mf-btn-primary"
+                                        onclick="return confirm('Mark order {{ $order->order_number }} as dispatched?')">
+                                        Mark dispatched
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7" /><path d="M5.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM18.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" /></svg>
+                                    </button>
+                                </form>
+                            @elseif($order->status === 'dispatched')
+                                <form method="POST" action="{{ route('orders.deliver', $order) }}" class="inline">
+                                    @csrf
+                                    <button type="submit" class="mf-btn-primary"
+                                        onclick="return confirm('Mark order {{ $order->order_number }} as delivered?')">
+                                        Mark delivered
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+                                    </button>
+                                </form>
+                            @elseif($order->status === 'delivered')
+                                <span class="mf-btn-secondary" style="cursor: default;">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
+                                    Delivered
+                                </span>
+                            @endif
+                        @endcan
+                    </div>
                 </div>
 
-                @can('see-financials')
-                    <div class="px-4 py-3 flex justify-end" style="border-top: 1px solid var(--line-2);">
-                        <dl class="text-[13px] grid grid-cols-[120px_120px] gap-y-1.5">
-                            <dt style="color: var(--muted);">Subtotal</dt>
-                            <dd class="text-right font-mono">€{{ number_format($order->subtotal, 2) }}</dd>
-                            <dt style="color: var(--muted);">Tax</dt>
-                            <dd class="text-right font-mono">€{{ number_format($order->tax_amount, 2) }}</dd>
-                            <dt class="font-semibold pt-1" style="border-top: 1px solid var(--line-2);">Total</dt>
-                            <dd class="text-right font-mono font-semibold pt-1 text-[15px]" style="border-top: 1px solid var(--line-2);">€{{ number_format($order->total_amount, 2) }}</dd>
+                {{-- Status stepper --}}
+                @include('orders.partials.status-stepper', ['order' => $order])
+
+                {{-- Meta strip: Order + Customer --}}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-10 mb-8 mt-9"
+                     style="border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 20px 0 24px;">
+                    <div>
+                        <div class="mf-eyebrow mb-3">Order</div>
+                        <dl class="grid grid-cols-[92px_1fr] gap-y-[7px] gap-x-3 text-[13px]">
+                            <dt style="color: var(--muted);">Ordered</dt>
+                            <dd class="font-mono">{{ $order->order_date->format('d / m / Y') }}</dd>
+                            <dt style="color: var(--muted);">Delivery</dt>
+                            <dd class="font-mono">{{ $order->delivery_date ? $order->delivery_date->format('d / m / Y') : '—' }}</dd>
+                            <dt style="color: var(--muted);">Payment</dt>
+                            <dd>
+                                <span class="mf-tag mf-tag-{{ $payTone }}">
+                                    <span class="inline-block rounded-full" style="width: 6px; height: 6px; background: currentColor;"></span>
+                                    {{ ucfirst($order->payment_status) }}
+                                </span>
+                            </dd>
+                            @if($order->dispatched_at)
+                                <dt style="color: var(--muted);">Dispatched</dt>
+                                <dd class="font-mono">{{ $order->dispatched_at->format('d/m/Y H:i') }}</dd>
+                            @endif
+                            @if($order->delivered_at)
+                                <dt style="color: var(--muted);">Delivered</dt>
+                                <dd class="font-mono">{{ $order->delivered_at->format('d/m/Y H:i') }}</dd>
+                            @endif
                         </dl>
                     </div>
-                @endcan
-            </div>
-
-            <div class="flex justify-between items-center">
-                <div class="text-[12px]" style="color: var(--muted);">
-                    Created {{ $order->created_at->format('d/m/Y H:i') }}
-                    @if($order->updated_at != $order->created_at)
-                        · Last updated {{ $order->updated_at->format('d/m/Y H:i') }}
-                    @endif
+                    <div>
+                        <div class="mf-eyebrow mb-3">Customer</div>
+                        <dl class="grid grid-cols-[92px_1fr] gap-y-[7px] gap-x-3 text-[13px]">
+                            <dt style="color: var(--muted);">Account</dt>
+                            <dd>{{ $order->customer->name }}</dd>
+                            <dt style="color: var(--muted);">Contact</dt>
+                            <dd>{{ $order->customer->email ?: '—' }}</dd>
+                            <dt style="color: var(--muted);">Address</dt>
+                            <dd>{{ collect([$order->customer->address, $order->customer->phone])->filter()->implode(' · ') ?: '—' }}</dd>
+                            @if($order->delivery_address)
+                                <dt style="color: var(--muted);">Deliver to</dt>
+                                <dd>{{ $order->delivery_address }}</dd>
+                            @endif
+                        </dl>
+                    </div>
                 </div>
-                @can('update', $order)
-                    <div class="flex gap-2">
-                        @if($order->status === 'pending')
-                            <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
+
+                @if($order->notes)
+                    <div class="mf-flash mf-flash-warn mb-6">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="12" r="10" /><path d="M12 8v4M12 16h.01" />
+                        </svg>
+                        <div><b>Notes:</b> {{ $order->notes }}</div>
+                    </div>
+                @endif
+
+                {{-- Items --}}
+                <div class="flex items-center justify-between mb-3.5">
+                    <h2 class="text-[15px] font-semibold" style="letter-spacing: -0.01em;">
+                        Items <span class="font-normal" style="color: var(--muted);">{{ $order->orderItems->count() }}</span>
+                    </h2>
+                    @can('update', $order)
+                        @if(in_array($order->status, ['confirmed', 'preparing'], true))
+                            <form method="POST" action="{{ route('order-allocations.auto-allocate', $order) }}" class="inline">
                                 @csrf
-                                @method('PATCH')
-                                <input type="hidden" name="status" value="confirmed">
-                                <input type="hidden" name="payment_status" value="{{ $order->payment_status }}">
-                                <input type="hidden" name="delivery_date" value="{{ $order->delivery_date?->format('Y-m-d') }}">
-                                <input type="hidden" name="delivery_address" value="{{ $order->delivery_address }}">
-                                <input type="hidden" name="notes" value="{{ $order->notes }}">
-                                <button type="submit"
-                                    onclick="return confirm('Confirm this order and make it available for stock allocation?')"
-                                    class="mf-btn-primary">
-                                    Confirm order
+                                <button type="submit" class="mf-btn-secondary text-[12px]"
+                                    onclick="return confirm('Auto-allocate available stock to this order using FIFO?')">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                                    Auto allocate
                                 </button>
                             </form>
                         @endif
-                        @if($order->status === 'confirmed')
-                            <a href="{{ route('order-allocations.show', $order) }}" class="mf-btn-primary">
-                                Manage allocation →
-                            </a>
+                    @endcan
+                </div>
+
+                <div style="border-bottom: 1px solid var(--line);">
+                    @if($showAllocation)
+                        @include('orders.partials.allocation-items', ['order' => $order, 'availableBatchItems' => $availableBatchItems])
+                    @else
+                        @foreach($order->orderItems as $item)
+                            @php $isOnlyLine = $order->orderItems->count() <= 1; @endphp
+                            <x-order.item-row :item="$item" :order="$order">
+                                <x-slot:summary>
+                                    <div class="flex items-center gap-3.5 mt-2.5 text-[12.5px] flex-wrap" style="color: var(--muted);">
+                                        @if($item->isFullyFulfilled())
+                                            <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--accent-ink);">
+                                                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3 3 5-6"/></svg>
+                                                {{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} fulfilled
+                                            </span>
+                                        @else
+                                            <span class="font-mono">{{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} fulfilled</span>
+                                        @endif
+                                        @if($item->isVariableWeight() && $item->weight_fulfilled_kg > 0)
+                                            <span style="color: var(--line);">·</span>
+                                            <span class="font-mono" style="color: var(--ink-2);">{{ number_format($item->weight_fulfilled_kg, 3) }} kg</span>
+                                        @endif
+                                        @can('update', $order)
+                                            @if($canAddItems)
+                                                <span style="color: var(--line);">·</span>
+                                                <form method="POST" action="{{ route('orders.items.update', [$order, $item]) }}" class="inline-flex items-center gap-1.5">
+                                                    @csrf @method('PATCH')
+                                                    <input type="number" name="quantity" min="1" value="{{ $item->quantity_ordered }}"
+                                                        class="mf-input w-16 px-2 py-0.5 text-[12px]">
+                                                    <button type="submit" class="mf-link" style="color: var(--accent-ink);">Update</button>
+                                                </form>
+                                                <form method="POST" action="{{ route('orders.items.destroy', [$order, $item]) }}" class="inline">
+                                                    @csrf @method('DELETE')
+                                                    <button type="submit" class="mf-link" style="color: var(--danger);"
+                                                        onclick="return confirm('{{ $isOnlyLine ? 'This is the only item — removing it will cancel the order and return any picked stock to its batch. Continue?' : 'Remove this line? Any picked stock will be returned to its batch.' }}')">{{ $isOnlyLine ? 'Remove (cancels order)' : 'Remove' }}</button>
+                                                </form>
+                                            @endif
+                                        @endcan
+                                    </div>
+                                </x-slot:summary>
+                            </x-order.item-row>
+                        @endforeach
+                    @endif
+                </div>
+
+                {{-- Add item --}}
+                @can('update', $order)
+                    @if($canAddItems && $productVariants->isNotEmpty())
+                        <div x-data="{ adding: false }" class="mt-3.5">
+                            <button type="button" x-show="!adding" @click="adding = true"
+                                class="w-full flex items-center justify-center gap-1.5 text-[13px]"
+                                style="height: 40px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); background: transparent; cursor: pointer;">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                                Add item
+                            </button>
+                            <div x-show="adding" x-cloak style="display: none;" class="rounded-lg p-4 mt-0"
+                                style="border: 1px solid var(--line); background: var(--panel);">
+                                <form method="POST" action="{{ route('orders.items.store', $order) }}">
+                                    @csrf
+                                    <div class="grid grid-cols-1 md:grid-cols-[1fr_120px_auto_auto] gap-3 items-end">
+                                        <div>
+                                            <label class="mf-label" for="add_product_variant_id">Product</label>
+                                            <select name="product_variant_id" id="add_product_variant_id" required class="mf-select">
+                                                <option value="">Select product…</option>
+                                                @foreach($productVariants as $productName => $variants)
+                                                    <optgroup label="{{ $productName }}">
+                                                        @foreach($variants as $variant)
+                                                            <option value="{{ $variant->id }}" {{ old('product_variant_id') == $variant->id ? 'selected' : '' }}>
+                                                                {{ $variant->name }} ({{ $variant->price_label }})
+                                                            </option>
+                                                        @endforeach
+                                                    </optgroup>
+                                                @endforeach
+                                            </select>
+                                            @error('product_variant_id')
+                                                <p class="mf-error">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+                                        <div>
+                                            <label class="mf-label" for="add_quantity">Quantity</label>
+                                            <input type="number" name="quantity" id="add_quantity" min="1" value="{{ old('quantity', 1) }}" required class="mf-input">
+                                            @error('quantity')
+                                                <p class="mf-error">{{ $message }}</p>
+                                            @enderror
+                                        </div>
+                                        <div>
+                                            <button type="submit" class="mf-btn-primary w-full justify-center">Add item</button>
+                                        </div>
+                                        <div>
+                                            <button type="button" @click="adding = false" class="mf-btn-ghost w-full justify-center">Cancel</button>
+                                        </div>
+                                    </div>
+                                    @if($order->status === 'ready')
+                                        <p class="text-[11.5px] mt-2" style="color: var(--muted);">
+                                            Adding to a ready order reopens picking — it returns to <b>Preparing</b> until the new line is fulfilled.
+                                        </p>
+                                    @endif
+                                </form>
+                            </div>
+                        </div>
+                    @endif
+                @endcan
+
+                {{-- Totals --}}
+                @can('see-financials')
+                    <div class="flex flex-col items-end gap-1 mt-8 text-[13px]">
+                        <div class="grid grid-cols-[120px_80px] gap-x-6">
+                            <div style="color: var(--muted);">Subtotal</div>
+                            <div class="text-right font-mono" style="color: var(--ink-2);">€{{ number_format($order->subtotal, 2) }}</div>
+                        </div>
+                        <div class="grid grid-cols-[120px_80px] gap-x-6">
+                            <div style="color: var(--muted);">Tax</div>
+                            <div class="text-right font-mono" style="color: var(--ink-2);">€{{ number_format($order->tax_amount, 2) }}</div>
+                        </div>
+                        <div class="grid grid-cols-[120px_80px] gap-x-6 font-semibold text-[15px] mt-1.5 pt-2"
+                            style="border-top: 1px solid var(--line); width: 224px;">
+                            <div>Total</div>
+                            <div class="text-right font-mono">€{{ number_format($order->total_amount, 2) }}</div>
+                        </div>
+                    </div>
+                @endcan
+
+                {{-- Footer --}}
+                <div class="flex justify-between items-center mt-8 pt-4" style="border-top: 1px solid var(--line-2);">
+                    <div class="text-[12px]" style="color: var(--muted);">
+                        Created {{ $order->created_at->format('d/m/Y H:i') }}
+                        @if($order->updated_at != $order->created_at)
+                            · Last updated {{ $order->updated_at->format('d/m/Y H:i') }}
                         @endif
+                    </div>
+                    @can('update', $order)
                         @if($order->canBeCancelled())
                             <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
-                                @csrf
-                                @method('PATCH')
+                                @csrf @method('PATCH')
                                 <input type="hidden" name="status" value="cancelled">
-                                <input type="hidden" name="payment_status" value="{{ $order->payment_status }}">
-                                <input type="hidden" name="delivery_date" value="{{ $order->delivery_date?->format('Y-m-d') }}">
-                                <input type="hidden" name="delivery_address" value="{{ $order->delivery_address }}">
-                                <input type="hidden" name="notes" value="{{ $order->notes }}">
-                                <button type="submit"
-                                    onclick="return confirm('Are you sure you want to cancel this order?')"
-                                    class="mf-btn-danger">
+                                @foreach($statusFields as $name => $value)
+                                    <input type="hidden" name="{{ $name }}" value="{{ $value }}">
+                                @endforeach
+                                <button type="submit" class="mf-link" style="color: var(--danger);"
+                                    onclick="return confirm('Are you sure you want to cancel this order? Any picked stock will be returned to its batch.')">
                                     Cancel order
                                 </button>
                             </form>
                         @endif
-                    </div>
-                @endcan
+                    @endcan
+                </div>
             </div>
         </main>
     </div>
