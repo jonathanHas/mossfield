@@ -12,7 +12,15 @@
 set -euo pipefail
 
 INSTALL_DIR="${MOSSFIELD_INSTALL_DIR:-/var/www/mossfield}"
-PHP_SERVICE="${MOSSFIELD_PHP_SERVICE:-php8.3-fpm}"
+# PHP-FPM unit to reload: explicit override wins, else autodetect the active
+# php*-fpm unit (so php8.5-fpm on mossserv, php8.3-fpm on prod — and survives
+# PHP upgrades), else fall back to the long-standing default.
+PHP_SERVICE="${MOSSFIELD_PHP_SERVICE:-}"
+if [ -z "$PHP_SERVICE" ]; then
+  PHP_SERVICE=$(systemctl list-units --type=service --state=active --plain --no-legend 'php*-fpm.service' 2>/dev/null \
+    | awk 'NR==1{sub(/\.service$/,"",$1); print $1}')
+fi
+PHP_SERVICE="${PHP_SERVICE:-php8.3-fpm}"
 BRANCH="main"
 ROLLBACK_TO=""
 MAINTENANCE=0
