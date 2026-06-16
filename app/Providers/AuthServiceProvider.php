@@ -6,6 +6,7 @@ use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseCuttingLog;
 use App\Models\Customer;
+use App\Models\DeliveryRun;
 use App\Models\Order;
 use App\Models\OrderAllocation;
 use App\Models\OrderItem;
@@ -16,6 +17,7 @@ use App\Policies\BatchItemPolicy;
 use App\Policies\BatchPolicy;
 use App\Policies\CheeseCuttingLogPolicy;
 use App\Policies\CustomerPolicy;
+use App\Policies\DeliveryRunPolicy;
 use App\Policies\OrderAllocationPolicy;
 use App\Policies\OrderItemPolicy;
 use App\Policies\OrderPolicy;
@@ -35,6 +37,7 @@ class AuthServiceProvider extends ServiceProvider
     protected $policies = [
         User::class => UserPolicy::class,
         Customer::class => CustomerPolicy::class,
+        DeliveryRun::class => DeliveryRunPolicy::class,
         Product::class => ProductPolicy::class,
         ProductVariant::class => ProductVariantPolicy::class,
         Batch::class => BatchPolicy::class,

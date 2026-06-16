@@ -157,6 +157,99 @@ class OrderItem extends Model
     }
 
     /**
+     * One-tap pick for the mobile picking flow: allocate from the chosen batch
+     * item and record fulfilment in a single transaction. order_allocations is
+     * unique per (order_item, batch_item), so a pick always lands on a single
+     * row: any existing reservation (office pre-allocation) is reused, widened
+     * for the shortfall via extendAllocation(), then fulfilled once with the
+     * full recorded weight. Returns false (nothing changed) on stale stock,
+     * over-allocation, or a missing weight on a variable-weight line.
+     */
+    public function pickFromBatchItem(BatchItem $batchItem, int $quantity, ?float $actualWeightKg = null): bool
+    {
+        if ($quantity <= 0) {
+            return false;
+        }
+
+        if ($this->isVariableWeight() && $actualWeightKg === null) {
+            return false;
+        }
+
+        try {
+            return DB::transaction(function () use ($batchItem, $quantity, $actualWeightKg) {
+                $allocation = $this->orderAllocations()
+                    ->where('batch_item_id', $batchItem->id)
+                    ->first();
+
+                $reserved = $allocation
+                    ? max(0, $allocation->quantity_allocated - $allocation->quantity_fulfilled)
+                    : 0;
+                $shortfall = $quantity - min($reserved, $quantity);
+
+                if ($shortfall > 0) {
+                    if ($allocation) {
+                        if (! $this->extendAllocation($allocation, $batchItem, $shortfall)) {
+                            throw new \RuntimeException("Failed to extend allocation {$allocation->id}.");
+                        }
+                    } else {
+                        $allocation = $this->allocateFromBatchItem($batchItem, $shortfall);
+                        if (! $allocation) {
+                            throw new \RuntimeException('Failed to allocate from batch item.');
+                        }
+                    }
+                }
+
+                if (! $this->fulfillAllocation($allocation, $quantity, $actualWeightKg)) {
+                    throw new \RuntimeException("Failed to fulfil allocation {$allocation->id}.");
+                }
+
+                return true;
+            });
+        } catch (\RuntimeException) {
+            return false;
+        }
+    }
+
+    /**
+     * Widen an existing allocation by $units under the same guards as
+     * allocateFromBatchItem (stock availability, never above the ordered
+     * quantity). Needed because order_allocations is unique per
+     * (order_item, batch_item) — a re-pick on a batch can't add a second row.
+     */
+    private function extendAllocation(OrderAllocation $allocation, BatchItem $batchItem, int $units): bool
+    {
+        return DB::transaction(function () use ($allocation, $batchItem, $units) {
+            $lockedBatchItem = BatchItem::whereKey($batchItem->id)->lockForUpdate()->first();
+            if (! $lockedBatchItem) {
+                return false;
+            }
+
+            // available_quantity already excludes this allocation's own
+            // unfulfilled reservation, so it must cover just the widening.
+            if ($lockedBatchItem->available_quantity < $units) {
+                return false;
+            }
+
+            $currentlyAllocated = (int) $this->orderAllocations()->sum('quantity_allocated');
+            if (($currentlyAllocated + $units) > $this->quantity_ordered) {
+                return false;
+            }
+
+            $allocation->refresh();
+            $allocation->quantity_allocated += $units;
+            if ($allocation->quantity_fulfilled < $allocation->quantity_allocated) {
+                $allocation->fulfilled_at = null;
+            }
+            $allocation->save();
+
+            $this->quantity_allocated = $currentlyAllocated + $units;
+            $this->save();
+
+            return true;
+        });
+    }
+
+    /**
      * Check if this order item has variable weight.
      */
     public function isVariableWeight(): bool

@@ -296,6 +296,8 @@ After completing §1 – §6, these should all pass:
 - [ ] Same curl from any other IP → 403 (once allowlist is populated)
 - [ ] `SELECT phone FROM customers LIMIT 1;` → ciphertext starting `eyJpdiI6`
 - [ ] Setting `APP_ENV=production` + `APP_DEBUG=true` in a test env causes boot to fail
+- [ ] A factory-role login redirects to `/picking` and the queue renders (no € amounts visible); a driver-role login gets 403 on `/picking`
+- [ ] As office: create a run + assign a customer at `/delivery-runs`, then on `/chilled-runs` "Enter order" saves a **pending** order and "Confirm all" moves it onto the picking queue. As factory: the sheet renders read-only (no qty inputs, no €) but the loaded tick works. *(No new env vars or operator actions — the `delivery_runs`/`loaded_at` migrations run with the standard §7 `php artisan migrate`.)*
 
 ---
 
@@ -304,3 +306,5 @@ After completing §1 – §6, these should all pass:
 | Date | Change |
 |---|---|
 | 2026-04-22 | Initial deployment runbook |
+| 2026-06-03 | Add mobile picking smoke test (factory `/picking` redirect + driver 403) |
+| 2026-06-04 | Add chilled run sheet smoke test (office entry + confirm-all, factory read-only + loaded tick) |

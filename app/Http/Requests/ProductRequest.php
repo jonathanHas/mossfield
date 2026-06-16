@@ -23,6 +23,7 @@ class ProductRequest extends FormRequest
             'image' => 'nullable|image|mimes:jpeg,jpg,png,webp|max:8192',
             'remove_image' => 'sometimes|boolean',
             'maturation_days' => 'nullable|integer|min:1|required_if:type,cheese',
+            'shelf_life_days' => 'nullable|integer|min:1',
             'is_active' => 'boolean',
         ];
     }

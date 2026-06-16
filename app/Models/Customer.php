@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Casts\EncryptedNullable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
@@ -21,12 +22,15 @@ class Customer extends Model
         'is_active',
         'notes',
         'mossorders_user_id',
+        'delivery_run_id',
+        'run_position',
     ];
 
     protected $casts = [
         'credit_limit' => 'decimal:2',
         'is_active' => 'boolean',
         'mossorders_user_id' => 'integer',
+        'run_position' => 'integer',
         // PII encrypted at rest. Name/email/country stay plaintext because
         // they are queried directly (unique checks, filtering).
         'phone' => EncryptedNullable::class,
@@ -39,6 +43,11 @@ class Customer extends Model
     public function orders(): HasMany
     {
         return $this->hasMany(Order::class);
+    }
+
+    public function deliveryRun(): BelongsTo
+    {
+        return $this->belongsTo(DeliveryRun::class);
     }
 
     public function getFullAddressAttribute(): string

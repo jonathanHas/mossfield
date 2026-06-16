@@ -167,8 +167,8 @@ The sync integration has been hardened across three phases. The operator-facing 
 
 ### Auth & middleware
 - **Routes are grouped by role, not by `verified` status.** Email verification is disabled (see Authentication Flow). Two tiers of business route groups exist in `routes/web.php`:
-  - `['auth', 'role:admin,office,factory']` — shared read-capable routes (products, batches, orders, stock, cheese-cutting index). Factory is view-only; writes are blocked via policies inside the controller (`$this->authorize(...)` per action).
-  - `['auth', 'role:admin,office']` — office-only flows (customers, product variants, order-allocations, online-orders, cheese-cutting write actions).
+  - `['auth', 'role:admin,office,factory']` — shared read-capable routes (products, batches, orders, stock, cheese-cutting index) **plus the mobile picking flow at `/picking`** (see "Mobile Picking Flow" below) **and the chilled run sheet at `/chilled-runs`** (see "Chilled Run Sheet" below). Factory is otherwise view-only; writes are blocked via policies inside the controller (`$this->authorize(...)` per action). The two factory write carve-outs are `OrderPolicy::fulfill` (allocate + fulfil + undo picks) and `OrderPolicy::load` (the chilled-run "loaded onto van" tick) — general order editing stays office/admin.
+  - `['auth', 'role:admin,office']` — office-only flows (customers, product variants, order-allocations, online-orders, cheese-cutting write actions, delivery-run management at `/delivery-runs`).
   - `['auth', 'role:admin']` — user management at `/users`.
   - Profile + password/logout stay on `auth`-only so every authenticated user can manage their own account.
 - **`api.token` middleware chain**: on `/api/*` routes, always combine `throttle:sync-api` (60/min per IP, registered in `AppServiceProvider`) with `api.token`. The middleware itself chains IP allowlist → token check → audit log. Don't bypass.
@@ -199,6 +199,7 @@ Hourly sync registered in `routes/console.php`, gated on `config('services.sync.
 ### Roles & authorization
 - `App\Enums\UserRole` — `admin | office | factory | driver`. Required on every user (`users.role`). Also `users.is_active` (default true); inactive users are rejected at login by filtering the `Auth::attempt` credentials array.
 - Policies live in `app/Policies/`, registered in `app/Providers/AuthServiceProvider.php`. `BasePolicy` is the CRUD baseline (`admin` via `before()` → all, `office` → full CRUD, `factory` → `viewAny`/`view` only, `driver` → deny-all). `UserPolicy` is admin-only. Add per-model policies by extending `BasePolicy`; override only for narrower rules.
+- **Factory picking carve-out**: `OrderPolicy::fulfill` grants admin/office/factory the narrow ability to record picks (allocate stock, fulfil with weights, undo a pick) via the `/picking` routes. It deliberately does NOT widen `update` — factory still cannot edit orders, change lines, cancel, or use the office `order-allocations.*` routes. Every `PickingController` action checks `$this->authorize('fulfill', $order)`.
 - **Controllers enforce writes via `$this->authorize('ability', $model)`** at the top of each action — `authorizeResource()` doesn't work in Laravel 12 because the new base `Controller` is a POPO without a `middleware()` method. Add explicit `authorize` calls in any new write action.
 - Column-level `see-financials` gate in `AuthServiceProvider::boot()` (admin/office only). Used in order blades (`@can('see-financials') ... @endcan`) to hide unit prices, line totals, subtotals, tax, and totals from factory users who share the `/orders` read screens.
 - **Last active admin is protected** — `User::isLastActiveAdmin()` returns true if demoting/deactivating/deleting this user would leave zero active admins. Called from `UserController::update/destroy/deactivate` and `ProfileController::destroy`. Block with a flash error on hit; never allow it through.
@@ -272,7 +273,7 @@ Mossfield Organic Farm produces three product types:
 ### Products
 Main categories (e.g. "Mossfield Organic Milk", "Mossfield Farmhouse Cheese").
 
-**Key Fields**: `name`; `type` (milk/yoghurt/cheese); `maturation_days` (cheese only); `is_active`.
+**Key Fields**: `name`; `type` (milk/yoghurt/cheese); `maturation_days` (cheese only); `shelf_life_days` (optional, any type — when set, the batch create form auto-fills `expiry_date = production_date + shelf_life_days`; milk products were backfilled to 10); `is_active`.
 
 ### Product Variants
 Specific sizes/packaging (e.g. "1L Bottle", "Whole Wheel", "Vacuum Pack").
@@ -392,6 +393,8 @@ Items are no longer frozen after creation. `OrderController::storeItem()` (route
 ### Editing & Removing Order Items (stock unwind)
 `PATCH /orders/{order}/items/{orderItem}` (`orders.items.update` → `updateItem()`) changes a line's quantity; `DELETE` (`orders.items.destroy` → `destroyItem()`) removes a line. Same gating as add (office/admin via `authorize('update')`; blocked on `{dispatched, delivered, cancelled}`; `abort_if` belongs-to guard).
 
+The line-mutation invariants below now live in the shared **`App\Http\Controllers\Concerns\MutatesOrderLines`** trait (`setLineQuantity` / `applyLineQuantity` / `removeLine` / `cancelOrderKeepingLines`), used by `OrderController::storeItem/updateItem/destroyItem` **and** `ChilledRunController::saveStop()` — route any new code that changes `quantity_ordered` or removes lines through it.
+
 - **`OrderItem::releaseUnits(int $units)`** is the shared unwind helper: it releases committed quantity **reserved-first** (just lowers `quantity_allocated` / deletes the row — no stock change) then **fulfilled-last** via `unfulfillAllocation()` (which `increment`s `BatchItem.quantity_remaining` — restoring picked stock). It rolls up the line's counters and is transaction-safe (LIFO by allocation id; `unfulfillAllocation`'s own transaction nests as a savepoint).
 - **Increase**: `updateItem` raises `quantity_ordered` (the `OrderItem::boot() saving` hook recomputes `line_total`); the inline picker shows the shortfall. **Decrease**: `releaseUnits(old − new)` then set the new qty. **Remove**: `releaseUnits(quantity_allocated)` (returns all reserved+picked stock) then delete — this is why the FK `onDelete('cascade')` no longer strands `quantity_remaining`.
 - **`Order::reconcilePickingStatus()`** runs after every edit/remove/deallocate/unfulfill (the canonical ready⇄preparing rule): `ready` + not-fully-fulfilled → `preparing`; `preparing` + fully-fulfilled → `ready`. One-directional around that boundary — never demotes `preparing → confirmed`. (So increasing a line on a ready order reverts it to preparing; undoing a pick un-sticks a wrongly-"ready" order; removing the last unpicked line from a preparing order advances it to ready.) **`OrderAllocationController::deallocate()` and `unfulfill()` both call it** — without that, undoing a pick left an order claiming "ready for dispatch" with nothing allocated.
@@ -442,6 +445,55 @@ POST /order-allocations/{allocation}/fulfill    # Fulfill allocation
 POST /order-allocations/{allocation}/unfulfill  # Undo fulfillment
 POST /order-allocations/{order}/auto-allocate   # Auto-allocate order
 ```
+
+## Mobile Picking Flow (`/picking`)
+
+Phone-first picking surface for the **factory** role (admin/office can use it too), built from a Claude Design handoff. Five screens: Today queue → order overview → pick item (fixed-qty / per-piece weight / bulk weight) → order-ready celebration. Factory users land here after login (`AuthenticatedSessionController::store()` branches on `isFactory()`); the "Picking" nav item sits in the Sales group for admin/office/factory.
+
+### Routes (in the `role:admin,office,factory` group)
+```php
+GET  /picking                                # Today queue (statuses confirmed/preparing/ready, delivery_date asc)
+GET  /picking/{order}                        # Overview — renders the "Order ready" celebration when fully fulfilled
+GET  /picking/{order}/items/{orderItem}      # Pick screen (or picked-summary + undo when line is done)
+POST /picking/{order}/items/{orderItem}/pick # One-tap allocate+fulfil (transactional)
+POST /picking/{order}/items/{orderItem}/undo # Unfulfil the line's latest pick (reservation survives)
+```
+
+### Key mechanics
+- **`OrderItem::pickFromBatchItem($batchItem, $qty, $weight)`** is the one-tap pick: `order_allocations` is **unique per (order_item, batch_item)**, so a pick always lands on a single row — an existing office reservation is reused, widened for any shortfall via the private `extendAllocation()` (same guards as `allocateFromBatchItem`), then fulfilled once with the full weight. Returns false (nothing changed) on stale stock / over-allocation; the controller flashes an error.
+- **Authorization**: every action calls `$this->authorize('fulfill', $order)` (`OrderPolicy::fulfill` = admin/office/factory). Status guard `ensureInQueue()` bounces non-picking statuses back to the queue.
+- **Status transitions**: first pick flips `confirmed → preparing`; `Order::reconcilePickingStatus()` then handles the `preparing ⇄ ready` boundary (and undo demotes ready orders). `calculateTotals()` re-runs after pick/undo so weight-priced lines bill actual kg.
+- **Batch chooser**: `PickingController::batchOptionsFor()` lists FIFO available batch items **plus** batches holding an unfulfilled reservation for the line (a fully pre-allocated batch has `available_quantity = 0` and would otherwise vanish from the picker). Each option carries `reserved` and `max` (= reserved + available).
+- **Financial redaction**: all € amounts on the picking blades are gated `@can('see-financials')` — factory sees quantities/weights only (covered by a feature test).
+- **Layout/CSS**: `<x-picking-layout>` (`resources/views/layouts/picking.blade.php`) is a stripped phone shell (no sidebar/topbar); `mob-*` classes live at the bottom of `resources/css/app.css` (`.mob-shell` caps width at 560px; `.mob-footer` is fixed with safe-area padding).
+- Views: `resources/views/picking/{index,show,item}.blade.php`; the pick form is Alpine-driven (qty stepper clamped to batch max, per-piece weight rows summed into a hidden `actual_weight_kg`, submit disabled until weights complete). Bulk-weighed variants get a single total-weight input, mirroring the desktop partial.
+- Tests: `tests/Feature/PickingTest.php` (access control, one-tap pick, reservation reuse/widening, weight validation, transitions, undo, queue scoping, € redaction).
+
+## Chilled Run Sheet (`/chilled-runs`)
+
+Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design handoff — and (for office/admin) the **order-entry surface** that replaces it. One tab per active **delivery run** (fixed weekly route: name, `day_of_week` 1–7 or null for whole-week "w/c" runs, driver, capacity note); the sheet lists the run's customers in stop order, paired with each customer's order for the run's resolved date. Each row can be put into edit mode to enter/change that stop's order inline.
+
+### Data model
+- **`delivery_runs`** table + `DeliveryRun` model. `DeliveryRun::dateFor($weekAnchor)` resolves the concrete date inside the anchored ISO week (`?date=` query param shifts weeks; whole-week runs resolve to week start).
+- **`customers.delivery_run_id`** (nullable FK, `nullOnDelete` — deleting a run un-assigns, never deletes customers) + **`customers.run_position`**. Plain columns — safe to query/order, unlike the encrypted PII columns.
+- **`orders.loaded_at`** (nullable timestamp) — the per-stop "loaded onto van" tick.
+
+### Key mechanics
+- **Routes**: `GET /chilled-runs` + `POST /chilled-runs/orders/{order}/loaded` in the `role:admin,office,factory` group; run management (`Route::resource('delivery-runs', …)` + assign/reorder/unassign POSTs) is office/admin only.
+- **`OrderPolicy::load`** is the second factory carve-out (sibling of `fulfill`): factory can tick loaded but still cannot edit orders. `DeliveryRunPolicy` is a bare `BasePolicy` (office CRUD, factory view-only).
+- **Columns**: `ChilledRunController::buildSheet()` — milk/yoghurt columns are **all active variants** (stable entry targets, render even when unordered; sorted by size — lexical; revisit if a "10L" churn variant lands); **cheese columns are dynamic** (variants actually present on the run's orders, between the yoghurt group and the last column); the last column is order **Notes** only. Cancelled orders excluded; multiple same-day orders per customer sum per cell; customers with no order that day still render with a "No order this week" tag.
+- **Crate math**: footer rows Total units / Blue crates / Extra units outside crate use `ProductVariant::effective_case_size` (`intdiv` / remainder) for milk/yoghurt; cheese columns get units only (`crates`/`extra` null → "—"). The summary strip shows per-type unit+crate totals (+ cheese units when present) and a loaded progress bar (counts only stops that have orders).
+- **No € anywhere on the sheet** — quantities only, so the `see-financials` gate is intentionally unused (don't add price columns without re-gating; covered by a feature test).
+- **Views/CSS**: `resources/views/chilled-runs/index.blade.php` + `partials/{_day-tabs,_summary-strip,_run-table,_empty}.blade.php`; run management at `resources/views/delivery-runs/`. Run-sheet classes (`mf-daytab*`, `mf-run*`, `mf-run-check`, `mf-crate-*`, `mf-run-qin`, `col-cheese`) live at the bottom of `resources/css/app.css`. Nav: "Chilled Runs" (snow icon, admin/office/factory) and "Delivery Runs" (truck icon, office/admin) in the Sales group.
+- Tests: `tests/Feature/ChilledRunTest.php` (role access, stop ordering, no-order/cancelled/inactive rows, column model, crate math, loaded-tick policy, run CRUD/assign/reorder, `dateFor()` week resolution, € redaction, and the full inline-entry suite).
+
+### Inline order entry (office/admin)
+- **Per-row edit via `?edit={customer_id}`** (server-driven — one row at a time; history payload only loaded for that row). The Edit/"Enter order" link shows when the row is *editable*: at most one non-cancelled order for the date AND (if present) status ∈ `{pending, confirmed, preparing, ready}`. With 2+ same-day orders the row links to `orders.show` instead; `saveStop` also aborts 409 on that case.
+- **`POST /chilled-runs/stops/{customer}/order`** (`chilled-runs.save-stop`, in the **office/admin route group** — factory 403 at middleware). Posts `qty[variant_id]` for every visible column + added lines; `ChilledRunController::saveStop()` **diff-applies**: creates a `pending` order when none exists (`order_date = today`, `delivery_date = run's resolved date`, number auto), zero where a line exists removes it (stock unwind), zero-everything **cancels the order keeping lines as history**, then `calculateTotals()` + `reconcilePickingStatus()`.
+- **`POST /chilled-runs/confirm-all`** (`chilled-runs.confirm-all`, office/admin group): flips every `pending` order on the selected run/date to `confirmed` — the "send the day's orders to the picking floor" action (`/picking` only lists confirmed/preparing/ready). The page-head button shows the pending count and only renders when there's something to confirm; pending orders carry a warn tag on their row.
+- **`App\Http\Controllers\Concerns\MutatesOrderLines`** trait holds the shared line-mutation invariants (`setLineQuantity` / `applyLineQuantity` / `removeLine` / `cancelOrderKeepingLines`) — extracted from and now also used by `OrderController::storeItem/updateItem/destroyItem`. Any new code that changes `quantity_ordered` or removes lines should go through it (it owns the releaseUnits-on-decrease and cancel-keeps-history rules).
+- **Row form**: a `<form>` can't wrap a `<tr>`, so the editing row's inputs associate with a hidden `<form id="stop-form-{id}">` rendered after the table via the HTML5 `form=` attribute.
+- **History recall**: edit mode ships the customer's last 5 non-cancelled orders (excluding the one being edited, inactive variants filtered) as JSON into the Alpine `stopEditor` component (inline `<script>` in `_run-table.blade.php`) — "Repeat last order" + ←/→ cycling prefill the inputs; history cheese variants that aren't columns yet become "added lines" (select + qty in the Notes cell) and promote to real columns after save.
 
 ## Online Orders Integration
 

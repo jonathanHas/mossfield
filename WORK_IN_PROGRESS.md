@@ -2,9 +2,33 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-05-25
+**Last Updated**: 2026-06-04
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Chilled Run Sheet + Inline Order Entry (2026-06-04)
+
+Desktop run-sheet at `/chilled-runs` from the second Claude Design handoff (extracted at `/tmp/design-handoff/`, transient) — the digital twin of the chilled delivery spreadsheet, and now the order-entry surface that replaces it:
+
+- **Delivery runs**: `delivery_runs` table + customer stop assignment (`customers.delivery_run_id`/`run_position`), managed at `/delivery-runs` (office/admin). `DeliveryRun::dateFor()` resolves each run's date inside the viewed week (`?date=` shifts weeks).
+- **The sheet**: day tabs per run, milk/yoghurt columns (all active variants) + dynamic cheese columns (labelled by variety) + notes, blue-crate footer totals from `case_size`, capacity-note flash, no € anywhere.
+- **Loaded tick** (`orders.loaded_at`): factory's second write carve-out, `OrderPolicy::load` — sibling of `fulfill`.
+- **Inline order entry** (office/admin, per row via `?edit=`): saves create a **pending** order for the run's date; "Repeat last order" + ←/→ history recall; added cheese lines promote to columns after save. Line mutations go through the new shared `App\Http\Controllers\Concerns\MutatesOrderLines` trait, which now also backs `OrderController::storeItem/updateItem/destroyItem`.
+- **Confirm all**: flips the run/date's pending orders to `confirmed` → they appear on the `/picking` queue.
+
+Full notes in `CLAUDE.md` → "Chilled Run Sheet". Tests: `tests/Feature/ChilledRunTest.php` (31 passing).
+
+**Deferred from the design**: print run sheet / CSV export / send-to-dispatch header buttons; the spreadsheet's "Don't reduce milk if possible" flag (no data field for it yet); per-customer standing orders (the `S/O · 24×1L 30×2L…` lines — history recall covers most of the need).
+
+---
+
+## Recently Completed: Mobile Picking Flow for Factory (2026-06-03)
+
+Phone-first picking surface at `/picking` from the Claude Design handoff (5 screens: Today queue, order overview, fixed-qty pick, variable-weight pick, order-ready). Factory's first write carve-out: `OrderPolicy::fulfill` (allocate + fulfil + undo only — order editing stays office/admin). Factory users now land on `/picking` after login. Full notes in `CLAUDE.md` → "Mobile Picking Flow". Tests: `tests/Feature/PickingTest.php` (16 passing).
+
+**Deferred from the same design bundle** (need features that don't exist yet): desktop dispatch queue + bulk dispatch (sections 1–3), driver route/POD screens (M6–M7 — signature pad, photos, routes). The design bundle was extracted at `/tmp/mossfield-design/` (transient).
 
 ---
 

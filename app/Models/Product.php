@@ -14,12 +14,14 @@ class Product extends Model
         'description',
         'image_path',
         'maturation_days',
+        'shelf_life_days',
         'is_active',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'maturation_days' => 'integer',
+        'shelf_life_days' => 'integer',
     ];
 
     protected function imageUrl(): Attribute

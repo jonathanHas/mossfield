@@ -245,3 +245,315 @@
     background: var(--accent);
     border-radius: 2px;
 }
+
+/* ─── Mobile picking (shop floor) ───
+   Ported from the fulfilment design handoff (mf.css). Phone-first classes for
+   the /picking flow; constrained to a phone-ish column so the same screens
+   stay sane when office/admin open them on a desktop. */
+.mob-shell {
+    max-width: 560px;
+    margin: 0 auto;
+    min-height: 100dvh;
+    padding-bottom: 110px; /* clear the fixed .mob-footer */
+    font-size: 15px;
+    color: var(--ink);
+}
+.mob-head {
+    padding: 14px 18px 12px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-bottom: 1px solid var(--line-2);
+    background: var(--bg);
+}
+.mob-head .iconbtn {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    display: grid;
+    place-items: center;
+    color: var(--ink-2);
+    flex-shrink: 0;
+}
+.mob-head .title {
+    font-family: Fraunces, Georgia, serif;
+    font-size: 19px;
+    font-weight: 500;
+    letter-spacing: -0.3px;
+    margin: 0;
+    line-height: 1.15;
+}
+.mob-head .sub {
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 1px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.mob-section {
+    padding: 0 18px;
+}
+.mob-section + .mob-section {
+    margin-top: 22px;
+}
+.mob-section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    padding: 0 4px;
+}
+.mob-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.mob-card + .mob-card {
+    margin-top: 8px;
+}
+.mob-tap-list {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    overflow: hidden;
+}
+.mob-tap-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: var(--panel);
+    border-top: 1px solid var(--line-2);
+    text-decoration: none;
+    color: var(--ink);
+}
+.mob-tap-row:first-child {
+    border-top: 0;
+}
+.mob-footer {
+    position: fixed;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 0;
+    width: 100%;
+    max-width: 560px;
+    padding: 14px 18px calc(18px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(250, 249, 246, 0) 0%, var(--bg) 30%);
+    display: flex;
+    gap: 10px;
+    z-index: 10;
+}
+.mob-fab {
+    flex: 1;
+    padding: 14px 18px;
+    border-radius: 12px;
+    background: var(--ink);
+    color: var(--bg);
+    font-weight: 500;
+    font-size: 15px;
+    border: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    cursor: pointer;
+    text-decoration: none;
+}
+.mob-fab.accent { background: var(--accent); color: #fff; }
+.mob-fab.ghost {
+    background: var(--panel);
+    color: var(--ink);
+    border: 1px solid var(--line);
+    flex: 0 0 auto;
+}
+.mob-fab.disabled,
+.mob-fab:disabled {
+    background: var(--line);
+    color: var(--muted);
+    cursor: not-allowed;
+}
+.mob-fab svg { width: 16px; height: 16px; }
+
+/* Weight-entry row (variable-weight picking) */
+.mob-weight {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 12px;
+    align-items: center;
+    padding: 14px 16px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+}
+.mob-weight + .mob-weight { margin-top: 8px; }
+.mob-weight .unit {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 24px;
+    font-weight: 500;
+}
+.mob-weight .kg { color: var(--muted); font-size: 14px; }
+.mob-weight .est {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+.mob-weight.is-done {
+    background: var(--accent-soft);
+    border-color: oklch(0.88 0.06 150);
+}
+.mob-weight input {
+    border: 0;
+    background: transparent;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 24px;
+    font-weight: 500;
+    width: 130px;
+    padding: 2px 6px;
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+}
+
+/* Batch code swatch */
+.swatch-batch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: var(--line-2);
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 11px;
+    color: var(--ink-2);
+}
+.swatch-batch::before {
+    content: "";
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+}
+
+/* Round qty-stepper buttons */
+.mob-step-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 22px;
+    border: 1px solid var(--line);
+    background: var(--bg);
+    font-size: 22px;
+    color: var(--ink);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+/* ─── Chilled run sheet ───
+   Ported from the fulfilment design handoff (mf.css). Desktop run-sheet
+   classes: day-selector tabs, the grouped milk/yoghurt quantity table with
+   crate-total footer, the loaded tick, and the summary strip cells. */
+
+/* Day selector tabs */
+.mf-daytabs { display: flex; gap: 8px; flex-wrap: wrap; }
+.mf-daytab {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 9px 16px; border-radius: 9px;
+    background: var(--panel); border: 1px solid var(--line);
+    cursor: pointer; text-align: left; min-width: 132px;
+    text-decoration: none;
+}
+.mf-daytab .d { font-size: 13px; font-weight: 600; color: var(--ink); display: flex; align-items: center; gap: 7px; }
+.mf-daytab .m { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; color: var(--muted); }
+.mf-daytab.is-active { background: var(--ink); border-color: var(--ink); }
+.mf-daytab.is-active .d { color: var(--bg); }
+.mf-daytab.is-active .m { color: oklch(0.82 0.01 150); }
+
+/* Run-sheet table */
+.mf-run { width: 100%; border-collapse: collapse; font-size: 13px; }
+.mf-run thead th { background: var(--bg); }
+.mf-run .grp-th {
+    padding: 7px 10px 5px; text-align: center;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase;
+    color: var(--muted); border-bottom: 1px solid var(--line-2);
+}
+.mf-run .grp-milk { color: var(--info); }
+.mf-run .grp-yog { color: var(--accent-ink); }
+.mf-run .sub-th {
+    padding: 6px 10px 10px; text-align: right; vertical-align: bottom;
+    font-size: 10.5px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.3px;
+    color: var(--muted); border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+}
+.mf-run .sub-th.l { text-align: left; }
+.mf-run td { border-top: 1px solid var(--line-2); vertical-align: top; }
+.mf-run .qty {
+    padding: 11px 10px; text-align: right;
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums;
+    font-size: 13.5px; color: var(--ink); white-space: nowrap;
+}
+.mf-run .qty.zero { color: var(--faint); }
+.mf-run .cust { padding: 11px 12px; }
+.mf-run .cust .nm { font-weight: 600; font-size: 13.5px; letter-spacing: -0.1px; }
+.mf-run .cust .ad { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.mf-run .cust .so { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10.5px; color: var(--faint); margin-top: 3px; }
+.mf-run .extras { padding: 11px 12px; font-size: 12px; color: var(--ink-2); line-height: 1.5; max-width: 280px; }
+.mf-run .col-milk { background: oklch(0.985 0.008 235); }
+.mf-run .col-yog { background: oklch(0.985 0.01 150); }
+.mf-run thead .col-milk { background: oklch(0.97 0.012 235); }
+.mf-run thead .col-yog { background: oklch(0.97 0.016 150); }
+.mf-run tr.is-loaded .cust .nm { color: var(--muted); }
+.mf-run tr.is-loaded { background: var(--line-2); }
+.mf-run tr.is-loaded .qty { color: var(--faint); }
+.mf-run-check {
+    width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid var(--line); background: var(--panel);
+    display: grid; place-items: center; cursor: pointer; color: transparent;
+    margin-top: 1px; padding: 0;
+}
+.mf-run-check.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.mf-run .pad { padding: 11px 8px 11px 14px; }
+
+/* Totals foot */
+.mf-run tfoot td { border-top: 2px solid var(--line); padding: 10px 10px; }
+.mf-run tfoot .lbl { padding-left: 14px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--muted); }
+.mf-run tfoot .tot {
+    text-align: right; font-family: 'JetBrains Mono', ui-monospace, monospace; font-variant-numeric: tabular-nums;
+    font-weight: 600; font-size: 14px; color: var(--ink);
+}
+.mf-run tfoot tr.sub-tot td { border-top: 1px solid var(--line-2); padding: 7px 10px; }
+.mf-run tfoot tr.sub-tot .tot { font-weight: 500; font-size: 12px; color: var(--muted); }
+.mf-run tfoot tr.sub-tot .lbl { padding-left: 14px; font-size: 10.5px; color: var(--muted); font-weight: 500; }
+
+/* Summary strip cells */
+.mf-crate-strip { display: flex; align-items: stretch; flex-wrap: wrap; }
+.mf-crate-cell { padding: 14px 18px; flex: 1; border-right: 1px solid var(--line-2); min-width: 130px; }
+.mf-crate-cell:last-child { border-right: 0; }
+.mf-crate-cell .v { font-family: Fraunces, Georgia, serif; font-size: 23px; font-weight: 500; letter-spacing: -0.5px; margin-top: 3px; }
+.mf-crate-cell .v small { font-size: 13px; color: var(--muted); font-family: 'JetBrains Mono', ui-monospace, monospace; font-weight: 400; letter-spacing: 0; }
+
+/* Chilled run sheet — inline order entry */
+[x-cloak] { display: none !important; }
+.mf-run .col-cheese { background: oklch(0.985 0.012 75); }
+.mf-run thead .col-cheese { background: oklch(0.97 0.018 75); }
+.mf-run .grp-cheese { color: var(--warn-ink); }
+.mf-run-qin {
+    width: 46px; text-align: center; padding: 4px 2px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px;
+    border: 1px solid var(--line); border-radius: 6px;
+    background: var(--panel); color: var(--ink);
+}
+.mf-run-qin:focus { outline: 0; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.mf-run tr.is-editing { background: var(--accent-soft); }
+.mf-run tr.is-editing td { border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); }
+
+/* Cheese column header: short variety label above the size — two cheese
+   products can share a size (e.g. both have a "wheel"). */
+.mf-run .sub-th .vrt {
+    display: block; margin-left: auto;
+    max-width: 56px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-size: 9px; letter-spacing: 0.4px; color: var(--warn-ink);
+}

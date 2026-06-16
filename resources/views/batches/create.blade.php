@@ -36,6 +36,7 @@
                                 <option value="{{ $product->id }}"
                                         data-variants="{{ $product->variants->toJson() }}"
                                         data-maturation-days="{{ $product->maturation_days }}"
+                                        data-shelf-life-days="{{ $product->shelf_life_days }}"
                                         {{ old('product_id', request('product_id')) == $product->id ? 'selected' : '' }}>
                                     {{ $product->name }} ({{ ucfirst($product->type) }})
                                 </option>
@@ -62,7 +63,7 @@
                     <div>
                         <x-input-label for="expiry_date" :value="__('Expiry date')" />
                         <x-text-input id="expiry_date" type="date" name="expiry_date" :value="old('expiry_date')" />
-                        <p class="text-[12px] mt-1" id="expiry-note" style="color: var(--muted);">Auto-filled for milk products (10 days from production).</p>
+                        <p class="text-[12px] mt-1" id="expiry-note" style="color: var(--muted);">Auto-filled from the product's shelf life, when set.</p>
                         <x-input-error :messages="$errors->get('expiry_date')" class="mt-1" />
                     </div>
                 </div>
@@ -219,11 +220,11 @@
             function updateExpiryDate() {
                 const selectedOption = productSelect.options[productSelect.selectedIndex];
                 const expiryDateInput = document.getElementById('expiry_date');
+                const shelfLifeDays = parseInt(selectedOption.dataset.shelfLifeDays);
 
-                if (selectedOption.text && selectedOption.text.includes('(Milk)') && productionDateInput.value) {
-                    const productionDate = new Date(productionDateInput.value);
-                    const expiryDate = new Date(productionDate);
-                    expiryDate.setDate(expiryDate.getDate() + 10);
+                if (shelfLifeDays && productionDateInput.value) {
+                    const expiryDate = new Date(productionDateInput.value);
+                    expiryDate.setDate(expiryDate.getDate() + shelfLifeDays);
 
                     expiryDateInput.value = expiryDate.toISOString().split('T')[0];
                 }

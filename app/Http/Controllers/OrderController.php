@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\BuildsAllocationData;
+use App\Http\Controllers\Concerns\MutatesOrderLines;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -15,6 +16,7 @@ use Illuminate\View\View;
 class OrderController extends Controller
 {
     use BuildsAllocationData;
+    use MutatesOrderLines;
 
     public function index(Request $request): View
     {
@@ -280,22 +282,14 @@ class OrderController extends Controller
         DB::transaction(function () use ($order, $validated) {
             $variant = ProductVariant::findOrFail($validated['product_variant_id']);
 
+            // Merge: the posted quantity adds to any existing line for this
+            // variant. Allocated/fulfilled are untouched, so the line becomes
+            // under-allocated and its picker reappears.
             $existing = $order->orderItems()
                 ->where('product_variant_id', $variant->id)
                 ->first();
 
-            if ($existing) {
-                // Merge: bump ordered qty. Allocated/fulfilled are untouched, so
-                // the line becomes under-allocated and its picker reappears.
-                $existing->quantity_ordered += $validated['quantity'];
-                $existing->save();
-            } else {
-                $order->orderItems()->create([
-                    'product_variant_id' => $variant->id,
-                    'quantity_ordered' => $validated['quantity'],
-                    'unit_price' => $variant->base_price,
-                ]);
-            }
+            $this->applyLineQuantity($order, $variant, $validated['quantity'] + (int) ($existing->quantity_ordered ?? 0));
 
             $order->calculateTotals();
 
@@ -337,14 +331,9 @@ class OrderController extends Controller
             return redirect()->route('orders.show', $order)->with('success', 'No change to quantity.');
         }
 
-        DB::transaction(function () use ($order, $orderItem, $newQty, $oldQty) {
-            if ($newQty < $oldQty) {
-                // Release the difference (reserved units first, then picked stock).
-                $orderItem->releaseUnits($oldQty - $newQty);
-            }
-
-            $orderItem->quantity_ordered = $newQty;
-            $orderItem->save(); // saving() hook recomputes line_total
+        DB::transaction(function () use ($order, $orderItem, $newQty) {
+            // Decreases release the difference (reserved first, then picked).
+            $this->setLineQuantity($orderItem, $newQty);
 
             $order->calculateTotals();
             $order->reconcilePickingStatus();
@@ -372,9 +361,8 @@ class OrderController extends Controller
         // An order can't go empty: removing its only line cancels the order
         // instead (keeping the line as history), returning any committed stock.
         if ($order->orderItems()->count() <= 1) {
-            DB::transaction(function () use ($order, $orderItem) {
-                $orderItem->releaseUnits($orderItem->quantity_allocated);
-                $order->update(['status' => 'cancelled']);
+            DB::transaction(function () use ($order) {
+                $this->cancelOrderKeepingLines($order);
             });
 
             return redirect()->route('orders.show', $order)
@@ -383,8 +371,7 @@ class OrderController extends Controller
 
         DB::transaction(function () use ($order, $orderItem) {
             // Return all committed stock (reserved + picked) before deleting.
-            $orderItem->releaseUnits($orderItem->quantity_allocated);
-            $orderItem->delete();
+            $this->removeLine($orderItem);
 
             $order->calculateTotals();
             $order->reconcilePickingStatus();

@@ -28,7 +28,10 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        // Factory users live on the shop floor: land them on the picking queue.
+        $home = $request->user()->isFactory() ? 'picking.index' : 'dashboard';
+
+        return redirect()->intended(route($home, absolute: false));
     }
 
     /**

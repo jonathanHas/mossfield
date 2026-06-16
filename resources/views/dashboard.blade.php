@@ -240,10 +240,11 @@
                     <div class="mf-panel p-6">
                         <div class="text-[13px] font-semibold" style="color: var(--ink);">Today on the floor</div>
                         <p class="mt-2 text-[13px]" style="color: var(--ink-2); line-height: 1.6;">
-                            Use the sidebar to open Batches, Cheese Cutting, or Stock. The Maturing panel on the right
-                            shows what's coming up next.
+                            Pick today's orders from the Picking queue. Use the sidebar to open Batches, Cheese Cutting,
+                            or Stock — the Maturing panel on the right shows what's coming up next.
                         </p>
-                        <div class="mt-4 flex gap-2">
+                        <div class="mt-4 flex gap-2 flex-wrap">
+                            <a href="{{ route('picking.index') }}" class="mf-btn-primary">Continue picking →</a>
                             <a href="{{ route('batches.index') }}" class="mf-btn-secondary">Batches</a>
                             <a href="{{ route('cheese-cutting.index') }}" class="mf-btn-secondary">Cheese cutting</a>
                             <a href="{{ route('stock.index') }}" class="mf-btn-secondary">Stock</a>

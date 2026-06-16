@@ -66,6 +66,9 @@
                                         @if($product->maturation_days)
                                             <span class="mf-tag mf-tag-neutral">{{ $product->maturation_days }}d maturation</span>
                                         @endif
+                                        @if($product->shelf_life_days)
+                                            <span class="mf-tag mf-tag-neutral">{{ $product->shelf_life_days }}d shelf life</span>
+                                        @endif
                                     </div>
                                     @if($product->description)
                                         <p class="mt-1 text-[12.5px]" style="color: var(--muted);">{{ Str::limit($product->description, 140) }}</p>

@@ -60,6 +60,12 @@ Work has moved past Phase 1 and diverged from a few of its details below. Curren
 - **Status auto-reconcile + cancel.** `Order::reconcilePickingStatus()` keeps the ready⇄preparing boundary correct after edits/undo (undoing a pick un-sticks a wrongly-"ready" order). `canBeCancelled()` now covers `pending|confirmed|preparing|ready`, and cancelling returns **all** reserved + picked stock.
 - **Variable-weight capture (desktop done).** Cheese variants are flagged for weighing; fulfilment supports **per-unit** entry (wheels) and a **single total** (`is_bulk_weighed`, vacuum packs). Order totals reflect the **actual fulfilled weight** once a line is fully picked (`invoiceable_total` / `calculateTotals`). This is the desktop version of Phase 3/4's variable-weight picking — the **mobile** factory screens remain the open work.
 
+## Update (2026-06-04)
+
+- **Mobile picking shipped (2026-06-03).** Phases 3/4's factory screens are live at `/picking` — one-tap allocate+fulfil via `OrderPolicy::fulfill`, per-piece and bulk weight entry, € redacted. See `CLAUDE.md` → "Mobile Picking Flow".
+- **Chilled run sheet shipped (2026-06-04).** `/chilled-runs` (second design handoff) covers day-grouped order **entry**, "Confirm all" (pending→confirmed → picking queue), and **load-out** (per-stop loaded tick, `OrderPolicy::load`) for the weekly delivery runs. This overlaps a chunk of what **Phase 2's dispatch queue** intended for chilled routes — revisit Phase 2's scope before building it (the remaining gap is the actual `dispatched` transition per run/van and any non-run orders).
+- **Still open from the original plan**: driver screens (M6–M7 — route manifest, signature/POD), bulk dispatch.
+
 ---
 
 ## Phase 1 — Enhanced `/orders/{order}` ✅ **code complete, awaiting browser smoke**
@@ -214,48 +220,67 @@ Surfaces the "ready" pile as a first-class workflow.
 
 ---
 
-## Phase 3 — Mobile factory picking flow
+## Phase 3 — Mobile factory picking flow ✅ **shipped 2026-06-03**
 
-Phone-first surfaces for the factory role. The desktop picking UI now lives
-inline on `/orders/{order}` (the old `/order-allocations/{order}` page redirects
-there) and is dense; this phase introduces a thumb-sized variant of the same
-workflow — including the per-unit and bulk (single-total) variable-weight entry
-already built for desktop.
+Phone-first surfaces for the factory role. Full reference docs live in
+`CLAUDE.md` → "Mobile Picking Flow (`/picking`)". Implementation diverged from
+the original sketch below in a few deliberate ways:
 
-### Scope
-- [ ] Decide: separate routes (`/m/orders/...`) vs. responsive variants of the
-      existing pages. **Recommendation:** new partial set + a route group
-      `/picking` that the factory role lands on. Driver gets `/drive` later
-      (Phase 4). Office can still access desktop allocation for power use.
-- [ ] Open question for next session: confirm with user whether factory role
-      should be **redirected** to `/picking` on login or simply linked from
-      a new "Today" nav item.
+### Scope (as landed)
+- [x] New `/picking` route group inside `role:admin,office,factory` —
+      `PickingController` with `index/show/item/pick/undo`. Office keeps the
+      desktop inline allocation UI for power use; both flows write the same
+      `order_allocations` rows so they interoperate.
+- [x] Factory **is redirected** to `/picking` on login
+      (`AuthenticatedSessionController::store()` branches on `isFactory()`);
+      a "Picking" nav item (Sales group, admin/office/factory) covers
+      discovery for everyone else. Factory dashboard card links there too.
+- [x] **Permissions (decided with user):** factory gains allocate + fulfil +
+      undo via a new narrow `OrderPolicy::fulfill` ability — their first write
+      carve-out. `update` stays office/admin; factory still cannot edit
+      orders, lines, or prices. Every € on the picking blades is behind
+      `@can('see-financials')`.
 
-### Screens (one blade view per artboard in `mossfield-order-fullfillment/project/mobile-screens.jsx`)
-- [ ] `picking/today.blade.php` — `MobileToday`
-- [ ] `picking/show.blade.php` — `MobileOrderOverview`
-- [ ] `picking/item-fixed.blade.php` — `MobilePickFixed`
-- [ ] `picking/item-variable.blade.php` — `MobilePickVariable` (most novel —
-      per-piece weight inputs, running total, variance vs estimate).
-- [ ] `picking/ready.blade.php` — `MobileOrderReady`
+### Screens (fewer files than planned — branches over views)
+- [x] `picking/index.blade.php` — `MobileToday` (queue + items-picked strip)
+- [x] `picking/show.blade.php` — `MobileOrderOverview`, **and** renders the
+      `MobileOrderReady` celebration variant once fully fulfilled (no separate
+      `ready.blade.php`)
+- [x] `picking/item.blade.php` — `MobilePickFixed` + `MobilePickVariable` as
+      branches (fixed stepper / per-piece weights with running total / bulk
+      single-total via `is_bulk_weighed`), plus a picked-summary + undo state
+      for done lines. Alpine-driven; submit disabled until weights complete.
+- [x] `layouts/picking.blade.php` (`<x-picking-layout>`) — stripped phone
+      shell, no sidebar/topbar, 560px column cap.
+- Omitted from the design (no data model behind them): aisle locations,
+  barcode scan, shift timer, variance-€ card, "Hand off to dispatch" (no
+  dispatch feature yet — Phase 2).
 
-### Endpoints
-- Mostly reuse `OrderAllocationController::fulfill` and `unfulfill`. Add:
-- [ ] `POST /picking/{order}/start` — flips order status from `confirmed` to
-      `preparing`; equivalent of "I'm starting on this".
-- [ ] `POST /picking/{order}/ready` — flips `preparing` → `ready` when all
-      items are fulfilled. (Currently no UI flips this automatically.)
+### Endpoints (as landed — differs from the sketch)
+- [x] `POST /picking/{order}/items/{orderItem}/pick` — **one-tap
+      allocate+fulfil** (`OrderItem::pickFromBatchItem()`): reuses/widens the
+      office reservation row (`order_allocations` is unique per
+      (order_item, batch_item) — see `extendAllocation()`), then fulfils once
+      with the recorded weight. Transactional; fails closed on stale stock.
+- [x] `POST /picking/{order}/items/{orderItem}/undo` — unfulfils the line's
+      latest pick; reservation survives, stock returns to batch.
+- The planned `start`/`ready` endpoints were unnecessary: first pick flips
+  `confirmed → preparing` and `Order::reconcilePickingStatus()` already owns
+  the `preparing ⇄ ready` boundary (including demotion on undo).
 
 ### CSS
-- [ ] Port the mobile patterns from `mf.css` lines 258-326 (`.mob`,
-      `.mob-head`, `.mob-card`, `.mob-tap-row`, `.mob-fab`, `.mob-weight`,
-      `.mob-bignum`).
+- [x] `mob-*` patterns ported to the bottom of `resources/css/app.css`
+      (`.mob-shell`, `.mob-head`, `.mob-card`, `.mob-tap-list/-row`,
+      `.mob-footer` — now `position: fixed` + safe-area inset, `.mob-fab`,
+      `.mob-weight`, `.swatch-batch`, `.mob-step-btn`). Progress bars reuse
+      the existing `.mf-bar`.
 
 ### Tests
-- [ ] Factory can hit `/picking` (passes BasePolicy::canRead via the existing
-      Order policy).
-- [ ] Variable-weight fulfillment via the mobile endpoint records the same
-      `actual_weight_kg` as the desktop flow does.
+- [x] `tests/Feature/PickingTest.php` — 17 tests: role access (factory in,
+      driver 403, office write routes still 403 for factory), one-tap pick,
+      reservation reuse/widening, weight validation + €/kg pricing parity
+      with desktop, status transitions, undo, queue scoping, € redaction,
+      login redirect, all view branches render.
 
 ---
 
@@ -297,10 +322,12 @@ Driver role becomes first-class.
 
 ## Cross-cutting / docs (any phase)
 
-- [ ] Update `WORK_IN_PROGRESS.md` once each phase lands.
-- [ ] Update `README.md` "Implemented Features" section.
+- [x] Update `WORK_IN_PROGRESS.md` once each phase lands. *(done through Phase 3, 2026-06-03)*
+- [x] Update `README.md` "Implemented Features" section. *(done through Phase 3, 2026-06-03 — mobile picking + role test users)*
 - [ ] Update `CLAUDE.md` Order Structure section once schema columns are
-      added (`dispatched_at`, `delivered_at`, etc.).
+      added (`dispatched_at`, `delivered_at`, etc.). *(Phase 2/4 — no new
+      columns yet; Phase 3 docs already landed in `CLAUDE.md` → "Mobile
+      Picking Flow" + Security Posture.)*
 
 ---
 

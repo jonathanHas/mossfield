@@ -34,6 +34,9 @@
                     @if($product->maturation_days)
                         <span class="mf-tag mf-tag-neutral">{{ $product->maturation_days }}d maturation</span>
                     @endif
+                    @if($product->shelf_life_days)
+                        <span class="mf-tag mf-tag-neutral">{{ $product->shelf_life_days }}d shelf life</span>
+                    @endif
                 </div>
             </div>
             <div class="flex gap-2">
@@ -76,6 +79,10 @@
                         @if($product->maturation_days)
                             <dt style="color: var(--muted);">Maturation</dt>
                             <dd class="font-mono">{{ $product->maturation_days }} days</dd>
+                        @endif
+                        @if($product->shelf_life_days)
+                            <dt style="color: var(--muted);">Shelf life</dt>
+                            <dd class="font-mono">{{ $product->shelf_life_days }} days</dd>
                         @endif
                         @if($product->description)
                             <dt style="color: var(--muted);">Description</dt>

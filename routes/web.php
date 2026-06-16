@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\BatchController;
+use App\Http\Controllers\ChilledRunController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\DeliveryRunController;
 use App\Http\Controllers\OnlineOrdersController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductVariantController;
@@ -91,6 +93,21 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
 
     Route::get('/cheese-cutting', [\App\Http\Controllers\CheeseCuttingController::class, 'index'])->name('cheese-cutting.index');
     Route::get('/stock', [\App\Http\Controllers\StockController::class, 'index'])->name('stock.index');
+
+    // Mobile picking flow — the factory write carve-out. Every action checks
+    // the narrow OrderPolicy::fulfill ability (allocate + fulfil + undo only);
+    // general order editing stays office/admin.
+    Route::get('/picking', [\App\Http\Controllers\PickingController::class, 'index'])->name('picking.index');
+    Route::get('/picking/{order}', [\App\Http\Controllers\PickingController::class, 'show'])->name('picking.show');
+    Route::get('/picking/{order}/items/{orderItem}', [\App\Http\Controllers\PickingController::class, 'item'])->name('picking.item');
+    Route::post('/picking/{order}/items/{orderItem}/pick', [\App\Http\Controllers\PickingController::class, 'pick'])->name('picking.pick');
+    Route::post('/picking/{order}/items/{orderItem}/undo', [\App\Http\Controllers\PickingController::class, 'undo'])->name('picking.undo');
+
+    // Chilled run sheet — read view of a run's stops + quantities. The one
+    // write is the "loaded onto van" tick, gated by the narrow
+    // OrderPolicy::load carve-out (factory can tick, can't edit orders).
+    Route::get('/chilled-runs', [ChilledRunController::class, 'index'])->name('chilled-runs.index');
+    Route::post('/chilled-runs/orders/{order}/loaded', [ChilledRunController::class, 'toggleLoaded'])->name('chilled-runs.toggle-loaded');
 });
 
 // Admin/office-only: factory denied entirely. These flows contain financial
@@ -112,6 +129,17 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
     Route::post('/order-allocations/{allocation}/fulfill', [\App\Http\Controllers\OrderAllocationController::class, 'fulfill'])->name('order-allocations.fulfill');
     Route::post('/order-allocations/{allocation}/unfulfill', [\App\Http\Controllers\OrderAllocationController::class, 'unfulfill'])->name('order-allocations.unfulfill');
     Route::post('/order-allocations/{order}/auto-allocate', [\App\Http\Controllers\OrderAllocationController::class, 'autoAllocate'])->name('order-allocations.auto-allocate');
+
+    // Chilled run sheet order entry — per-stop save from the row editor.
+    // Office/admin only (factory keeps the read view + loaded tick).
+    Route::post('/chilled-runs/stops/{customer}/order', [ChilledRunController::class, 'saveStop'])->name('chilled-runs.save-stop');
+    Route::post('/chilled-runs/confirm-all', [ChilledRunController::class, 'confirmAll'])->name('chilled-runs.confirm-all');
+
+    // Delivery run management — define runs and assign customers/stops.
+    Route::resource('delivery-runs', DeliveryRunController::class)->except(['show']);
+    Route::post('/delivery-runs/{deliveryRun}/assign', [DeliveryRunController::class, 'assign'])->name('delivery-runs.assign');
+    Route::post('/delivery-runs/{deliveryRun}/reorder', [DeliveryRunController::class, 'reorder'])->name('delivery-runs.reorder');
+    Route::post('/customers/{customer}/unassign-run', [DeliveryRunController::class, 'unassign'])->name('delivery-runs.unassign');
 
     // Online orders (Mossorders integration)
     Route::get('/online-orders', [OnlineOrdersController::class, 'index'])->name('online-orders.index');

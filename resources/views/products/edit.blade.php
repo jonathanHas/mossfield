@@ -85,6 +85,13 @@
                 </div>
 
                 <div class="mb-5">
+                    <x-input-label for="shelf_life_days" :value="__('Shelf life (days)')" />
+                    <x-text-input id="shelf_life_days" type="number" name="shelf_life_days" :value="old('shelf_life_days', $product->shelf_life_days)" min="1" />
+                    <x-input-error :messages="$errors->get('shelf_life_days')" class="mt-1" />
+                    <p class="text-[12px] mt-1" style="color: var(--muted);">Optional. When set, new batches get a use-by date of production date + shelf life.</p>
+                </div>
+
+                <div class="mb-5">
                     <div class="flex items-center">
                         <input id="is_active" name="is_active" type="checkbox" value="1"
                                {{ old('is_active', $product->is_active) ? 'checked' : '' }} class="mf-checkbox">

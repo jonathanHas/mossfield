@@ -239,3 +239,4 @@ After Phase 3:
 - Payment flow (none integrated yet).
 - Host hardening, firewall, TLS termination — these live with infra, not the app.
 - 2FA/MFA for office users — worth doing before external users get office logins, but not a sync-automation blocker.
+- Role/authorization posture (not a sync concern) — documented in `CLAUDE.md` → "Security Posture". Note for future reviews: as of 2026-06-03 factory is no longer strictly view-only — it holds the narrow `OrderPolicy::fulfill` ability (allocate/fulfil/undo picks via `/picking`); order editing and financials remain office/admin.

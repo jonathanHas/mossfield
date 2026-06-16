@@ -41,6 +41,18 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
   - Tracks order source (office vs online)
 - **Stock Allocation**: Advanced FIFO allocation with availability tracking
 - **Auto-Allocation**: Intelligent automatic stock assignment
+- **Mobile Picking (`/picking`)**: Phone-first picking flow for the factory role (admin/office can use it too)
+  - Today queue (per-order progress + items-picked strip) → order overview → pick screens → "Order ready" handoff
+  - **One-tap pick**: choosing a batch (FIFO-suggested) allocates *and* fulfils in a single transaction; office pre-allocations are reused, not duplicated
+  - Per-piece weight entry with running total for wheels; single total-weight input for bulk-weighed packs
+  - Factory's only write power (`OrderPolicy::fulfill`: pick + undo) — order editing and all € amounts stay office/admin; factory lands here after login
+- **Chilled Run Sheet (`/chilled-runs`)**: Digital twin of the weekly delivery-run spreadsheet — and the order-entry surface that replaces it
+  - One tab per **delivery run** (fixed weekly route: day, route name, driver, capacity note); customers are assigned to a run as ordered stops at `/delivery-runs` (office/admin)
+  - Grid of milk/yoghurt quantity columns (all active variants), **dynamic cheese columns** (appear when ordered, labelled by variety), and an order-notes column; footer reproduces the sheet's Total units / Blue crates / Extra units rows from each variant's `case_size`
+  - **Inline order entry** (office/admin): edit any stop's row in place — quantities become inputs, "Repeat last order" + ←/→ browse the customer's history to prefill, extra cheese lines added via a select. Saving creates/updates a **pending** order for the run's date; zeroing everything cancels it (stock returned, lines kept as history)
+  - **Confirm all** pushes the day's pending orders to `confirmed` — onto the `/picking` queue
+  - **Loaded tick** per stop with a progress bar ("3 stops still to load"): factory's second narrow write power (`OrderPolicy::load`) — they can tick the van loaded but still can't edit orders
+  - Week navigation (`?date=`) to view/enter future weeks; no € anywhere on the page
 - **Variable Weight Fulfillment**: Weight captured at fulfillment for cheese (flagged per variant via `is_variable_weight`)
   - Two entry styles (per variant via `is_bulk_weighed`): **per-unit** weights for wheels (#1, #2, #3… with a running total) or a single **total weight** for the line for vacuum packs
   - Weight-based pricing (€/kg) when `is_priced_by_weight` is set on the variant
@@ -91,6 +103,8 @@ composer run dev
 - **Password:** `admin123`
 
 > `AdminUserSeeder` refuses to run when `APP_ENV=production`. In non-production environments you can override the default password with `ADMIN_SEED_PASSWORD=<something>` in `.env` before running the seeder.
+
+The seeder also creates one user per role for testing (same password): `office_test`, `factory_test` (no email), and `driver_test` (no email). `factory_test` lands on the mobile picking queue at `/picking` after login.
 
 ## API Integration
 
@@ -307,8 +321,9 @@ Mossfield Organic Farm produces three main product categories:
 2. **Maturation** → Track cheese aging with visual timeline
 3. **Cutting** → Convert wheels to vacuum packs (cheese only)
 4. **Orders** → Customer orders with stock allocation (managed inline on the order page)
-5. **Fulfillment** → FIFO allocation with weight entry for cheese (per-unit for wheels, single total for vacuum packs)
-6. **Online Orders** → Preview and import orders from Mossorders portal
+5. **Chilled Runs** → Weekly run sheet at `/chilled-runs`: enter/confirm the day's orders per stop, then tick stops loaded as the van fills
+6. **Fulfillment** → FIFO allocation with weight entry for cheese (per-unit for wheels, single total for vacuum packs) — desktop inline on the order page, or phone-first at `/picking` (factory's home screen)
+7. **Online Orders** → Preview and import orders from Mossorders portal
 
 ## Built With Laravel
 
