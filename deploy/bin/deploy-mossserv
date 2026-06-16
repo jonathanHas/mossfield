@@ -2,9 +2,11 @@
 #
 # Deploy mossfield to the mossserv box (new staging/test server).
 # Thin wrapper over deploy2: pins the mossserv host and install path, then hands
-# off to deploy2 (passphrase auto-load, pre-flight checks, and all flags). The
-# SSH user + key for `mossserv` come from ~/.ssh/config; the hostname is resolved
-# via /etc/hosts. The php-fpm unit to reload is autodetected by deploy-on-prod.
+# off to deploy2 (passphrase auto-load, pre-flight checks, and all flags).
+#
+# Connections target the `mossserv-deploy` SSH alias (defined in ~/.ssh/config),
+# which carries the dedicated `deploy` user and its key (~/.ssh/id_mossserv_deploy).
+# The php-fpm unit to reload is autodetected by deploy-on-prod.
 #
 # Usage:
 #   deploy/bin/deploy-mossserv [-y] [-m "<msg>"] [--maintenance] [--skip-npm] [--dry-run] ...
@@ -12,7 +14,7 @@
 # All flags are passed straight through to deploy2 (run with -h to see them).
 set -euo pipefail
 
-export MOSSFIELD_PROD_HOST="${MOSSFIELD_PROD_HOST:-mossserv}"
+export MOSSFIELD_PROD_HOST="${MOSSFIELD_PROD_HOST:-mossserv-deploy}"
 export MOSSFIELD_PROD_PATH="${MOSSFIELD_PROD_PATH:-/var/www/mossfield}"
 
 exec "$(dirname "$0")/deploy2" "$@"
