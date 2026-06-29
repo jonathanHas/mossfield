@@ -378,14 +378,15 @@ Verify: a curl to `/api/products` from the mossorders host returns 200; from any
 
 ## Future redeploys
 
-The routine path is `deploy/bin/deploy`, run from the dev box:
+The routine path is `deploy/bin/ship` (targets the mossserv box), run from the dev box:
 
 ```bash
 cd <repo-root>
-deploy/bin/deploy            # add -m "<msg>" to auto-commit dirty tracked files
+deploy/bin/ship              # prompt for a commit message (blank = timestamp)
+deploy/bin/ship -m "<msg>"   # use the given message, no prompt
 ```
 
-It pushes the current branch to GitHub, then SSHes to the prod box and runs `deploy/bin/deploy-on-prod` (which handles git pull, composer, npm, migrate, cache rebuild, php-fpm reload). See the script's `--help` for flags (`--maintenance`, `--skip-npm`, `--branch=`, `--dry-run`).
+`ship` auto-commits **all** local changes (tracked *and* untracked), pushes the current branch to GitHub, then SSHes to the box and runs `deploy/bin/deploy-on-prod` (which handles git pull, composer, npm, migrate, cache rebuild, php-fpm reload) — with maintenance mode on by default (`--no-maintenance` to skip it). It's a thin wrapper over `deploy-mossserv` → `deploy2`; for the original prod box use `deploy/bin/deploy2`. See any script's `--help` for flags (`--maintenance`, `--skip-npm`, `--branch=`, `--dry-run`).
 
 One-time dev-box setup before the first run:
 

@@ -256,7 +256,27 @@ The hourly run appends a `run summary` line. Dashboard freshness strip updates w
 
 ## 7. Upgrade / redeploy
 
-Routine path: from the dev box, `deploy/bin/deploy` (see `deploy/INSTALL.md` "Future redeploys" for the SSH alias / `ssh-add` setup it depends on). On the prod box that wraps `deploy/bin/deploy-on-prod`, which is a mechanical translation of the steps below.
+**Everyday path (recommended): `deploy/bin/ship`.** From the dev box, after making and testing changes locally:
+
+```bash
+deploy/bin/ship              # prompt for a commit message (blank = timestamp)
+deploy/bin/ship -m "Fix totals"   # use the given message, no prompt
+deploy/bin/ship --no-maintenance  # deploy live (skip artisan down/up)
+```
+
+`ship` is the one-shot wrapper for the mossserv box: it auto-commits **all** local changes (tracked *and* untracked), pushes to GitHub, and deploys with maintenance mode on by default — so you don't have to remember the underlying flag combo. It shows the deploy summary and asks to confirm before pushing. Any extra flags (`--skip-npm`, `--dry-run`, `-y`, `--branch=<name>`) pass straight through.
+
+The deploy-script family (all in `deploy/bin/`):
+
+| Script | Use it for |
+|---|---|
+| **`ship`** | **Everyday deploys to mossserv** — auto-commit-all + push + deploy w/ maintenance. The default. |
+| `deploy-mossserv` | mossserv target without the auto-commit defaults (pins host/path, hands off to `deploy2`). |
+| `deploy2` | Original prod box (`mossfield-prod`); auto-loads the passphrase-protected SSH key (prompts once per session). |
+| `deploy` | Same as `deploy2` but does **not** auto-load the key — run `ssh-add` first. |
+| `deploy-on-prod` | Runs **on the server** (pull/build/migrate/cache/reload); invoked over SSH by the above, or directly for rollback. |
+
+See `deploy/INSTALL.md` "Future redeploys" for the SSH alias setup these depend on.
 
 Manual fallback (also what to run if `deploy-on-prod` is broken):
 

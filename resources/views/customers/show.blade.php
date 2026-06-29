@@ -29,6 +29,9 @@
         @if (session('success'))
             <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
         @endif
+        @if (session('warning'))
+            <div class="mf-flash mf-flash-warn">{{ session('warning') }}</div>
+        @endif
 
         <div class="grid gap-4 grid-cols-1 lg:grid-cols-3 mb-4">
             <div class="mf-panel">

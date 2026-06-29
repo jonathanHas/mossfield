@@ -180,7 +180,11 @@ echo "  ✓ $PROD_HOST reachable"
 step "Deploy summary"
 LOCAL_SUBJECT=$(git log -1 --pretty=%s)
 LOCAL_SHORT=$(git rev-parse --short HEAD)
-REMOTE_PROD_SHA=$(ssh "$PROD_HOST" "cd $PROD_PATH && sudo -u www-data git rev-parse HEAD" 2>/dev/null || echo "unknown")
+# Read the current remote SHA for the summary + rollback hint. Prefer the
+# www-data view (original prod box, where the deploy user is root); fall back to
+# a direct read with a safe.directory override for boxes whose deploy user can't
+# `sudo -u www-data` (e.g. mossserv's key-only deploy user) but can still read.
+REMOTE_PROD_SHA=$(ssh "$PROD_HOST" "sudo -u www-data git -C $PROD_PATH rev-parse HEAD 2>/dev/null || git -C $PROD_PATH -c safe.directory='*' rev-parse HEAD 2>/dev/null" 2>/dev/null || echo "unknown")
 REMOTE_PROD_SHORT=${REMOTE_PROD_SHA:0:10}
 echo "  branch:   $BRANCH"
 echo "  prod is:  $REMOTE_PROD_SHORT"

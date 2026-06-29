@@ -50,7 +50,7 @@ class CustomerController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:customers,email',
+            'email' => 'required|email|max:255',
             'phone' => 'nullable|string|max:255',
             'address' => 'required|string',
             'city' => 'required|string|max:255',
@@ -67,10 +67,12 @@ class CustomerController extends Controller
         $validated['is_active'] = $request->has('is_active');
         $validated['requires_reference'] = $request->has('requires_reference');
 
-        Customer::create($validated);
+        $customer = Customer::create($validated);
 
-        return redirect()->route('customers.index')
+        $redirect = redirect()->route('customers.index')
             ->with('success', 'Customer created successfully.');
+
+        return $this->withDuplicateEmailWarning($redirect, $customer);
     }
 
     public function show(Customer $customer): View
@@ -91,7 +93,7 @@ class CustomerController extends Controller
     {
         $validated = $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255|unique:customers,email,'.$customer->id,
+            'email' => 'required|email|max:255',
             'phone' => 'nullable|string|max:255',
             'address' => 'required|string',
             'city' => 'required|string|max:255',
@@ -110,8 +112,28 @@ class CustomerController extends Controller
 
         $customer->update($validated);
 
-        return redirect()->route('customers.show', $customer)
+        $redirect = redirect()->route('customers.show', $customer)
             ->with('success', 'Customer updated successfully.');
+
+        return $this->withDuplicateEmailWarning($redirect, $customer);
+    }
+
+    /**
+     * Attach a non-blocking warning when other customers share this customer's email.
+     * Duplicate emails are allowed (e.g. a supplier's separate shops invoice to one address);
+     * the warning just makes reuse a deliberate choice rather than an accident.
+     */
+    private function withDuplicateEmailWarning(RedirectResponse $redirect, Customer $customer): RedirectResponse
+    {
+        $dupes = Customer::where('email', $customer->email)
+            ->where('id', '!=', $customer->id)
+            ->pluck('name');
+
+        if ($dupes->isNotEmpty()) {
+            $redirect->with('warning', 'Heads up: this email is also used by '.$dupes->implode(', ').'.');
+        }
+
+        return $redirect;
     }
 
     public function destroy(Customer $customer): RedirectResponse

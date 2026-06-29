@@ -138,7 +138,8 @@ if [ -z "$ROLLBACK_TO" ]; then
 fi
 
 step "Ensuring public/storage symlink"
-sudo -u "$WEB_USER" php artisan storage:link
+# --force recreates the link if it already exists, instead of erroring out.
+sudo -u "$WEB_USER" php artisan storage:link --force
 
 step "Rebuilding framework caches"
 sudo -u "$WEB_USER" php artisan config:cache
