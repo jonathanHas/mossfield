@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Models\Batch;
 use App\Models\BatchItem;
+use App\Models\CheeseConversionLog;
 use App\Models\CheeseCuttingLog;
 use App\Models\Customer;
 use App\Models\DeliveryRun;
@@ -15,6 +16,7 @@ use App\Models\ProductVariant;
 use App\Models\User;
 use App\Policies\BatchItemPolicy;
 use App\Policies\BatchPolicy;
+use App\Policies\CheeseConversionLogPolicy;
 use App\Policies\CheeseCuttingLogPolicy;
 use App\Policies\CustomerPolicy;
 use App\Policies\DeliveryRunPolicy;
@@ -43,6 +45,7 @@ class AuthServiceProvider extends ServiceProvider
         Batch::class => BatchPolicy::class,
         BatchItem::class => BatchItemPolicy::class,
         CheeseCuttingLog::class => CheeseCuttingLogPolicy::class,
+        CheeseConversionLog::class => CheeseConversionLogPolicy::class,
         Order::class => OrderPolicy::class,
         OrderItem::class => OrderItemPolicy::class,
         OrderAllocation::class => OrderAllocationPolicy::class,

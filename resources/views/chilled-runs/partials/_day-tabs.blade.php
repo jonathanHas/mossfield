@@ -2,6 +2,7 @@
 <div class="mf-daytabs mb-4">
     @foreach ($runs as $run)
         <a href="{{ route('chilled-runs.index', array_filter(['run' => $run->id, 'date' => request('date')])) }}"
+           data-confirm-unsaved
            class="mf-daytab{{ $run->id === $activeRun->id ? ' is-active' : '' }}">
             <span class="d">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">

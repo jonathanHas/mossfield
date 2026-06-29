@@ -97,6 +97,11 @@
                         <input type="checkbox" name="is_active" id="is_active" value="1" {{ old('is_active', true) ? 'checked' : '' }} class="mf-checkbox">
                         <label for="is_active" class="ml-2 text-[13px]">Active customer</label>
                     </div>
+
+                    <div class="flex items-center mt-3">
+                        <input type="checkbox" name="requires_reference" id="requires_reference" value="1" {{ old('requires_reference') ? 'checked' : '' }} class="mf-checkbox">
+                        <label for="requires_reference" class="ml-2 text-[13px]">Always require a customer reference on orders</label>
+                    </div>
                 </div>
 
                 <div class="flex items-center justify-end gap-2 pt-4" style="border-top: 1px solid var(--line-2);">

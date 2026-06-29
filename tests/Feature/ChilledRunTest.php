@@ -488,6 +488,67 @@ class ChilledRunTest extends TestCase
         $this->assertSame(0, Order::where('customer_id', $shop->id)->count());
     }
 
+    public function test_customer_reference_is_saved_on_a_new_order(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Ref Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.save-stop', $shop), [
+                'run' => $run->id,
+                'qty' => [$oneL->id => 3],
+                'customer_reference' => 'PO-12345',
+            ])
+            ->assertRedirect();
+
+        $this->assertSame('PO-12345', Order::where('customer_id', $shop->id)->sole()->customer_reference);
+    }
+
+    public function test_customer_reference_can_be_updated_and_cleared_on_an_existing_order(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Ref Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $order = $this->orderFor($shop, [[$oneL, 3]], 'pending');
+        $order->update(['customer_reference' => 'OLD-1']);
+
+        // Change the reference (quantities unchanged).
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.save-stop', $shop), [
+                'run' => $run->id,
+                'qty' => [$oneL->id => 3],
+                'customer_reference' => 'NEW-2',
+            ])
+            ->assertRedirect();
+        $this->assertSame('NEW-2', $order->fresh()->customer_reference);
+
+        // Blank posts (untouched hidden input) normalise to null.
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.save-stop', $shop), [
+                'run' => $run->id,
+                'qty' => [$oneL->id => 3],
+                'customer_reference' => '',
+            ])
+            ->assertRedirect();
+        $this->assertNull($order->fresh()->customer_reference);
+    }
+
+    public function test_reference_required_customer_auto_expands_the_field(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Ref Shop');
+        $shop->update(['requires_reference' => true]);
+        $this->variant($this->milk, '1L Bottle', '1L', 16);
+
+        // In edit mode the ref input renders and the editor auto-opens it.
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index', ['edit' => $shop->id]))
+            ->assertOk()
+            ->assertSee('name="customer_reference"', false)
+            ->assertSee('requiresRef: true', false);
+    }
+
     public function test_multiple_same_day_orders_block_inline_editing(): void
     {
         $run = $this->makeRun();

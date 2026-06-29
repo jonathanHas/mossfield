@@ -2,9 +2,57 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-06-04
+**Last Updated**: 2026-06-27
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Chilled Runs Unsaved-Changes Guard (2026-06-27)
+
+The Chilled Runs inline editor entered one row at a time via a full-page `?edit=` link, so typed-but-unsaved quantities were **discarded silently** whenever the user clicked another customer's "Enter order", a day tab, a week arrow, or used the back button. Now there's a guard.
+
+- **Dirty tracking** in the `stopEditor` Alpine component (`_run-table.blade.php`): `init()` snapshots a `baseline` and `$watch`es `qty`/`addedLines`/`reference`, `serialize()`-comparing to a global `window.__stopDirty` (a true value diff — reverting a change clears it).
+- **In-app links → labelled modal**, not a native `confirm()` (which can't relabel its OK/Cancel). A delegated capture-phase click handler intercepts links tagged **`data-confirm-unsaved`** (other rows' Edit/"Enter order" + the "Multiple orders" link in `_run-table`, day tabs in `_day-tabs`, week prev/next in `index`) and opens the reusable `<x-modal name="discard-stop">` with **"Keep editing" / "Discard changes"**. Discard clears the flag and proceeds to the stashed href.
+- **`beforeunload` net** covers the back button / refresh / tab close / sidebar nav (browser-controlled generic dialog — the one spot that can't be relabelled).
+- **No double-prompt**: Save (submit listener on `stop-form-{id}`) and Cancel (`@click`) both clear the flag.
+
+Views-only change (3 blade files); no controller/route/CSS/migration. Full notes in `CLAUDE.md` → "Chilled Run Sheet" → "Inline order entry".
+
+**Operator action**: none.
+
+---
+
+## Recently Completed: Optional Customer Reference / PO Number (2026-06-27)
+
+Orders can now carry an optional **`customer_reference`** — the customer's own reference / purchase-order number, distinct from the auto `ORD-…` `order_number`. Only a few customers need it, so the input stays tucked behind a small reveal button ("+ Customer ref" / "+ Ref") and doesn't draw the eye; the reveal is built as a reusable "extra options" affordance so more fields/actions can live there later.
+
+- **Per-customer flag** `customers.requires_reference` (boolean): when set, the ref field **auto-expands** for that customer on the order create form and the Chilled Runs row; otherwise it stays hidden until clicked. Set via a checkbox on the customer create/edit forms; surfaced as a "Ref required" badge on the customer page.
+- **Editable anytime**: settable on order create, and editable later via the order edit page **and** the Chilled Runs inline editor (`saveStop` saves/updates/clears it; empties normalise to null).
+- **Two migrations**: `add_customer_reference_to_orders_table` + `add_requires_reference_to_customers_table`. No € / financial implications anywhere.
+- **Subtle fix**: `customer_reference` was added to `$statusFields` on `orders/show.blade.php` so the inline Confirm/Cancel PATCH forms (which replay those fields as hidden inputs) don't blank the ref on a status change.
+
+Full notes in `CLAUDE.md` → "Customer Reference" (under Order Structure). Tests: `tests/Feature/OrderCustomerReferenceTest.php` (5) + 3 new `customer_reference` cases in `ChilledRunTest` — full targeted run 66 passing.
+
+**Operator action on existing installs**: run `php artisan migrate` to add the two columns (additive, no data backfill needed).
+
+---
+
+## Recently Completed: Farmhouse → Mature Cheese Conversion (2026-06-20)
+
+Operators can now move aged Farmhouse wheels into a separate **Mature** product, mirroring the cheese-cutting subsystem (`batch_item → batch_item` + audit log) but crossing batch/product boundaries.
+
+- **New "Mossfield Mature Cheese" product** (seeded, `maturation_days = 150`) with Whole Wheel + Vacuum Pack variants — a normal cheese product, so mature wheels flow through stock/allocation and stay cuttable via the existing cutting flow.
+- **Two-phase model** (`/cheese-conversion`, office/admin write; factory views): the page is an **interactive wheel allocator** (from the `Mature Conversion.html` design handoff) — one card per batch with Farmhouse / Maturing zones; drag (or select + Mature→ / ←Return / quick-allocate stepper) wheels across, then **Save maturing**.
+  - **Phase 1 — maturing hold** (`POST .../hold/{batchItem}`): a *reversible* set-aside stored as `batch_items.quantity_maturing`. Allowed at **any age**. Held wheels stay physical farmhouse stock (`quantity_remaining` unchanged) but are **excluded from order allocation/picking** — `BatchItem::getAvailableQuantityAttribute()` subtracts `quantity_maturing` (+ a new `holdable_quantity` accessor caps the hold). Lowering the hold returns wheels to available.
+  - **Phase 2 — release** (`POST .../release/{batchItem}`, only when `Batch::isEligibleForMaturation()`): the actual product conversion — consumes the saved hold, get-or-creates **one Mature batch per source** (`batches.source_batch_id`, `production_date` carried forward → immediately sellable), mints mature wheels, writes a `CheeseConversionLog`, decrements **both** `quantity_remaining` and `quantity_maturing`. Reuses the original conversion transaction.
+  - **Undo release** (`POST .../logs/{log}/undo`): reversible until the mature wheels are cut/sold — returns N wheels to the source batch's `quantity_remaining` + `quantity_maturing`, drops the mature item, deletes the log. Surfaced on the **mature batch's `batches/show`** ("Return to farmhouse hold", gated on `targetBatchItem->available_quantity >= wheels_converted`).
+- **Stock**: cheese wheel rows show a distinct **`maturing`** segment (`--state-maturing`) removed from available; `StockOverviewService` + `cheese-row` updated. Cutting now guards on `available_quantity` so held/allocated wheels can't be cut.
+- **UI**: Alpine `matureCard(total, held)` seeds the saved hold into the Maturing zone (fixes the "wheels vanish on confirm" bug); `.mc-*` styles in `app.css`; `x-mature.meta` component; "Convert to Mature" button on `batches/show` links to the page; nav "Mature Conversion" (Production group).
+
+Full notes in `CLAUDE.md` (to be folded in). Tests: `tests/Feature/CheeseConversionTest.php` (12 passing).
+
+**Operator action on existing installs**: re-run `php artisan db:seed --class=ProductSeeder` to create the Mature product (idempotent). Optionally set `MATURE_CONVERSION_MONTHS` to tune the threshold.
 
 ---
 
@@ -18,7 +66,7 @@ Desktop run-sheet at `/chilled-runs` from the second Claude Design handoff (extr
 - **Inline order entry** (office/admin, per row via `?edit=`): saves create a **pending** order for the run's date; "Repeat last order" + ←/→ history recall; added cheese lines promote to columns after save. Line mutations go through the new shared `App\Http\Controllers\Concerns\MutatesOrderLines` trait, which now also backs `OrderController::storeItem/updateItem/destroyItem`.
 - **Confirm all**: flips the run/date's pending orders to `confirmed` → they appear on the `/picking` queue.
 
-Full notes in `CLAUDE.md` → "Chilled Run Sheet". Tests: `tests/Feature/ChilledRunTest.php` (31 passing).
+Full notes in `CLAUDE.md` → "Chilled Run Sheet". Tests: `tests/Feature/ChilledRunTest.php` (34 passing).
 
 **Deferred from the design**: print run sheet / CSV export / send-to-dispatch header buttons; the spreadsheet's "Don't reduce milk if possible" flag (no data field for it yet); per-customer standing orders (the `S/O · 24×1L 30×2L…` lines — history recall covers most of the need).
 

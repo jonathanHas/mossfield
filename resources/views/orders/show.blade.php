@@ -25,6 +25,7 @@
             'delivery_date' => $order->delivery_date?->format('Y-m-d'),
             'delivery_address' => $order->delivery_address,
             'notes' => $order->notes,
+            'customer_reference' => $order->customer_reference,
         ];
     @endphp
 
@@ -181,6 +182,10 @@
                         <dl class="grid grid-cols-[92px_1fr] gap-y-[7px] gap-x-3 text-[13px]">
                             <dt style="color: var(--muted);">Ordered</dt>
                             <dd class="font-mono">{{ $order->order_date->format('d / m / Y') }}</dd>
+                            @if($order->customer_reference)
+                                <dt style="color: var(--muted);">Customer ref</dt>
+                                <dd class="font-mono">{{ $order->customer_reference }}</dd>
+                            @endif
                             <dt style="color: var(--muted);">Delivery</dt>
                             <dd class="font-mono">{{ $order->delivery_date ? $order->delivery_date->format('d / m / Y') : '—' }}</dd>
                             <dt style="color: var(--muted);">Payment</dt>

@@ -107,6 +107,9 @@
                                     fixedIds: {{ Js::from($milkCols->pluck('id')->merge($yogCols->pluck('id'))->values()) }},
                                     cheeseColIds: {{ Js::from($cheeseCols->pluck('id')->values()) }},
                                     labels: {{ Js::from((object) $variantLabels->all()) }},
+                                    customer: {{ Js::from($customer->name) }},
+                                    reference: {{ Js::from($sheet['editCustomerReference']) }},
+                                    requiresRef: {{ $customer->requires_reference ? 'true' : 'false' }},
                                 })">
                                 <td class="pad"></td>
                                 <td class="cust">
@@ -127,7 +130,8 @@
                                     </div>
                                     <div class="mt-2 flex items-center gap-1.5">
                                         <button type="submit" form="stop-form-{{ $customer->id }}" class="mf-btn-primary" style="padding: 4px 12px;">Save</button>
-                                        <a href="{{ route('chilled-runs.index', $sheetParams) }}#stop-{{ $customer->id }}" class="mf-btn-ghost" style="padding: 4px 8px;">Cancel</a>
+                                        <a href="{{ route('chilled-runs.index', $sheetParams) }}#stop-{{ $customer->id }}" class="mf-btn-ghost" style="padding: 4px 8px;" @click="window.__stopDirty = false">Cancel</a>
+                                        <button type="button" class="mf-btn-ghost" style="padding: 4px 8px;" @click="showExtras = !showExtras" x-show="!showExtras" x-cloak title="Add a customer reference">+ Ref</button>
                                     </div>
                                 </td>
                                 @foreach ($milkCols->concat($yogCols)->concat($cheeseCols) as $variant)
@@ -141,6 +145,15 @@
                                     </td>
                                 @endforeach
                                 <td class="extras">
+                                    {{-- Customer reference (optional; auto-shown when the customer requires one). --}}
+                                    <div x-show="showExtras" x-cloak class="mb-2">
+                                        <input type="text" maxlength="255" class="mf-run-qin" style="width: 150px;"
+                                               form="stop-form-{{ $customer->id }}"
+                                               name="customer_reference"
+                                               x-model="reference"
+                                               placeholder="Customer ref"
+                                               aria-label="Customer reference">
+                                    </div>
                                     {{-- Added lines (cheese etc.) — become columns after save. --}}
                                     <template x-for="line in addedLines" :key="line.variant_id">
                                         <div class="flex items-center gap-1.5 mb-1.5">
@@ -213,15 +226,18 @@
                                             @endif
                                         </div>
                                     @endif
+                                    @if (! empty($sheet['references'][$customer->id]))
+                                        <div class="so" style="color: var(--muted);">Ref: {{ $sheet['references'][$customer->id] }}</div>
+                                    @endif
                                     @if ($canEnter)
                                         <div class="mt-1.5">
                                             @if ($row['editable'])
-                                                <a class="mf-link text-[12px]"
+                                                <a class="mf-link text-[12px]" data-confirm-unsaved
                                                    href="{{ route('chilled-runs.index', array_merge($sheetParams, ['edit' => $customer->id])) }}#stop-{{ $customer->id }}">
                                                     {{ $hasOrders ? 'Edit' : 'Enter order' }}
                                                 </a>
                                             @elseif ($orders->count() > 1)
-                                                <a class="mf-link text-[12px]" href="{{ route('orders.show', $orders->first()) }}">Multiple orders — open</a>
+                                                <a class="mf-link text-[12px]" data-confirm-unsaved href="{{ route('orders.show', $orders->first()) }}">Multiple orders — open</a>
                                             @endif
                                         </div>
                                     @endif
@@ -299,6 +315,31 @@
                         labels: init.labels,
                         hIndex: -1,        // -1 = not previewing history
                         addedLines: [],    // cheese (non-column) lines: [{variant_id, qty}]
+                        reference: init.reference ?? '',          // optional customer ref / PO number
+                        showExtras: !!(init.reference || init.requiresRef),  // auto-open for ref'd customers
+                        baseline: '',      // snapshot of the as-loaded order, for dirty detection
+
+                        init() {
+                            window.__stopDirty = false;
+                            window.__stopCustomer = init.customer;
+                            this.baseline = this.serialize();
+                            this.$watch('qty', () => this.sync());
+                            this.$watch('addedLines', () => this.sync());
+                            this.$watch('reference', () => this.sync());
+                            // Save clears the dirty flag so neither guard prompts on submit.
+                            const form = document.getElementById('stop-form-{{ $editId }}');
+                            if (form) form.addEventListener('submit', () => { window.__stopDirty = false; });
+                            // Net for back button / refresh / tab close / sidebar nav.
+                            window.addEventListener('beforeunload', (e) => {
+                                if (window.__stopDirty) { e.preventDefault(); e.returnValue = ''; }
+                            });
+                        },
+                        serialize() {
+                            return JSON.stringify({ qty: this.qty, added: this.addedLines, reference: this.reference });
+                        },
+                        sync() {
+                            window.__stopDirty = this.serialize() !== this.baseline;
+                        },
 
                         repeatLast() {
                             if (this.history.length) this.applyHistory(0);
@@ -335,7 +376,49 @@
                         },
                     };
                 }
+
+                // In-app guard: before leaving the edit row via a run-sheet link
+                // (other rows' Edit/Enter order, day tabs, week nav), show a labelled
+                // modal ("Keep editing" / "Discard changes") instead of the browser's
+                // generic OK/Cancel confirm.
+                let __stopPendingHref = null;
+                document.addEventListener('click', function (e) {
+                    const a = e.target.closest('a[data-confirm-unsaved]');
+                    if (!a || !window.__stopDirty) return;
+                    e.preventDefault();
+                    __stopPendingHref = a.href;
+                    const nameEl = document.getElementById('stop-discard-name');
+                    if (nameEl) nameEl.textContent = window.__stopCustomer || 'this customer';
+                    window.dispatchEvent(new CustomEvent('open-modal', { detail: 'discard-stop' }));
+                }, true);
+
+                // "Discard changes": clear the dirty flag (so the beforeunload net stays
+                // silent) and proceed to the link the user clicked. "Keep editing" just
+                // closes the modal via Alpine ($dispatch('close')). Delegated so it works
+                // regardless of where the modal markup sits relative to this script.
+                document.addEventListener('click', function (e) {
+                    if (!e.target.closest('#stop-discard-confirm')) return;
+                    window.__stopDirty = false;
+                    window.dispatchEvent(new CustomEvent('close-modal', { detail: 'discard-stop' }));
+                    if (__stopPendingHref) window.location.href = __stopPendingHref;
+                });
             </script>
+
+            {{-- Unsaved-changes dialog for the in-app run-sheet links (above). --}}
+            <x-modal name="discard-stop" maxWidth="sm">
+                <div class="p-5">
+                    <h3 class="text-[15px] font-medium" style="color: var(--ink);">
+                        Unsaved quantities for <span id="stop-discard-name"></span>
+                    </h3>
+                    <p class="mt-1 text-[13px]" style="color: var(--muted);">
+                        You've entered quantities that haven't been saved. Leaving now will lose them.
+                    </p>
+                    <div class="mt-4 flex items-center justify-end gap-2">
+                        <button type="button" class="mf-btn-secondary" x-on:click="$dispatch('close')">Keep editing</button>
+                        <button type="button" id="stop-discard-confirm" class="mf-btn-danger">Discard changes</button>
+                    </div>
+                </div>
+            </x-modal>
         @endif
     @endif
 </div>

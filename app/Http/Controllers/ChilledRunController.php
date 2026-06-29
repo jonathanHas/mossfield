@@ -151,6 +151,7 @@ class ChilledRunController extends Controller
             'date' => 'nullable|date',
             'qty' => 'array',
             'qty.*' => 'nullable|integer|min:0|max:65000',
+            'customer_reference' => 'nullable|string|max:255',
         ]);
 
         $run = DeliveryRun::findOrFail($validated['run']);
@@ -178,12 +179,19 @@ class ChilledRunController extends Controller
         $posted = collect($validated['qty'] ?? [])
             ->mapWithKeys(fn ($qty, $variantId) => [(int) $variantId => (int) $qty]);
         $postedPositive = $posted->filter(fn ($qty) => $qty > 0);
+        // The ref input is always in the DOM (hidden behind the toggle), so an
+        // untouched/blank one posts ''. Normalise empties to null.
+        $reference = isset($validated['customer_reference']) && trim($validated['customer_reference']) !== ''
+            ? trim($validated['customer_reference'])
+            : null;
 
+        // A reference with no quantities and no existing order is intentionally
+        // not persisted — an order with no lines is meaningless.
         if (! $order && $postedPositive->isEmpty()) {
             return $backToSheet()->with('success', 'Nothing to save — no quantities entered.');
         }
 
-        DB::transaction(function () use (&$order, $customer, $runDate, $posted, $postedPositive) {
+        DB::transaction(function () use (&$order, $customer, $runDate, $posted, $postedPositive, $reference) {
             // The edit zeroes everything and no lines exist outside the posted
             // set: an order can't go empty, so cancel it (keeping the lines as
             // history, returning all committed stock).
@@ -203,6 +211,10 @@ class ChilledRunController extends Controller
                     'payment_status' => 'pending',
                 ]); // order_number auto-generated via Order::boot()
             }
+
+            // Persist the (possibly cleared) customer reference. calculateTotals()
+            // below saves the model, so this dirty attribute rides along.
+            $order->customer_reference = $reference;
 
             $existingByVariant = $order->orderItems()->get()->groupBy('product_variant_id');
 
@@ -314,6 +326,12 @@ class ChilledRunController extends Controller
             $extras[$row['customer']->id] = $row['orders']->pluck('notes')->filter()->implode(' · ');
         }
 
+        // Customer reference per stop (first set reference) — for display and edit prefill.
+        $references = [];
+        foreach ($rows as $row) {
+            $references[$row['customer']->id] = $row['orders']->pluck('customer_reference')->filter()->first();
+        }
+
         // Footer rows: units / full blue crates / remainder outside crates.
         // Crates only make sense for milk/yoghurt (cheese has no case_size) —
         // cheese columns carry units with null crate cells (view renders "—").
@@ -355,6 +373,7 @@ class ChilledRunController extends Controller
             'rows' => $rows,
             'qtyMap' => $qtyMap,
             'extras' => $extras,
+            'references' => $references,
             'milkCols' => $milkCols,
             'yogCols' => $yogCols,
             'cheeseCols' => $cheeseCols,
@@ -371,6 +390,7 @@ class ChilledRunController extends Controller
             'loadedPct' => $loadableCount > 0 ? (int) round($loadedCount / $loadableCount * 100) : 0,
             'editCustomerId' => $editRow ? $editCustomerId : 0,
             'editQuantities' => $editRow ? ($qtyMap[$editCustomerId] ?? []) : [],
+            'editCustomerReference' => $editRow ? ($references[$editCustomerId] ?? null) : null,
             'history' => $editRow ? $this->historyFor($editRow['customer'], $editRow['orders']->first()) : [],
             'addLineVariants' => $editRow ? $this->addLineVariants($fixedCols, $cheeseCols) : collect(),
         ];

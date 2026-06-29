@@ -59,11 +59,13 @@ class CustomerController extends Controller
             'credit_limit' => 'required|numeric|min:0',
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
             'is_active' => 'boolean',
+            'requires_reference' => 'boolean',
             'notes' => 'nullable|string',
             'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id',
         ]);
 
         $validated['is_active'] = $request->has('is_active');
+        $validated['requires_reference'] = $request->has('requires_reference');
 
         Customer::create($validated);
 
@@ -98,11 +100,13 @@ class CustomerController extends Controller
             'credit_limit' => 'required|numeric|min:0',
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
             'is_active' => 'boolean',
+            'requires_reference' => 'boolean',
             'notes' => 'nullable|string',
             'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id,'.$customer->id,
         ]);
 
         $validated['is_active'] = $request->has('is_active');
+        $validated['requires_reference'] = $request->has('requires_reference');
 
         $customer->update($validated);
 

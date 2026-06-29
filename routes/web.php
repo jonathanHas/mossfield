@@ -92,6 +92,7 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::delete('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'destroyItem'])->name('orders.items.destroy');
 
     Route::get('/cheese-cutting', [\App\Http\Controllers\CheeseCuttingController::class, 'index'])->name('cheese-cutting.index');
+    Route::get('/cheese-conversion', [\App\Http\Controllers\CheeseConversionController::class, 'index'])->name('cheese-conversion.index');
     Route::get('/stock', [\App\Http\Controllers\StockController::class, 'index'])->name('stock.index');
 
     // Mobile picking flow — the factory write carve-out. Every action checks
@@ -120,6 +121,13 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
     // Cheese cutting write actions — factory will get this later.
     Route::get('/cheese-cutting/cut/{batchItem}', [\App\Http\Controllers\CheeseCuttingController::class, 'create'])->name('cheese-cutting.create');
     Route::post('/cheese-cutting/cut/{batchItem}', [\App\Http\Controllers\CheeseCuttingController::class, 'store'])->name('cheese-cutting.store');
+
+    // Mature conversion (factory views the index, can't write). "hold" sets the
+    // reversible maturing reservation (any age); "release" turns aged held wheels
+    // into the Mature product; "undo" returns released wheels to the hold.
+    Route::post('/cheese-conversion/hold/{batchItem}', [\App\Http\Controllers\CheeseConversionController::class, 'hold'])->name('cheese-conversion.hold');
+    Route::post('/cheese-conversion/release/{batchItem}', [\App\Http\Controllers\CheeseConversionController::class, 'release'])->name('cheese-conversion.release');
+    Route::post('/cheese-conversion/logs/{log}/undo', [\App\Http\Controllers\CheeseConversionController::class, 'undoRelease'])->name('cheese-conversion.undo');
 
     // Order allocation
     Route::get('/order-allocations', [\App\Http\Controllers\OrderAllocationController::class, 'index'])->name('order-allocations.index');

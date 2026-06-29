@@ -162,6 +162,20 @@ Run these **in order** on a new production install. Each is idempotent and safe 
 
 Verify after running: `SELECT phone, address FROM customers LIMIT 1;` directly in MySQL should return base64-ish ciphertext beginning with `eyJpdiI6...`. Loading a customer via the app should return plaintext.
 
+The same `php artisan migrate --force` also adds `batch_items.quantity_maturing` (`2026_06_20_130000…`) and the conversion-traceability columns (`cheese_conversion_logs`, `batches.source_batch_id`) used by **Mature Conversion** — no operator action beyond the migrate. See §4.1a for the one seeder step it needs.
+
+It also adds the optional **Customer Reference / PO number** columns — `orders.customer_reference` (`2026_06_27_120000…`) and `customers.requires_reference` (`2026_06_27_120100…`). Additive, no backfill, no new env vars. Tick "Always require a customer reference on orders" on a customer to auto-show the field on their orders.
+
+### 4.1a Seed the Mature Cheese product (Mature Conversion)
+
+The Mature Conversion flow (`/cheese-conversion`) releases Farmhouse wheels into a separate **Mossfield Mature Cheese** product. It's created by `ProductSeeder` (idempotent `firstOrCreate` — also creates its Whole Wheel + Vacuum Pack variants). On an existing DB, run it once:
+
+```bash
+sudo -u www-data php artisan db:seed --class=ProductSeeder --force
+```
+
+Verify: the product exists — `SELECT name FROM products WHERE name = 'Mossfield Mature Cheese';`. Optionally tune the age threshold (default 5 months) via `MATURE_CONVERSION_MONTHS` in `.env`, then `php artisan config:clear`. Prices/weights for the Mature variants are placeholders (€55 wheel, €7 pack) — confirm with the farm and edit at `/products`.
+
 ### 4.2 Populate the IP allowlist
 
 Once the mossorders public IP is stable (e.g. after DNS/ingress settles), set on mossfield:
@@ -298,6 +312,8 @@ After completing §1 – §6, these should all pass:
 - [ ] Setting `APP_ENV=production` + `APP_DEBUG=true` in a test env causes boot to fail
 - [ ] A factory-role login redirects to `/picking` and the queue renders (no € amounts visible); a driver-role login gets 403 on `/picking`
 - [ ] As office: create a run + assign a customer at `/delivery-runs`, then on `/chilled-runs` "Enter order" saves a **pending** order and "Confirm all" moves it onto the picking queue. As factory: the sheet renders read-only (no qty inputs, no €) but the loaded tick works. *(No new env vars or operator actions — the `delivery_runs`/`loaded_at` migrations run with the standard §7 `php artisan migrate`.)*
+- [ ] As office on `/cheese-conversion`: a Farmhouse batch's wheels can be set aside ("Save maturing") and the held wheels drop out of `/stock` available + aren't auto-allocated to orders; a ≥5-month batch shows "Release to mature" → a Mature batch appears in `/batches` & `/stock`; "Return to farmhouse hold" on the mature batch undoes it. As factory: the page renders read-only. *(Requires the §4.1a `ProductSeeder` run; `quantity_maturing` migration runs with the standard `php artisan migrate`.)*
+- [ ] As office: create an order with a **Customer ref** (click "+ Customer ref" on `/orders/create`) → it shows on the order page and survives a status change; tick "Always require a customer reference on orders" on a customer → the field auto-expands on their order form and Chilled Runs row. *(Additive `customer_reference`/`requires_reference` migrations run with the standard `php artisan migrate`; no new env vars.)*
 
 ---
 
@@ -308,3 +324,5 @@ After completing §1 – §6, these should all pass:
 | 2026-04-22 | Initial deployment runbook |
 | 2026-06-03 | Add mobile picking smoke test (factory `/picking` redirect + driver 403) |
 | 2026-06-04 | Add chilled run sheet smoke test (office entry + confirm-all, factory read-only + loaded tick) |
+| 2026-06-20 | Add Mature Conversion: §4.1a seed Mossfield Mature Cheese product + `MATURE_CONVERSION_MONTHS`; `quantity_maturing` migration; conversion smoke test |
+| 2026-06-27 | Add optional Customer Reference / PO number: `orders.customer_reference` + `customers.requires_reference` migrations (additive, no env); customer-ref smoke test |

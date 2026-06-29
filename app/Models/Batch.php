@@ -10,6 +10,7 @@ class Batch extends Model
 {
     protected $fillable = [
         'product_id',
+        'source_batch_id',
         'batch_code',
         'production_date',
         'expiry_date',
@@ -56,6 +57,40 @@ class Batch extends Model
     public function cuttingLogs(): HasMany
     {
         return $this->hasMany(CheeseCuttingLog::class, 'source_batch_item_id');
+    }
+
+    /**
+     * The Farmhouse batch this Mature batch was converted from (null for
+     * normal batches). The conversion get-or-creates one Mature batch per
+     * source, so this is a clean 1:1 traceability link.
+     */
+    public function sourceBatch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class, 'source_batch_id');
+    }
+
+    /**
+     * Mature batches produced by converting wheels from this batch.
+     */
+    public function matureBatches(): HasMany
+    {
+        return $this->hasMany(Batch::class, 'source_batch_id');
+    }
+
+    /**
+     * Whether this batch is old enough to convert into Mature cheese.
+     * Age-based eligibility (default 5 months) — deliberately distinct from
+     * maturation_days / ready_date, which only gate "ready to sell".
+     */
+    public function isEligibleForMaturation(): bool
+    {
+        if (! $this->production_date) {
+            return false;
+        }
+
+        $months = (int) config('mossfield.mature_conversion_months', 5);
+
+        return $this->production_date->copy()->addMonths($months)->lte(now());
     }
 
     public function generateBatchCode(): string

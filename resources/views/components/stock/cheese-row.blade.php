@@ -7,8 +7,9 @@
 
 @php
     // Render order matches batches/partials/batch-card.blade.php so colors line up:
-    // available (yellow→green), allocated (amber/warn), cut (grey), sold (black).
-    $order = ['available', 'allocated', 'cut', 'sold'];
+    // available (yellow→green), allocated (amber/warn), maturing (deep amber),
+    // cut (grey), converted-to-mature (purple), sold (black).
+    $order = ['available', 'allocated', 'maturing', 'cut', 'converted', 'sold'];
     $dots = [];
     foreach ($order as $state) {
         $n = (int) ($segments[$state] ?? 0);

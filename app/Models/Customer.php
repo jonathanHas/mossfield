@@ -20,6 +20,7 @@ class Customer extends Model
         'credit_limit',
         'payment_terms',
         'is_active',
+        'requires_reference',
         'notes',
         'mossorders_user_id',
         'delivery_run_id',
@@ -29,6 +30,7 @@ class Customer extends Model
     protected $casts = [
         'credit_limit' => 'decimal:2',
         'is_active' => 'boolean',
+        'requires_reference' => 'boolean',
         'mossorders_user_id' => 'integer',
         'run_position' => 'integer',
         // PII encrypted at rest. Name/email/country stay plaintext because

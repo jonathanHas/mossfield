@@ -71,9 +71,10 @@ class CheeseCuttingController extends Controller
             'notes' => 'nullable|string|max:1000',
         ]);
 
-        // Ensure we have enough wheels to cut
-        if ($batchItem->quantity_remaining < 1) {
-            return back()->withErrors(['error' => 'No wheels remaining to cut.']);
+        // Ensure we have enough free wheels to cut — wheels reserved by an order
+        // or set aside for maturing aren't cuttable.
+        if ($batchItem->available_quantity < 1) {
+            return back()->withErrors(['error' => 'No free wheels remaining to cut (remaining wheels are allocated or set aside for maturing).']);
         }
 
         DB::transaction(function () use ($validated, $batchItem) {

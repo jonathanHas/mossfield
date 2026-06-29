@@ -29,10 +29,10 @@
                     @endif
                     <div class="flex items-center gap-2 font-mono text-[12px]" style="color: var(--muted);">
                         <a href="{{ route('chilled-runs.index', ['run' => $activeRun->id, 'date' => $weekAnchor->subWeek()->toDateString()]) }}"
-                           class="mf-btn-ghost" title="Previous week">&larr;</a>
+                           data-confirm-unsaved class="mf-btn-ghost" title="Previous week">&larr;</a>
                         <span>{{ $sheet['runDate']->format('d/m/Y') }}</span>
                         <a href="{{ route('chilled-runs.index', ['run' => $activeRun->id, 'date' => $weekAnchor->addWeek()->toDateString()]) }}"
-                           class="mf-btn-ghost" title="Next week">&rarr;</a>
+                           data-confirm-unsaved class="mf-btn-ghost" title="Next week">&rarr;</a>
                     </div>
                 </div>
             @endif

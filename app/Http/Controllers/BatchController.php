@@ -125,7 +125,10 @@ class BatchController extends Controller
     public function show(Batch $batch): View
     {
         $this->authorize('view', $batch);
-        $batch->load(['product', 'batchItems.productVariant', 'cuttingLogs']);
+        $batch->load([
+            'product', 'batchItems.productVariant', 'cuttingLogs', 'sourceBatch.product', 'matureBatches.product',
+            'batchItems.targetConversionLogs.sourceBatchItem.batch.product',
+        ]);
 
         return view('batches.show', compact('batch'));
     }

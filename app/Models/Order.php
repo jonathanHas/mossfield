@@ -23,6 +23,7 @@ class Order extends Model
         'loaded_at',
         'delivery_address',
         'notes',
+        'customer_reference',
         'mossorders_order_id',
     ];
 

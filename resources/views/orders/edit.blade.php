@@ -31,7 +31,8 @@
                 </div>
             </div>
 
-            <form method="POST" action="{{ route('orders.update', $order) }}" class="p-5">
+            <form method="POST" action="{{ route('orders.update', $order) }}" class="p-5"
+                x-data="{ showRef: {{ (old('customer_reference', $order->customer_reference) || $order->customer->requires_reference) ? 'true' : 'false' }} }">
                 @csrf
                 @method('PATCH')
 
@@ -76,6 +77,17 @@
                     <x-input-label for="notes" :value="__('Order notes')" />
                     <textarea id="notes" name="notes" rows="4" class="mf-textarea">{{ old('notes', $order->notes) }}</textarea>
                     <x-input-error :messages="$errors->get('notes')" class="mt-1" />
+                </div>
+
+                <div class="mb-5">
+                    <button type="button" class="mf-btn-ghost text-[12px]" x-show="!showRef" @click="showRef = true">+ Customer ref</button>
+                    <div x-show="showRef" x-cloak>
+                        <x-input-label for="customer_reference" :value="__('Customer ref')" />
+                        <x-text-input id="customer_reference" name="customer_reference" type="text" class="block w-full"
+                            :value="old('customer_reference', $order->customer_reference)" maxlength="255" placeholder="e.g. their PO number" />
+                        <p class="mt-1 text-[12px]" style="color: var(--muted);">Optional — the customer's own reference / purchase-order number.</p>
+                        <x-input-error :messages="$errors->get('customer_reference')" class="mt-1" />
+                    </div>
                 </div>
 
                 <div class="mb-5">

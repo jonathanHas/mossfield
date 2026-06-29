@@ -9,6 +9,8 @@
     --state-damaged: var(--danger);
     --state-empty: var(--line-2);
     --state-cut: #9CA3AF;
+    --state-maturing: oklch(0.55 0.11 56);
+    --state-converted: #8B5CF6;
     --state-sold: #1F1D17;
 
     /* Product-family tones for chip tags (cool blue for milk, warm gold for yoghurt). */

@@ -1,0 +1,61 @@
+#!/usr/bin/env bash
+#
+# Everyday "ship it" wrapper for mossserv.
+#
+# The routine flow: make + test changes locally, then push to git and out to
+# the mossserv box. This script auto-commits ALL local changes (tracked AND
+# untracked), pushes, and deploys to mossserv with maintenance mode — so you
+# don't have to remember the deploy-mossserv flag combo
+# (`-m "<msg>" --include-untracked --maintenance`).
+#
+# It's a thin wrapper over deploy-mossserv (which itself pins the host/path and
+# hands off to deploy2 — passphrase auto-load, pre-flight checks, push, remote
+# trigger). Nothing here is re-implemented; we just supply the defaults.
+#
+# Usage:
+#   deploy/bin/ship [-m "<msg>"] [--no-maintenance] [--skip-npm] [--dry-run] [-y] ...
+#
+#   ./ship                 # prompt for a message (blank => timestamp), deploy w/ maintenance
+#   ./ship -m "Fix totals" # use the given message, skip the prompt
+#   ./ship --no-maintenance# deploy live (no artisan down/up)
+#
+# Any flag not listed below is passed straight through to deploy-mossserv /
+# deploy2 (so --skip-npm, --dry-run, -y, --branch=<name> all work).
+#
+# NOTE: deploy2 commits during its pre-flight, BEFORE the "Proceed? [y/N]"
+# prompt. If you abort at that prompt, the local commit already exists (just
+# not pushed) — undo it with `git reset --soft HEAD~1`.
+
+set -euo pipefail
+
+MAINTENANCE=1
+MSG=""
+PASSTHRU=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-maintenance) MAINTENANCE=0; shift ;;
+    -m|--message) MSG="$2"; shift 2 ;;
+    --message=*) MSG="${1#*=}"; shift ;;
+    *) PASSTHRU+=("$1"); shift ;;
+  esac
+done
+
+# Prompt for a commit message if none was given; blank reply => timestamp.
+if [ -z "$MSG" ]; then
+  read -r -p "Commit message (blank = timestamp): " MSG || true
+  if [ -z "$MSG" ]; then
+    MSG="Deploy $(date '+%Y-%m-%d %H:%M')"
+    echo "  ⓘ using auto message: $MSG"
+  fi
+fi
+
+# Build the deploy-mossserv argument list. Append --maintenance only when on,
+# so we never pass an empty string (deploy2 rejects unknown/empty args).
+ARGS=(-m "$MSG" --include-untracked)
+[ "$MAINTENANCE" -eq 1 ] && ARGS+=(--maintenance)
+# Only splice passthrough args when there are some — an empty-array expansion
+# would otherwise pass "" and deploy2 would reject it as an unknown arg.
+[ "${#PASSTHRU[@]}" -gt 0 ] && ARGS+=("${PASSTHRU[@]}")
+
+exec "$(dirname "$0")/deploy-mossserv" "${ARGS[@]}"

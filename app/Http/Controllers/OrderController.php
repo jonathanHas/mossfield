@@ -130,6 +130,7 @@ class OrderController extends Controller
             'delivery_date' => 'nullable|date|after_or_equal:order_date',
             'delivery_address' => 'nullable|string',
             'notes' => 'nullable|string',
+            'customer_reference' => 'nullable|string|max:255',
             'items' => 'required|array|min:1',
             'items.*.product_variant_id' => 'required|exists:product_variants,id',
             'items.*.quantity' => 'required|integer|min:1',
@@ -146,6 +147,7 @@ class OrderController extends Controller
                 'delivery_date' => $validated['delivery_date'],
                 'delivery_address' => $validated['delivery_address'],
                 'notes' => $validated['notes'],
+                'customer_reference' => $validated['customer_reference'] ?? null,
                 'status' => 'pending',
                 'payment_status' => 'pending',
             ]);
@@ -190,6 +192,7 @@ class OrderController extends Controller
             'payment_status' => 'required|in:pending,paid,partial,overdue',
             'delivery_address' => 'nullable|string',
             'notes' => 'nullable|string',
+            'customer_reference' => 'nullable|string|max:255',
         ]);
 
         $isCancelling = $validated['status'] === 'cancelled' && $order->status !== 'cancelled';

@@ -9,6 +9,7 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
 - **Batch Coding**: Automated batch code generation (M/Y/G + ddmmyy format)
 - **Cheese Maturation**: Track maturation periods and ready-to-sell dates
 - **Cheese Cutting**: Convert whole wheels to vacuum-packed units with full traceability
+- **Mature Conversion** (`/cheese-conversion`): Set Farmhouse wheels aside to age — a reversible "maturing hold" (any age) that takes them out of order allocation — then release aged wheels into the separate **Mossfield Mature Cheese** product. Drag-and-drop / select wheel allocator; release is reversible until the mature wheels are cut or sold
 - **Grouped Batch Browser** (`/batches`, `/cheese-cutting`): Batches grouped by product type and cheese variety with three-level collapsible sections. At-a-glance wheel status in every cheese batch header — one circle per wheel (🟡 remaining · ⚪ cut · ⚫ sold) plus a stacked bar for vacuum packs — so stock status is visible without expanding anything
 
 ### 📦 **Product & Variant Management**
@@ -33,7 +34,9 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
   - Track credit limits, payment terms, and outstanding balances
   - Link to Mossorders online portal via unique user ID
   - View customer order history and account status
+  - **"Always require a reference" flag** (`requires_reference`) for customers who issue PO numbers — auto-shows the Customer ref field on their orders
 - **Order Processing**: From pending to confirmed to fulfilled
+- **Customer Reference / PO Number** (optional): capture the customer's own reference / purchase-order number on an order, distinct from the auto `ORD-…` number. Tucked behind a small reveal button so it stays out of the way (auto-expands for `requires_reference` customers); editable on the order create/edit pages and inline on the Chilled Runs sheet
 - **Online Order Import**: Import orders from Mossorders portal
   - Web interface at `/online-orders` for preview and import
   - Automatic customer mapping via Mossorders user ID
@@ -49,7 +52,7 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
 - **Chilled Run Sheet (`/chilled-runs`)**: Digital twin of the weekly delivery-run spreadsheet — and the order-entry surface that replaces it
   - One tab per **delivery run** (fixed weekly route: day, route name, driver, capacity note); customers are assigned to a run as ordered stops at `/delivery-runs` (office/admin)
   - Grid of milk/yoghurt quantity columns (all active variants), **dynamic cheese columns** (appear when ordered, labelled by variety), and an order-notes column; footer reproduces the sheet's Total units / Blue crates / Extra units rows from each variant's `case_size`
-  - **Inline order entry** (office/admin): edit any stop's row in place — quantities become inputs, "Repeat last order" + ←/→ browse the customer's history to prefill, extra cheese lines added via a select. Saving creates/updates a **pending** order for the run's date; zeroing everything cancels it (stock returned, lines kept as history)
+  - **Inline order entry** (office/admin): edit any stop's row in place — quantities become inputs, "Repeat last order" + ←/→ browse the customer's history to prefill, extra cheese lines added via a select, plus an optional **Customer ref** behind a "+ Ref" toggle. Saving creates/updates a **pending** order for the run's date; zeroing everything cancels it (stock returned, lines kept as history). Navigating away from a row with unsaved quantities (another row, day tab, week arrow, or back/refresh) prompts first so edits aren't lost silently
   - **Confirm all** pushes the day's pending orders to `confirmed` — onto the `/picking` queue
   - **Loaded tick** per stop with a progress bar ("3 stops still to load"): factory's second narrow write power (`OrderPolicy::load`) — they can tick the van loaded but still can't edit orders
   - Week navigation (`?date=`) to view/enter future weeks; no € anywhere on the page
@@ -301,7 +304,8 @@ Mossfield Organic Farm produces three main product categories:
 1. **Milk**: 1L and 2L bottles (batch code: **M**ddmmyy)
 2. **Yoghurt**: 250g and 500g tubs (batch code: **Y**ddmmyy)  
 3. **Cheese**: Multiple varieties with maturation tracking (batch code: **G**ddmmyy)
-   - Farmhouse, Garlic & Basil, Tomato & Herb, Cumin Seed, Mature
+   - Farmhouse, Garlic & Basil, and **Mature** are seeded; Tomato & Herb, Cumin Seed are aspirational varieties not yet seeded
+   - **Mature** is not made fresh — it's a premium product produced by aging Farmhouse wheels (set aside via a reversible maturing hold, then released once ~5 months old). See Mature Conversion above
    - Produced as wheels, later cut into vacuum packs
    - Full traceability from wheel to individual pack
 
@@ -310,7 +314,7 @@ Mossfield Organic Farm produces three main product categories:
 `/stock` renders one card per product type (milk, yoghurt, cheese), built by `App\Services\StockOverviewService`:
 
 - **Row per (variant, batch)** — each line in the milk and yoghurt cards is a single batch of a single variant. Each cheese wheel and pack row is likewise per-batch. The batch code is shown in mono under the variant label.
-- **Segments** — milk and yoghurt rows split each row's produced units into `available / allocated / sold` (sold derived from `quantity_produced − quantity_remaining`). Cheese wheels additionally show `cut`. Sold cases render in the case grid using `--state-sold`.
+- **Segments** — milk and yoghurt rows split each row's produced units into `available / allocated / sold` (sold derived from `quantity_produced − quantity_remaining`). Cheese wheels additionally show `cut`, `maturing` (wheels held to mature, excluded from available), and `converted` (released into the Mature product). Sold cases render in the case grid using `--state-sold`.
 - **Per-batch expiry** — every row shows its own expiry tag; tone flips to `warn` within 5 days of expiry.
 - **Active filter** — only batches with `status = 'active'` AND `(expiry_date IS NULL OR expiry_date >= today)` contribute. Closed or expired batches drop off automatically.
 - **Stock value** — top-of-page euro total summed from `productVariant->calculatePrice(available_quantity)`, weight-aware for €/kg cheese.
@@ -320,10 +324,11 @@ Mossfield Organic Farm produces three main product categories:
 1. **Production** → Create batches with automatic code generation
 2. **Maturation** → Track cheese aging with visual timeline
 3. **Cutting** → Convert wheels to vacuum packs (cheese only)
-4. **Orders** → Customer orders with stock allocation (managed inline on the order page)
-5. **Chilled Runs** → Weekly run sheet at `/chilled-runs`: enter/confirm the day's orders per stop, then tick stops loaded as the van fills
-6. **Fulfillment** → FIFO allocation with weight entry for cheese (per-unit for wheels, single total for vacuum packs) — desktop inline on the order page, or phone-first at `/picking` (factory's home screen)
-7. **Online Orders** → Preview and import orders from Mossorders portal
+4. **Maturing** → Set Farmhouse wheels aside at `/cheese-conversion` (reversible hold, excluded from orders), then release aged wheels into the Mature product
+5. **Orders** → Customer orders with stock allocation (managed inline on the order page)
+6. **Chilled Runs** → Weekly run sheet at `/chilled-runs`: enter/confirm the day's orders per stop, then tick stops loaded as the van fills
+7. **Fulfillment** → FIFO allocation with weight entry for cheese (per-unit for wheels, single total for vacuum packs) — desktop inline on the order page, or phone-first at `/picking` (factory's home screen)
+8. **Online Orders** → Preview and import orders from Mossorders portal
 
 ## Built With Laravel
 

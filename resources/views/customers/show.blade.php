@@ -15,6 +15,9 @@
                     @if($customer->hasOnlineAccount())
                         <span class="mf-tag mf-tag-info">Online · {{ $customer->mossorders_user_id }}</span>
                     @endif
+                    @if($customer->requires_reference)
+                        <span class="mf-tag mf-tag-warn">Ref required</span>
+                    @endif
                 </div>
             </div>
             <div class="flex gap-2">

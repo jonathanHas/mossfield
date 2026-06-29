@@ -13,28 +13,42 @@
         ['id' => 'dashboard', 'label' => 'Dashboard', 'route' => 'dashboard', 'match' => 'dashboard', 'icon' => 'dashboard'],
     ]];
 
+    // Sales — orders only
     $salesItems = [];
     if ($canSeeOrders) {
         $salesItems[] = ['id' => 'orders', 'label' => 'Orders', 'route' => 'orders.index', 'match' => 'orders.*', 'icon' => 'order'];
-        $salesItems[] = ['id' => 'picking', 'label' => 'Picking', 'route' => 'picking.index', 'match' => 'picking.*', 'icon' => 'package'];
         $salesItems[] = ['id' => 'chilled', 'label' => 'Chilled Runs', 'route' => 'chilled-runs.index', 'match' => 'chilled-runs.*', 'icon' => 'snow'];
     }
     if ($canSeeOnlineOrders) {
         $salesItems[] = ['id' => 'online', 'label' => 'Online Orders', 'route' => 'online-orders.index', 'match' => 'online-orders.*', 'icon' => 'online'];
     }
+    if ($salesItems) $groups[] = ['label' => 'Sales', 'items' => $salesItems];
+
+    // Fulfillment — picking + allocation
+    $fulfillItems = [];
+    if ($canSeeOrders) {
+        $fulfillItems[] = ['id' => 'picking', 'label' => 'Picking', 'route' => 'picking.index', 'match' => 'picking.*', 'icon' => 'package'];
+    }
     if ($canSeeAllocation) {
-        $salesItems[] = ['id' => 'alloc', 'label' => 'Stock Allocation', 'route' => 'order-allocations.index', 'match' => 'order-allocations.*', 'icon' => 'alloc'];
-        $salesItems[] = ['id' => 'runs', 'label' => 'Delivery Runs', 'route' => 'delivery-runs.index', 'match' => 'delivery-runs.*', 'icon' => 'truck'];
+        $fulfillItems[] = ['id' => 'alloc', 'label' => 'Stock Allocation', 'route' => 'order-allocations.index', 'match' => 'order-allocations.*', 'icon' => 'alloc'];
+    }
+    if ($fulfillItems) $groups[] = ['label' => 'Fulfillment', 'items' => $fulfillItems];
+
+    // Miscellaneous — delivery runs + customers (office+admin)
+    $miscItems = [];
+    if ($canSeeAllocation) {
+        $miscItems[] = ['id' => 'runs', 'label' => 'Delivery Runs', 'route' => 'delivery-runs.index', 'match' => 'delivery-runs.*', 'icon' => 'truck'];
     }
     if ($canSeeCustomers) {
-        $salesItems[] = ['id' => 'customers', 'label' => 'Customers', 'route' => 'customers.index', 'match' => 'customers.*', 'icon' => 'customer'];
+        $miscItems[] = ['id' => 'customers', 'label' => 'Customers', 'route' => 'customers.index', 'match' => 'customers.*', 'icon' => 'customer'];
     }
-    if ($salesItems) $groups[] = ['label' => 'Sales', 'items' => $salesItems];
+    if ($miscItems) $groups[] = ['label' => 'Miscellaneous', 'items' => $miscItems];
 
     if ($canSeeProduction) {
         $groups[] = ['label' => 'Production', 'items' => [
             ['id' => 'batches', 'label' => 'Batches', 'route' => 'batches.index', 'match' => 'batches.*', 'icon' => 'batch'],
             ['id' => 'cutting', 'label' => 'Cheese Cutting', 'route' => 'cheese-cutting.index', 'match' => 'cheese-cutting.*', 'icon' => 'cut'],
+            ['id' => 'mature', 'label' => 'Mature Conversion', 'route' => 'cheese-conversion.index', 'match' => 'cheese-conversion.*', 'icon' => 'mature'],
             ['id' => 'stock', 'label' => 'Stock', 'route' => 'stock.index', 'match' => 'stock.*', 'icon' => 'stock'],
             ['id' => 'products', 'label' => 'Products', 'route' => 'products.index', 'match' => 'products.*', 'icon' => 'products'],
         ]];
@@ -51,6 +65,7 @@
         'products'  => ['M3 7l9-4 9 4-9 4-9-4z', 'M3 7v10l9 4 9-4V7', 'M12 11v10'],
         'batch'     => ['M6 2h9l3 3v17H6z', 'M9 7h6M9 11h6M9 15h4'],
         'cut'       => ['M6 6l12 12M18 6L6 18', 'M8 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM20 8a2 2 0 1 1-4 0 2 2 0 0 1 4 0z'],
+        'mature'    => ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 6v6l4 2'],
         'stock'     => ['M3 9l9-6 9 6v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9z', 'M9 21V12h6v9'],
         'customer'  => ['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75'],
         'order'     => ['M3 3h2l2 13h13l2-8H7', 'M10 21a1 1 0 1 1-2 0 1 1 0 0 1 2 0zM20 21a1 1 0 1 1-2 0 1 1 0 0 1 2 0z'],
@@ -60,7 +75,6 @@
         'users'     => ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'],
         'snow'      => ['M12 2v20', 'M2 12h20', 'M5.6 5.6l12.8 12.8', 'M18.4 5.6L5.6 18.4'],
         'truck'     => ['M1 5h13v11H1z', 'M14 9h4l3 3v4h-7V9z', 'M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
-        'search'    => ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16zM21 21l-4.35-4.35'],
         'chevron'   => ['M6 9l6 6 6-6'],
     ];
 
@@ -98,48 +112,54 @@
         </button>
     </div>
 
-    <!-- Search stub -->
-    <div class="px-3 pt-1 pb-2.5">
-        <div
-            class="flex items-center gap-2 px-2.5 py-[7px] rounded-[7px] text-[13px]"
-            style="background: var(--panel); border: 1px solid var(--line); color: var(--muted);"
-        >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                @foreach ($icons['search'] as $d)<path d="{{ $d }}" />@endforeach
-            </svg>
-            <span>Search</span>
-            <span class="ml-auto text-[11px] font-mono" style="color: var(--faint);">⌘K</span>
-        </div>
-    </div>
-
     <!-- Nav groups -->
     <nav class="flex-1 overflow-auto px-3 py-1">
         @foreach ($groups as $gi => $group)
-            <div class="{{ $gi === 0 ? '' : 'mt-[18px]' }}">
+            @php
+                $navKey = $group['label'] ? 'nav-open:'.\Illuminate\Support\Str::slug($group['label']) : null;
+                $hasActive = collect($group['items'])->contains(fn ($i) => request()->routeIs($i['match']));
+            @endphp
+            <div
+                class="{{ $gi === 0 ? '' : 'mt-[18px]' }}"
+                @if ($group['label']) x-data="{ open: @js($hasActive) || (localStorage.getItem(@js($navKey)) ?? '1') === '1' }" @endif
+            >
                 @if ($group['label'])
-                    <div
-                        class="px-2.5 pt-1 pb-1.5 text-[10.5px] font-semibold uppercase"
+                    <button
+                        type="button"
+                        @click="open = !open; localStorage.setItem(@js($navKey), open ? '1' : '0')"
+                        class="w-full flex items-center px-2.5 pt-1 pb-1.5 text-[10.5px] font-semibold uppercase"
                         style="letter-spacing: 0.8px; color: var(--faint);"
-                    >{{ $group['label'] }}</div>
-                @endif
-                @foreach ($group['items'] as $item)
-                    @php $isActive = request()->routeIs($item['match']); @endphp
-                    <a
-                        href="{{ route($item['route']) }}"
-                        class="flex items-center gap-2.5 px-2.5 py-[7px] rounded-md mb-px text-[13.5px] transition-colors"
-                        @style([
-                            'color: '.($isActive ? 'var(--ink)' : 'var(--ink-2)'),
-                            'font-weight: '.($isActive ? 600 : 500),
-                            'background: '.($isActive ? 'var(--panel)' : 'transparent'),
-                            'box-shadow: '.($isActive ? '0 1px 2px rgba(0,0,0,0.04), inset 0 0 0 1px var(--line)' : 'none'),
-                        ])
                     >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                            @foreach ($icons[$item['icon']] as $d)<path d="{{ $d }}" />@endforeach
+                        <span>{{ $group['label'] }}</span>
+                        <svg
+                            class="ml-auto transition-transform duration-150"
+                            :class="{ '-rotate-90': !open }"
+                            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                        >
+                            <path d="{{ $icons['chevron'][0] }}" />
                         </svg>
-                        <span>{{ $item['label'] }}</span>
-                    </a>
-                @endforeach
+                    </button>
+                @endif
+                <div @if ($group['label']) x-show="open" x-cloak @endif>
+                    @foreach ($group['items'] as $item)
+                        @php $isActive = request()->routeIs($item['match']); @endphp
+                        <a
+                            href="{{ route($item['route']) }}"
+                            class="flex items-center gap-2.5 px-2.5 py-[7px] rounded-md mb-px text-[13.5px] transition-colors"
+                            @style([
+                                'color: '.($isActive ? 'var(--ink)' : 'var(--ink-2)'),
+                                'font-weight: '.($isActive ? 600 : 500),
+                                'background: '.($isActive ? 'var(--panel)' : 'transparent'),
+                                'box-shadow: '.($isActive ? '0 1px 2px rgba(0,0,0,0.04), inset 0 0 0 1px var(--line)' : 'none'),
+                            ])
+                        >
+                            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                                @foreach ($icons[$item['icon']] as $d)<path d="{{ $d }}" />@endforeach
+                            </svg>
+                            <span>{{ $item['label'] }}</span>
+                        </a>
+                    @endforeach
+                </div>
             </div>
         @endforeach
     </nav>

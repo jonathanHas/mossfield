@@ -167,8 +167,8 @@ The sync integration has been hardened across three phases. The operator-facing 
 
 ### Auth & middleware
 - **Routes are grouped by role, not by `verified` status.** Email verification is disabled (see Authentication Flow). Two tiers of business route groups exist in `routes/web.php`:
-  - `['auth', 'role:admin,office,factory']` — shared read-capable routes (products, batches, orders, stock, cheese-cutting index) **plus the mobile picking flow at `/picking`** (see "Mobile Picking Flow" below) **and the chilled run sheet at `/chilled-runs`** (see "Chilled Run Sheet" below). Factory is otherwise view-only; writes are blocked via policies inside the controller (`$this->authorize(...)` per action). The two factory write carve-outs are `OrderPolicy::fulfill` (allocate + fulfil + undo picks) and `OrderPolicy::load` (the chilled-run "loaded onto van" tick) — general order editing stays office/admin.
-  - `['auth', 'role:admin,office']` — office-only flows (customers, product variants, order-allocations, online-orders, cheese-cutting write actions, delivery-run management at `/delivery-runs`).
+  - `['auth', 'role:admin,office,factory']` — shared read-capable routes (products, batches, orders, stock, cheese-cutting index, **mature-conversion index** at `/cheese-conversion`) **plus the mobile picking flow at `/picking`** (see "Mobile Picking Flow" below) **and the chilled run sheet at `/chilled-runs`** (see "Chilled Run Sheet" below). Factory is otherwise view-only; writes are blocked via policies inside the controller (`$this->authorize(...)` per action). The two factory write carve-outs are `OrderPolicy::fulfill` (allocate + fulfil + undo picks) and `OrderPolicy::load` (the chilled-run "loaded onto van" tick) — general order editing stays office/admin.
+  - `['auth', 'role:admin,office']` — office-only flows (customers, product variants, order-allocations, online-orders, cheese-cutting write actions, **mature-conversion writes** — hold/release/undo, see "Mature Conversion" below — delivery-run management at `/delivery-runs`).
   - `['auth', 'role:admin']` — user management at `/users`.
   - Profile + password/logout stay on `auth`-only so every authenticated user can manage their own account.
 - **`api.token` middleware chain**: on `/api/*` routes, always combine `throttle:sync-api` (60/min per IP, registered in `AppServiceProvider`) with `api.token`. The middleware itself chains IP allowlist → token check → audit log. Don't bypass.
@@ -226,8 +226,9 @@ chmod -R 775 storage/ bootstrap/cache/
 Mossfield Organic Farm produces three product types:
 1. **Milk**: 1L and 2L bottles (batch code: Mddmmyy)
 2. **Yoghurt**: 250g and 500g tubs (batch code: Yddmmyy)
-3. **Cheese**: Farmhouse, Garlic & Basil, Tomato & Herb, Cumin Seed, Mature (batch code: Gddmmyy)
+3. **Cheese**: Farmhouse, Garlic & Basil (seeded); **Mature** (seeded — a premium product produced by aging Farmhouse, not made fresh; see "Mature Conversion" below). Tomato & Herb, Cumin Seed are aspirational varieties not yet seeded. Batch code: Gddmmyy.
    - Produced as wheels, later cut into vacuum packs; requires maturation tracking; each vacuum pack must be traceable to its original wheel.
+   - **Mature** is reached by setting Farmhouse wheels aside to age (a reversible "maturing hold"), then releasing them into the Mature product once ~5 months old.
 
 ## Implemented Features
 
@@ -236,6 +237,7 @@ Mossfield Organic Farm produces three product types:
 - **Product Management**: products with full CRUD
 - **Product Variant Management**: full CRUD for variants (sizes, packaging) — weight, price, active status per variant; nested routes `/products/{product}/variants/*`
 - **Cheese Cutting System**: convert wheels to vacuum packs with full traceability
+- **Mature Conversion** (`/cheese-conversion`): set Farmhouse wheels aside to age (reversible maturing hold, excluded from orders), then release aged wheels into the separate Mature product — see "Mature Conversion" below
 - **Stock Overview**: real-time stock levels and valuations
 - **Grouped Batch Browser** (`/batches`): three-level collapsible hierarchy (type → cheese variety → batch) via native `<details>`/`<summary>`. Each batch card header shows an at-a-glance status strip: one circle per wheel produced (**yellow**=remaining, **grey**=cut, **black**=sold whole) plus a 128px stacked mini-bar for vacuum packs (yellow=remaining, black=sold). Same layout on `/cheese-cutting`, with the "Cut Wheel" action inside each expanded body.
 
@@ -341,7 +343,7 @@ Both controllers delegate to FormRequests (`app/Http/Requests/ProductRequest.php
 ### Customers
 Buyers placing orders through the office system or online portal.
 
-**Key Fields**: `name`; `email` (unique); `phone` (optional); `address`/`city`/`postal_code`/`country`; `credit_limit` (€); `payment_terms` (enum: `immediate`, `net_7`, `net_14`, `net_30`); `is_active`; `notes`; `mossorders_user_id` (nullable, unique).
+**Key Fields**: `name`; `email` (unique); `phone` (optional); `address`/`city`/`postal_code`/`country`; `credit_limit` (€); `payment_terms` (enum: `immediate`, `net_7`, `net_14`, `net_30`); `is_active`; `requires_reference` (boolean, default false — when set, the optional "Customer ref" field auto-expands for this customer on the order forms and Chilled Runs row; plain boolean, safe to query); `notes`; `mossorders_user_id` (nullable, unique).
 
 **Helper Methods**: `hasOnlineAccount()`; `getOutstandingBalanceAttribute()`; `canPlaceOrder(float $orderAmount)`.
 
@@ -352,12 +354,22 @@ Buyers placing orders through the office system or online portal.
 ### Orders
 Track customer purchases and fulfillment status.
 
-**Key Fields**: `order_number` (auto, `ORD-YYYYMMDD-XXX`); `customer_id`; `order_date`/`delivery_date`; `status` (enum: `pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `delivered`, `cancelled`); `payment_status` (enum: `pending`, `paid`, `partial`, `overdue`); `subtotal`/`tax_amount`/`total_amount` (€); `delivery_address` (optional override); `notes`; `mossorders_order_id` (nullable, unique).
+**Key Fields**: `order_number` (auto, `ORD-YYYYMMDD-XXX`); `customer_id`; `order_date`/`delivery_date`; `status` (enum: `pending`, `confirmed`, `preparing`, `ready`, `dispatched`, `delivered`, `cancelled`); `payment_status` (enum: `pending`, `paid`, `partial`, `overdue`); `subtotal`/`tax_amount`/`total_amount` (€); `delivery_address` (optional override); `notes`; `customer_reference` (nullable string — the customer's own reference / PO number, distinct from the auto `order_number`; see "Customer Reference" below); `mossorders_order_id` (nullable, unique).
 
 **Helper Methods**: `scopeFromMossorders($query)`; `isFullyAllocated()`; `canBeCancelled()`.
 
 ### Currency
 All prices throughout the application are displayed in euros (€).
+
+### Customer Reference (optional PO number)
+`orders.customer_reference` (nullable string) holds the **customer's own reference / purchase-order number** — distinct from the auto-generated `order_number`. Only a few customers need it, so the input stays tucked behind a small reveal button and doesn't draw the eye; it auto-expands for customers flagged `customers.requires_reference`. Settable on create and **editable anytime** (order edit page + Chilled Runs inline editor). No € / financial implications.
+
+- **Migrations**: `2026_06_27_120000_add_customer_reference_to_orders_table` + `2026_06_27_120100_add_requires_reference_to_customers_table`. `customer_reference` is in `Order::$fillable`; `requires_reference` is in `Customer::$fillable` with a `boolean` cast.
+- **Order forms** (`OrderController::store/update`): both validate `nullable|string|max:255`. The create/edit blades wrap the field in a small Alpine reveal (`x-data="{ showRef }"`) — the create form seeds a `customer_id ⇒ requires_reference` map and `@change`s on the customer `<select>` to auto-open; the edit form pre-opens when a value exists or the customer requires one.
+- **Show page**: renders a "Customer ref" row in the Order panel only when set. **`customer_reference` is in `$statusFields`** (`orders/show.blade.php`) — the inline Confirm/Cancel PATCH forms replay `$statusFields` as hidden inputs, so omitting it would blank the ref on any status change. Add it to `$statusFields` if you ever add new replayed quick-actions.
+- **Customer flag**: `CustomerController::store/update` validate `requires_reference` as boolean and coerce via `$request->has(...)` (mirrors `is_active`); create/edit blades have the checkbox; show page shows a "Ref required" badge.
+- **Chilled Runs** (`ChilledRunController::saveStop`): validates + persists/clears the ref (empties normalised to null since the always-in-DOM hidden input posts `''`); `buildSheet()` exposes `references` (per-row, for display) + `editCustomerReference` (edit prefill). The `_run-table` editor adds `reference`/`showExtras` to the `stopEditor` Alpine state (auto-open for ref'd customers, dirty-tracked) behind a "+ Ref" toggle. A ref with **no quantities and no existing order is intentionally not persisted** (no empty orders).
+- Tests: `tests/Feature/OrderCustomerReferenceTest.php` (store/update persist, survives status-only PATCH, requires-reference auto-expand) + the three `customer_reference` cases in `ChilledRunTest`.
 
 ### Orders Master-Detail View
 `/orders` is a paginated table; `/orders/{order}` is master-detail — sibling orders in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected order detail on the right.
@@ -494,6 +506,26 @@ Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design
 - **`App\Http\Controllers\Concerns\MutatesOrderLines`** trait holds the shared line-mutation invariants (`setLineQuantity` / `applyLineQuantity` / `removeLine` / `cancelOrderKeepingLines`) — extracted from and now also used by `OrderController::storeItem/updateItem/destroyItem`. Any new code that changes `quantity_ordered` or removes lines should go through it (it owns the releaseUnits-on-decrease and cancel-keeps-history rules).
 - **Row form**: a `<form>` can't wrap a `<tr>`, so the editing row's inputs associate with a hidden `<form id="stop-form-{id}">` rendered after the table via the HTML5 `form=` attribute.
 - **History recall**: edit mode ships the customer's last 5 non-cancelled orders (excluding the one being edited, inactive variants filtered) as JSON into the Alpine `stopEditor` component (inline `<script>` in `_run-table.blade.php`) — "Repeat last order" + ←/→ cycling prefill the inputs; history cheese variants that aren't columns yet become "added lines" (select + qty in the Notes cell) and promote to real columns after save.
+- **Customer reference**: the editor also posts an optional `customer_reference` behind a small "+ Ref" toggle (auto-open for `requires_reference` customers), saved/cleared in `saveStop()`; the saved value renders under the order number in display mode. See "Customer Reference" under Order Structure for the full cross-surface notes.
+- **Unsaved-changes guard**: because each row's typed quantities live only in Alpine/DOM until **Save**, leaving the row otherwise discards them silently. `stopEditor` tracks a dirty flag (`init()` snapshots a `baseline`, then `$watch`es `qty`/`addedLines`/`reference` and `serialize()`-compares — a true value diff, so reverting clears it) on the global `window.__stopDirty` (+ `window.__stopCustomer`). **Two coordinated guards:** (1) a delegated capture-phase click handler intercepts run-sheet nav links marked **`data-confirm-unsaved`** (other rows' Edit/"Enter order" + "Multiple orders" link in `_run-table`, the day tabs in `_day-tabs`, the week prev/next in `index`) and opens a labelled `<x-modal name="discard-stop">` ("Keep editing" / "Discard changes") instead of a native `confirm()` — *Discard* clears the flag and navigates to the stashed href; (2) a `beforeunload` net for the back button / refresh / tab close / sidebar nav (browser-controlled generic dialog — can't be relabelled). **Save** and **Cancel** both clear the flag (Save via a submit listener on `stop-form-{id}`; Cancel via `@click`), so neither double-prompts. The attribute is inert when not editing (the guard only arms inside the `@if ($editId)` script block).
+
+## Mature Conversion (`/cheese-conversion`)
+
+Turns Farmhouse cheese into the separate premium **Mossfield Mature Cheese** product, in two phases. Built from the `Mature Conversion.html` Claude Design handoff — a desktop **wheel allocator** (Farmhouse / Maturing zones; drag wheels or select + Mature→/←Return/quick-allocate stepper). One card per non-mature cheese **wheel batch_item**, at any age.
+
+### Two-phase model
+1. **Maturing hold** — a *reversible* set-aside stored in **`batch_items.quantity_maturing`** (migration `2026_06_20_130000_add_quantity_maturing_to_batch_items_table`). Allowed at **any age**. Held wheels stay physical farmhouse stock (`quantity_remaining` unchanged) but are **excluded from order allocation/picking/cutting**. Lowering the hold returns wheels to available — the "Save maturing" button persists the Maturing-zone count (fixes the original "wheels vanish on confirm" bug).
+2. **Release** — once the batch passes `Batch::isEligibleForMaturation()` (~5 months), "Release N to mature" consumes the saved hold into the Mature product: get-or-creates **one Mature batch per source** (`batches.source_batch_id`, `production_date` carried forward ⇒ immediately sellable), mints mature wheels, writes a `CheeseConversionLog`, decrements **both** `quantity_remaining` and `quantity_maturing`.
+3. **Undo release** — reversible until the mature wheels are cut/sold: returns N wheels to the source batch's `quantity_remaining` + `quantity_maturing`, drops the mature item, deletes the log. Surfaced on the **mature batch's `batches/show`** ("Return to farmhouse hold", gated on `targetBatchItem->available_quantity >= wheels_converted`).
+
+### Key mechanics
+- **The single leverage point**: `BatchItem::getAvailableQuantityAttribute()` = `max(0, quantity_remaining − unfulfilledAllocations − quantity_maturing)`. Subtracting the hold here propagates "won't auto-assign" to auto-allocate, manual allocate, picking, `BuildsAllocationData`, and `StockOverviewService::totalValue` automatically. `getHoldableQuantityAttribute()` = `remaining − unfulfilledAllocations` caps the hold and drives the allocator's wheel total.
+- **Routes**: `GET /cheese-conversion` (`cheese-conversion.index`, shared admin/office/factory read) + office/admin writes `POST .../hold/{batchItem}`, `POST .../release/{batchItem}`, `POST .../logs/{log}/undo`. Controller `CheeseConversionController` (`index`/`hold`/`release`/`undoRelease`); `guardSourceWheel()` enforces non-mature cheese wheel (no age gate — `release` adds its own eligibility check).
+- **Authorization**: hold/release gate on `authorize('create', CheeseConversionLog::class)`; undo on `authorize('delete', $log)` (instance — `delete` is a model-level ability). `CheeseConversionLogPolicy` is a bare `BasePolicy` (office write, factory read, driver deny); factory is denied writes at the route group anyway.
+- **Stock**: cheese wheel rows show a distinct **`maturing`** segment (`--state-maturing`, deep amber) removed from `available` — `StockOverviewService::buildCheeseCard()` sums `quantity_maturing`; `resources/views/components/stock/cheese-row.blade.php` renders it. Cutting now guards on `available_quantity` (`CheeseCuttingController::store`) so held/allocated wheels can't be cut.
+- **Mature is a normal cheese product** (seeded by `ProductSeeder`: `Mossfield Mature Cheese`, `maturation_days` 150, Whole Wheel + Vacuum Pack variants) ⇒ released wheels flow through stock/allocation and stay cuttable via the existing cheese-cutting flow with no extra work.
+- **Views/CSS**: `resources/views/cheese-conversion/index.blade.php` (Alpine `matureCard(total, held)` seeds the saved hold into the Maturing zone; `x-mature.meta` component); `.mc-*` classes + the `.mc-scope` farm/mature color tokens at the bottom of `resources/css/app.css`. Nav: "Mature Conversion" (clock icon, admin/office/factory) in the Production group. No € on the screen — quantities only.
+- Tests: `tests/Feature/CheeseConversionTest.php` (hold set-aside/reverse/cap, exclusion from auto-allocate, young-batch holds, release eligibility + product conversion + production carry-forward, undo-to-hold + blocked-once-cut, stock `maturing` segment, held-can't-be-cut, role gating).
 
 ## Online Orders Integration
 

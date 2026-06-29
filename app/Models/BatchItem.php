@@ -13,12 +13,14 @@ class BatchItem extends Model
         'product_variant_id',
         'quantity_produced',
         'quantity_remaining',
+        'quantity_maturing',
         'unit_weight_kg',
     ];
 
     protected $casts = [
         'quantity_produced' => 'integer',
         'quantity_remaining' => 'integer',
+        'quantity_maturing' => 'integer',
         'unit_weight_kg' => 'decimal:3',
     ];
 
@@ -40,6 +42,16 @@ class BatchItem extends Model
     public function targetCuttingLogs(): HasMany
     {
         return $this->hasMany(CheeseCuttingLog::class, 'target_batch_item_id');
+    }
+
+    public function sourceConversionLogs(): HasMany
+    {
+        return $this->hasMany(CheeseConversionLog::class, 'source_batch_item_id');
+    }
+
+    public function targetConversionLogs(): HasMany
+    {
+        return $this->hasMany(CheeseConversionLog::class, 'target_batch_item_id');
     }
 
     public function getQuantitySoldAttribute(): int
@@ -82,7 +94,19 @@ class BatchItem extends Model
 
     public function getAvailableQuantityAttribute(): int
     {
-        // Available = remaining - allocated but not yet fulfilled
+        // Available = remaining - allocated but not yet fulfilled - maturing hold.
+        // The maturing hold sets wheels aside so they're never auto-assigned to
+        // an order; subtracting it here propagates that to every allocation path.
+        return max(0, $this->holdable_quantity - (int) $this->quantity_maturing);
+    }
+
+    /**
+     * Wheels that can be set aside for maturing: remaining stock minus what is
+     * already reserved by unfulfilled orders (independent of the current hold).
+     * Equals available_quantity + quantity_maturing.
+     */
+    public function getHoldableQuantityAttribute(): int
+    {
         $allocated = $this->orderAllocations()
             ->whereNull('fulfilled_at')
             ->sum('quantity_allocated');

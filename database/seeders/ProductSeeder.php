@@ -185,5 +185,52 @@ class ProductSeeder extends Seeder
                 'is_active' => true,
             ]
         );
+
+        // Mature cheese — the destination of the Farmhouse → Mature conversion.
+        // A normal cheese product so converted wheels flow through stock,
+        // allocation and the existing cheese-cutting flow unchanged. Variant
+        // names MUST contain "wheel"/"vacuum" for that classification to work.
+        $matureCheese = Product::firstOrCreate(
+            [
+                'name' => 'Mossfield Mature Cheese',
+                'type' => 'cheese',
+            ],
+            [
+                'description' => 'Farmhouse cheese aged five months into a deeper, sharper mature',
+                'maturation_days' => 150,
+                'is_active' => true,
+            ]
+        );
+
+        ProductVariant::firstOrCreate(
+            [
+                'product_id' => $matureCheese->id,
+                'name' => 'Whole Wheel',
+                'size' => 'wheel',
+                'unit' => 'wheel',
+            ],
+            [
+                'weight_kg' => 2.300,
+                'base_price' => 55.00,
+                'is_variable_weight' => true,
+                'is_active' => true,
+            ]
+        );
+
+        ProductVariant::firstOrCreate(
+            [
+                'product_id' => $matureCheese->id,
+                'name' => 'Vacuum Pack',
+                'size' => 'pack',
+                'unit' => 'pack',
+            ],
+            [
+                'weight_kg' => 0.250,
+                'base_price' => 7.00,
+                'is_variable_weight' => true,
+                'is_bulk_weighed' => true,
+                'is_active' => true,
+            ]
+        );
     }
 }

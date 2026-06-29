@@ -204,6 +204,13 @@
                                 return str_contains(strtolower($item->productVariant->name), 'wheel') && $item->quantity_remaining > 0;
                             });
                             $isReady = $batch->ready_date === null || $batch->ready_date <= now();
+
+                            $isMatureProduct = $batch->product->name === 'Mossfield Mature Cheese';
+                            $convertibleWheels = $batch->batchItems->filter(function($item) {
+                                return str_contains(strtolower($item->productVariant->name), 'wheel') && $item->available_quantity > 0;
+                            });
+                            $matureMonths = (int) config('mossfield.mature_conversion_months', 5);
+                            $matureDate = $batch->production_date?->copy()->addMonths($matureMonths);
                         @endphp
                         @if($availableWheels->count() > 0 && $isReady)
                             @can('create', App\Models\CheeseCuttingLog::class)
@@ -224,9 +231,73 @@
                                 @endif
                             </button>
                         @endif
+
+                        {{-- Farmhouse → Mature conversion (not offered on mature batches).
+                             Wheel selection happens on the interactive conversion page. --}}
+                        @unless($isMatureProduct)
+                            @if($batch->isEligibleForMaturation() && $convertibleWheels->count() > 0)
+                                @can('create', App\Models\CheeseConversionLog::class)
+                                    <a href="{{ route('cheese-conversion.index') }}" class="mf-btn-secondary">
+                                        Convert to Mature
+                                        <span class="text-[11.5px] font-mono ml-1" style="opacity: 0.8;">({{ $convertibleWheels->sum('available_quantity') }} free)</span>
+                                    </a>
+                                @endcan
+                            @elseif(! $batch->isEligibleForMaturation() && $matureDate)
+                                <button class="mf-btn-secondary cursor-not-allowed" style="color: var(--faint);" disabled>
+                                    Eligible for mature on {{ $matureDate->format('d/m/Y') }}
+                                </button>
+                            @endif
+                        @endunless
                     @endif
                 </div>
-                <p class="text-[12px] mt-3" style="color: var(--muted);">More actions coming soon.</p>
+                @php
+                    // Releases that landed in this (mature) batch — each can be
+                    // returned to the source farmhouse hold while its wheels are intact.
+                    $releaseLogs = $batch->batchItems->flatMap(fn ($i) => $i->targetConversionLogs->map(fn ($l) => ['log' => $l, 'item' => $i]));
+                @endphp
+                @if($batch->sourceBatch || $batch->matureBatches->isNotEmpty() || $releaseLogs->isNotEmpty())
+                    <div class="mt-3 pt-3 text-[12px] space-y-1" style="border-top: 1px solid var(--line-2); color: var(--muted);">
+                        @if($batch->sourceBatch)
+                            <div>
+                                Matured from
+                                <a href="{{ route('batches.show', $batch->sourceBatch) }}" class="mf-link font-mono">{{ $batch->sourceBatch->batch_code }}</a>
+                                <span>({{ $batch->sourceBatch->product->name }})</span>
+                            </div>
+                        @endif
+                        @foreach($batch->matureBatches as $matureBatch)
+                            <div>
+                                Matured into
+                                <a href="{{ route('batches.show', $matureBatch) }}" class="mf-link font-mono">{{ $matureBatch->batch_code }}</a>
+                                <span>({{ $matureBatch->product->name }})</span>
+                            </div>
+                        @endforeach
+
+                        @foreach($releaseLogs as $entry)
+                            @php $log = $entry['log']; $matureItem = $entry['item']; $canUndo = $matureItem->available_quantity >= $log->wheels_converted; @endphp
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <span>
+                                    Released {{ $log->wheels_converted }} wheel(s) on {{ $log->conversion_date->format('d/m/Y') }}
+                                    @if($log->sourceBatchItem?->batch)
+                                        from <span class="font-mono">{{ $log->sourceBatchItem->batch->batch_code }}</span>
+                                    @endif
+                                </span>
+                                @can('delete', $log)
+                                    @if($canUndo)
+                                        <form method="POST" action="{{ route('cheese-conversion.undo', $log) }}"
+                                              onsubmit="return confirm('Return {{ $log->wheels_converted }} wheel(s) to the farmhouse maturing hold?')">
+                                            @csrf
+                                            <button type="submit" class="mf-link" style="color: var(--accent-ink);">Return to farmhouse hold</button>
+                                        </form>
+                                    @else
+                                        <span style="color: var(--faint);">(cut/sold — can't undo)</span>
+                                    @endif
+                                @endcan
+                            </div>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-[12px] mt-3" style="color: var(--muted);">More actions coming soon.</p>
+                @endif
             </div>
         </div>
     </div>

@@ -18,7 +18,7 @@ class StockOverviewService
 
         $items = BatchItem::query()
             ->with(['batch.product', 'productVariant'])
-            ->withCount('sourceCuttingLogs')
+            ->withCount(['sourceCuttingLogs', 'sourceConversionLogs'])
             ->withSum([
                 'orderAllocations as quantity_currently_allocated' => fn ($q) => $q->whereNull('fulfilled_at'),
             ], DB::raw('quantity_allocated - quantity_fulfilled'))
@@ -155,16 +155,23 @@ class StockOverviewService
 
             if ($isWheel($variant->name)) {
                 $cut = (int) $group->sum(fn ($i) => (int) ($i->source_cutting_logs_count ?? 0));
-                $sold = max(0, $produced - $remaining - $cut);
-                $remainingClamped = max(0, $produced - $cut - $sold);
-                $available = max(0, $remainingClamped - $allocated);
+                $converted = (int) $group->sum(fn ($i) => (int) ($i->source_conversion_logs_count ?? 0));
+                $maturing = (int) $group->sum(fn ($i) => (int) $i->quantity_maturing);
+                $sold = max(0, $produced - $remaining - $cut - $converted);
+                $remainingClamped = max(0, $produced - $cut - $converted - $sold);
+                // Held-for-maturing wheels are part of remaining stock but set
+                // aside — never available to sell or allocate.
+                $maturing = min($maturing, $remainingClamped);
+                $available = max(0, $remainingClamped - $allocated - $maturing);
                 $wheels[] = [
                     'label' => $label,
                     'total' => $produced,
                     'segments' => [
                         'available' => $available,
                         'allocated' => $allocated,
+                        'maturing' => $maturing,
                         'cut' => $cut,
+                        'converted' => $converted,
                         'sold' => $sold,
                     ],
                     'batch_code' => $batch->batch_code,
