@@ -17,6 +17,8 @@ class BatchController extends Controller
         $this->authorize('viewAny', Batch::class);
         $query = Batch::with([
             'product',
+            'sourceBatch.product',
+            'matureBatches.product',
             'batchItems' => fn ($q) => $q->with('productVariant')
                 ->withCount('sourceCuttingLogs')
                 ->withSum([

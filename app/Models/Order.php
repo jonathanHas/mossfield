@@ -144,6 +144,16 @@ class Order extends Model
     }
 
     /**
+     * Whether the order has progressed to at least "ready" (ready or later).
+     * Gates invoice availability — an invoice is only offered once the order is
+     * picked/ready. Cancelled never qualifies.
+     */
+    public function hasReachedReady(): bool
+    {
+        return in_array($this->status, ['ready', 'dispatched', 'delivered'], true);
+    }
+
+    /**
      * Keep the ready/preparing boundary in sync after items or fulfilment
      * change: a ready order with unpicked work drops to preparing, and a
      * fully-picked preparing order advances to ready. Intentionally one-

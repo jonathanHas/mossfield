@@ -18,7 +18,9 @@ use App\Models\ProductVariant;
  *  - Cancelling keeps the lines as history (never deletes them) while
  *    returning all committed stock — consistent with every other cancel path.
  *  - line_total recompute is automatic via OrderItem::boot()'s saving hook;
- *    unit_price is locked from the variant's base_price at line creation.
+ *    unit_price is locked at line creation from the customer's rate for the
+ *    variant (Customer::unitPriceFor — a per-variant special price if set,
+ *    else the variant's base_price).
  *
  * Callers are responsible for wrapping in a transaction and for running
  * Order::calculateTotals() + reconcilePickingStatus() afterwards.
@@ -59,7 +61,7 @@ trait MutatesOrderLines
             $order->orderItems()->create([
                 'product_variant_id' => $variant->id,
                 'quantity_ordered' => $qty,
-                'unit_price' => $variant->base_price,
+                'unit_price' => $order->customer->unitPriceFor($variant),
             ]);
 
             return;

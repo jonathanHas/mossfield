@@ -11,7 +11,7 @@
         $groupedBatches = $groupedBatches->sortBy(fn ($_, $type) => array_search($type, $typeOrder) === false ? 99 : array_search($type, $typeOrder));
 
         $wheelStatsFor = function ($batch) {
-            $stats = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'cut' => 0, 'sold' => 0];
+            $stats = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
             foreach ($batch->batchItems as $item) {
                 if (! str_contains(strtolower($item->productVariant->name), 'wheel')) {
                     continue;
@@ -22,9 +22,12 @@
                 $remaining = max(0, $produced - $cut - $sold);
                 $allocated = max(0, min($remaining, (int) ($item->quantity_currently_allocated ?? 0)));
                 $free = max(0, $remaining - $allocated);
+                $maturing = min($free, (int) $item->quantity_maturing);
+                $free = max(0, $free - $maturing);
                 $stats['produced'] += $produced;
                 $stats['free'] += $free;
                 $stats['allocated'] += $allocated;
+                $stats['maturing'] += $maturing;
                 $stats['cut'] += $cut;
                 $stats['sold'] += $sold;
             }
@@ -116,7 +119,7 @@
                             $subBatchCount = $subBatches->count();
                             $subWheelTotals = null;
                             if ($type === 'cheese') {
-                                $subWheelTotals = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'cut' => 0, 'sold' => 0];
+                                $subWheelTotals = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
                                 foreach ($subBatches as $b) {
                                     $s = $wheelStatsFor($b);
                                     foreach ($subWheelTotals as $k => $v) {
@@ -145,6 +148,12 @@
                                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 border border-amber-700"></span>
                                                     {{ $subWheelTotals['allocated'] }}
                                                 </span>
+                                                @if ($subWheelTotals['maturing'] > 0)
+                                                    <span class="inline-flex items-center gap-1" title="Set aside to mature">
+                                                        <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-maturing); border-color: oklch(0.42 0.11 56);"></span>
+                                                        {{ $subWheelTotals['maturing'] }}
+                                                    </span>
+                                                @endif
                                                 <span class="inline-flex items-center gap-1" title="Cut to vac packs">
                                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-600"></span>
                                                     {{ $subWheelTotals['cut'] }}

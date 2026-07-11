@@ -128,7 +128,35 @@
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0">
                         <a href="{{ route('orders.index', $listFilters) }}" class="mf-btn-ghost lg:hidden">← All</a>
+                        @can('see-financials')
+                            @if($order->hasReachedReady())
+                                <a href="{{ route('orders.invoice', $order) }}" class="mf-btn-secondary" target="_blank" rel="noopener">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h8M8 9h2" /></svg>
+                                    Invoice
+                                </a>
+                                @if($order->customer->email)
+                                    <form method="POST" action="{{ route('orders.email', [$order, 'invoice']) }}" class="inline">
+                                        @csrf
+                                        <button type="submit" class="mf-btn-secondary"
+                                            onclick="return confirm('Email the invoice to {{ $order->customer->email }}?')">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="m22 6-10 7L2 6" /></svg>
+                                            Email invoice
+                                        </button>
+                                    </form>
+                                @endif
+                            @endif
+                        @endcan
                         @can('update', $order)
+                            @if($order->customer->email)
+                                <form method="POST" action="{{ route('orders.email', [$order, 'docket']) }}" class="inline">
+                                    @csrf
+                                    <button type="submit" class="mf-btn-secondary"
+                                        onclick="return confirm('Email the dispatch docket to {{ $order->customer->email }}?')">
+                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="m22 6-10 7L2 6" /></svg>
+                                        Email docket
+                                    </button>
+                                </form>
+                            @endif
                             <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
                             @if($order->status === 'pending')
                                 <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
@@ -236,19 +264,42 @@
                     <h2 class="text-[15px] font-semibold" style="letter-spacing: -0.01em;">
                         Items <span class="font-normal" style="color: var(--muted);">{{ $order->orderItems->count() }}</span>
                     </h2>
-                    @can('update', $order)
-                        @if(in_array($order->status, ['confirmed', 'preparing'], true))
+                </div>
+
+                @can('update', $order)
+                    @if(in_array($order->status, ['confirmed', 'preparing'], true) && ! $order->isFullyAllocated())
+                        <div class="mf-flash mf-flash-success mb-4 items-center justify-between gap-4">
+                            <div class="flex items-start gap-2.5">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
+                                <div>
+                                    <b>Assign stock in one tap.</b>
+                                    Auto allocate pulls available stock to every line using FIFO (oldest batches first).
+                                </div>
+                            </div>
                             <form method="POST" action="{{ route('order-allocations.auto-allocate', $order) }}" class="inline">
                                 @csrf
-                                <button type="submit" class="mf-btn-secondary text-[12px]"
+                                <button type="submit" class="mf-btn-primary whitespace-nowrap"
                                     onclick="return confirm('Auto-allocate available stock to this order using FIFO?')">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
                                     Auto allocate
                                 </button>
                             </form>
-                        @endif
-                    @endcan
-                </div>
+                        </div>
+                    @endif
+
+                    {{-- Handoff cue: fully allocated, awaiting weigh/pack. Complement of the
+                         auto-allocate banner above, so the two never show together. --}}
+                    @if(in_array($order->status, ['confirmed', 'preparing'], true) && $order->orderItems->isNotEmpty() && $order->isFullyAllocated() && ! $order->isFullyFulfilled())
+                        <div class="mf-flash mf-flash-success mb-4">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" /></svg>
+                            <div>
+                                <b>Stock allocated — ready to weigh &amp; pack.</b>
+                                The dispatch team can now weigh the cheese and assemble the order.
+                                Enter the actual weights and quantities on each line below to complete it.
+                            </div>
+                        </div>
+                    @endif
+                @endcan
 
                 <div style="border-bottom: 1px solid var(--line);">
                     @if($showAllocation)

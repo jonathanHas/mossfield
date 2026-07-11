@@ -9,7 +9,9 @@
         $remaining = max(0, $produced - $cut - $sold);
         $allocated = max(0, min($remaining, (int) ($item->quantity_currently_allocated ?? 0)));
         $free = max(0, $remaining - $allocated);
-        return compact('produced', 'cut', 'sold', 'remaining', 'allocated', 'free') + [
+        $maturing = min($free, (int) $item->quantity_maturing);   // held wheels currently live inside $free
+        $free = max(0, $free - $maturing);
+        return compact('produced', 'cut', 'sold', 'remaining', 'allocated', 'maturing', 'free') + [
             'name' => $item->productVariant->name,
             'item' => $item,
         ];
@@ -80,12 +82,15 @@
                                 @for($i = 0; $i < $wb['allocated']; $i++)
                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 border border-amber-700" title="Wheel allocated to an order"></span>
                                 @endfor
+                                @for($i = 0; $i < $wb['maturing']; $i++)
+                                    <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-maturing); border-color: oklch(0.42 0.11 56);" title="Wheel set aside to mature"></span>
+                                @endfor
                                 @for($i = 0; $i < $wb['free']; $i++)
                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600" title="Wheel free in stock"></span>
                                 @endfor
                                 @if($wb['produced'] > 0)
                                     <span class="ml-2 text-[11.5px] font-mono" style="color: var(--muted);">
-                                        {{ $wb['free'] }} · {{ $wb['allocated'] }} · {{ $wb['cut'] }} · {{ $wb['sold'] }}
+                                        {{ $wb['free'] }} · {{ $wb['allocated'] }}@if($wb['maturing'] > 0) · <span style="color: var(--state-maturing);">{{ $wb['maturing'] }}</span>@endif · {{ $wb['cut'] }} · {{ $wb['sold'] }}
                                         <span style="color: var(--faint);">/ {{ $wb['produced'] }}</span>
                                     </span>
                                 @endif

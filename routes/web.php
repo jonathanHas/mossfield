@@ -1,8 +1,10 @@
 <?php
 
+use App\Http\Controllers\BackupController;
 use App\Http\Controllers\BatchController;
 use App\Http\Controllers\ChilledRunController;
 use App\Http\Controllers\CustomerController;
+use App\Http\Controllers\CustomerSpecialPriceController;
 use App\Http\Controllers\DeliveryRunController;
 use App\Http\Controllers\OnlineOrdersController;
 use App\Http\Controllers\ProductController;
@@ -85,6 +87,7 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::resource('products', ProductController::class);
     Route::resource('batches', BatchController::class);
     Route::resource('orders', \App\Http\Controllers\OrderController::class);
+    Route::get('/orders/{order}/docket', [\App\Http\Controllers\OrderController::class, 'docket'])->name('orders.docket');
     Route::post('/orders/{order}/dispatch', [\App\Http\Controllers\OrderController::class, 'markDispatched'])->name('orders.dispatch');
     Route::post('/orders/{order}/deliver', [\App\Http\Controllers\OrderController::class, 'markDelivered'])->name('orders.deliver');
     Route::post('/orders/{order}/items', [\App\Http\Controllers\OrderController::class, 'storeItem'])->name('orders.items.store');
@@ -114,7 +117,21 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
 // Admin/office-only: factory denied entirely. These flows contain financial
 // or process data the factory floor doesn't need.
 Route::middleware(['auth', 'role:admin,office'])->group(function () {
+    // Order invoice — office/admin only (carries prices, unlike the dispatch docket).
+    // HTML view by default; ?download=1 returns the PDF.
+    Route::get('/orders/{order}/invoice', [\App\Http\Controllers\OrderController::class, 'invoice'])->name('orders.invoice');
+
+    // Email a document (invoice or docket) to the customer as a PDF attachment.
+    // Office/admin only — emailing a customer is office work (factory can still
+    // view/print the docket, just not email it). Invoice adds see-financials + ready guards.
+    Route::post('/orders/{order}/email/{document}', [\App\Http\Controllers\OrderController::class, 'emailDocument'])
+        ->where('document', 'invoice|docket')
+        ->name('orders.email');
+
     Route::resource('customers', CustomerController::class);
+    // Per-customer alternative prices (managed from the customer show page).
+    Route::resource('customers.special-prices', CustomerSpecialPriceController::class)
+        ->only(['store', 'update', 'destroy']);
     Route::resource('products.variants', ProductVariantController::class)
         ->except(['index', 'show']);
 
@@ -160,6 +177,11 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::resource('users', UserController::class)->except(['show']);
     Route::post('/users/{user}/deactivate', [UserController::class, 'deactivate'])->name('users.deactivate');
     Route::post('/users/{user}/reactivate', [UserController::class, 'reactivate'])->name('users.reactivate');
+
+    // Backup & Restore.
+    Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
+    Route::get('/backup/download', [BackupController::class, 'download'])->name('backup.download');
+    Route::post('/backup/restore', [BackupController::class, 'restore'])->name('backup.restore');
 });
 
 require __DIR__.'/auth.php';

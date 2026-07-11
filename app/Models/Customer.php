@@ -52,6 +52,26 @@ class Customer extends Model
         return $this->belongsTo(DeliveryRun::class);
     }
 
+    public function specialPrices(): HasMany
+    {
+        return $this->hasMany(CustomerSpecialPrice::class);
+    }
+
+    /**
+     * Unit price this customer pays for a variant: the negotiated special
+     * price if one exists, otherwise the variant's standard base_price. The
+     * value is in the same units as base_price (€/unit, or €/kg when the
+     * variant is priced by weight), so it drops straight into unit_price.
+     */
+    public function unitPriceFor(ProductVariant $variant): float
+    {
+        $special = $this->specialPrices()
+            ->where('product_variant_id', $variant->id)
+            ->value('price');
+
+        return $special !== null ? (float) $special : (float) $variant->base_price;
+    }
+
     public function getFullAddressAttribute(): string
     {
         return "{$this->address}, {$this->city}, {$this->postal_code}, {$this->country}";

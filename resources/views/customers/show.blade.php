@@ -187,5 +187,100 @@
                 </div>
             @endif
         </div>
+
+        {{-- Per-customer alternative prices. The value stored here replaces the
+             variant's base_price on NEW office-entered order lines for this
+             customer; existing orders keep their locked unit_price. --}}
+        <div class="mf-panel mt-4">
+            <div class="mf-panel-header">
+                <div class="flex-1">
+                    <div class="text-[13px] font-semibold">Special prices <span style="color: var(--muted); font-weight: 400;">({{ $customer->specialPrices->count() }})</span></div>
+                    <div class="text-[12px] mt-0.5" style="color: var(--muted);">Overrides the standard price on new orders for this customer. Weight-priced variants take a €/kg figure.</div>
+                </div>
+            </div>
+
+            @if($customer->specialPrices->count() > 0)
+                <div class="overflow-x-auto">
+                    <table class="w-full border-collapse text-[13px]">
+                        <thead>
+                            <tr>
+                                <th class="mf-th">Product</th>
+                                <th class="mf-th">Variant</th>
+                                <th class="mf-th">Standard</th>
+                                <th class="mf-th">Special price</th>
+                                <th class="mf-th"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($customer->specialPrices->sortBy([['productVariant.product.name', 'asc'], ['productVariant.name', 'asc']]) as $sp)
+                                <tr style="border-top: 1px solid var(--line-2);">
+                                    <td class="mf-td">{{ $sp->productVariant->product->name ?? '—' }}</td>
+                                    <td class="mf-td">
+                                        {{ $sp->productVariant->name }}
+                                        @if($sp->productVariant->is_priced_by_weight)
+                                            <span class="mf-tag mf-tag-neutral">€/kg</span>
+                                        @endif
+                                    </td>
+                                    <td class="mf-td font-mono" style="color: var(--muted);">{{ $sp->productVariant->price_label }}</td>
+                                    <td class="mf-td">
+                                        <form method="POST" action="{{ route('customers.special-prices.update', [$customer, $sp]) }}" class="flex items-center gap-2">
+                                            @csrf
+                                            @method('PUT')
+                                            <input type="hidden" name="product_variant_id" value="{{ $sp->product_variant_id }}">
+                                            <span style="color: var(--muted);">€</span>
+                                            <input type="number" step="0.01" min="0.01" name="price" value="{{ $sp->price }}" class="mf-input" style="width: 110px;" required>
+                                            <button type="submit" class="mf-btn-ghost">Save</button>
+                                        </form>
+                                    </td>
+                                    <td class="mf-td text-right">
+                                        <form method="POST" action="{{ route('customers.special-prices.destroy', [$customer, $sp]) }}" onsubmit="return confirm('Remove this special price?');">
+                                            @csrf
+                                            @method('DELETE')
+                                            <button type="submit" class="mf-link" style="color: var(--danger);">Remove</button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @else
+                <div class="px-4 py-6 text-center">
+                    <div class="text-[13px]" style="color: var(--muted);">No special prices — this customer pays standard prices.</div>
+                </div>
+            @endif
+
+            {{-- Add a special price --}}
+            <div class="px-4 py-3" style="border-top: 1px solid var(--line-2);">
+                <form method="POST" action="{{ route('customers.special-prices.store', $customer) }}" class="flex flex-wrap items-end gap-3">
+                    @csrf
+                    <div>
+                        <label class="mf-label" for="sp-variant">Variant</label>
+                        <select id="sp-variant" name="product_variant_id" class="mf-input" style="min-width: 260px;" required>
+                            <option value="">Select a variant…</option>
+                            @foreach($productVariants as $productName => $variants)
+                                <optgroup label="{{ $productName }}">
+                                    @foreach($variants as $variant)
+                                        <option value="{{ $variant->id }}" @selected(old('product_variant_id') == $variant->id)>
+                                            {{ $variant->name }} — standard {{ $variant->price_label }}
+                                        </option>
+                                    @endforeach
+                                </optgroup>
+                            @endforeach
+                        </select>
+                        @error('product_variant_id') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="mf-label" for="sp-price">Special price (€)</label>
+                        <input id="sp-price" type="number" step="0.01" min="0.01" name="price" value="{{ old('price') }}" class="mf-input" style="width: 140px;" placeholder="0.00" required>
+                        @error('price') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                    <button type="submit" class="mf-btn-secondary">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+                        Add special price
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </x-app-layout>

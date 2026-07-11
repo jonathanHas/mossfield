@@ -111,7 +111,17 @@
                                 <td class="mf-td">{{ $order->customer->name }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d/m/Y') }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->delivery_date ? $order->delivery_date->format('d/m/Y') : '—' }}</td>
-                                <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span></td>
+                                <td class="mf-td">
+                                    <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span>
+                                    @if($order->status === 'ready')
+                                        <a href="{{ route('orders.docket', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View dispatch docket in a new window">Docket</a>
+                                    @endif
+                                    @can('see-financials')
+                                        @if($order->hasReachedReady())
+                                            <a href="{{ route('orders.invoice', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View invoice in a new window">Invoice</a>
+                                        @endif
+                                    @endcan
+                                </td>
                                 <td class="mf-td"><span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span></td>
                                 @can('see-financials')
                                     <td class="mf-td font-mono font-medium">€{{ number_format($order->total_amount, 2) }}</td>

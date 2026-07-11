@@ -2,9 +2,31 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-06-27
+**Last Updated**: 2026-07-11
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Maturing hold + mature lineage visible on Batches (2026-07-11)
+
+Views-only follow-ups to the Mature Conversion feature, prompted by operator confusion that a maturing hold and a release "weren't showing" on `/batches`.
+
+- **Maturing segment on wheel strips**: a maturing **hold** keeps wheels inside `quantity_remaining` by design, so the batch/cheese-cutting wheel strips previously counted held wheels as free (yellow). Now `maturing = min(free, quantity_maturing)` is carved out of `free` and drawn as a distinct **deep-amber** circle (shared `var(--state-maturing)` token, matching `/stock`), with the count in the numeric summary and a new **Maturing** column in the batches detail table. Applied to all four wheel-strip locations (`batches/{index,partials/batch-card}` + `cheese-cutting/{index,partials/batch-card}`).
+- **Farmhouse ↔ Mature lineage line** on the `/batches` index cards: "Matured from `<code>`" / "Matured into `<code>`" links (via `source_batch_id`, eager-loaded in `BatchController::index()`), mirroring what `batches/show` already showed. This makes it obvious a Mature batch is *fed by* a farmhouse batch (a release draws down the source and grows the mature batch) rather than appearing from nowhere.
+- **Note on batch codes** (no change made): the `-1`/`-2` suffix in `Batch::generateBatchCode()` is a same-date collision disambiguator, **not** a lineage marker — batches sharing a `G010126` base are only date-linked; the sole real link is `source_batch_id`.
+
+No controller logic / model / migration changes (one eager-load added). Full notes in `CLAUDE.md` → "Wheel & Vac-Pack Visualization". Existing `CheeseConversion`/`Batch` tests still pass.
+
+**Operator action**: none.
+
+---
+
+## Recently Completed: Sidebar nav — Stock & Products moved to Miscellaneous (2026-07-11)
+
+`Stock` and `Products` nav links moved from the **Production** group to the **Miscellaneous** group in `resources/views/layouts/navigation.blade.php` (Production now holds Batches, Cheese Cutting, Mature Conversion). Same `$canSeeProduction` visibility gate — factory users still see both links, only the group changed.
+
+**Operator action**: none.
 
 ---
 

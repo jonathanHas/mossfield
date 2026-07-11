@@ -17,7 +17,9 @@
         $remaining = max(0, $produced - $cut - $sold);
         $allocated = max(0, min($remaining, (int) ($item->quantity_currently_allocated ?? 0)));
         $free = max(0, $remaining - $allocated);
-        return compact('produced', 'cut', 'sold', 'remaining', 'allocated', 'free') + ['name' => $item->productVariant->name];
+        $maturing = min($free, (int) $item->quantity_maturing);   // held wheels currently live inside $free
+        $free = max(0, $free - $maturing);
+        return compact('produced', 'cut', 'sold', 'remaining', 'allocated', 'maturing', 'free') + ['name' => $item->productVariant->name];
     });
 
     $packBreakdowns = $packItems->map(function ($item) {
@@ -111,12 +113,15 @@
                                 @for($i = 0; $i < $wb['allocated']; $i++)
                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 border border-amber-700" title="Wheel allocated to an order"></span>
                                 @endfor
+                                @for($i = 0; $i < $wb['maturing']; $i++)
+                                    <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-maturing); border-color: oklch(0.42 0.11 56);" title="Wheel set aside to mature"></span>
+                                @endfor
                                 @for($i = 0; $i < $wb['free']; $i++)
                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600" title="Wheel free in stock"></span>
                                 @endfor
                                 @if($wb['produced'] > 0)
                                     <span class="ml-2 text-[11.5px] font-mono" style="color: var(--muted);">
-                                        {{ $wb['free'] }} · {{ $wb['allocated'] }} · {{ $wb['cut'] }} · {{ $wb['sold'] }}
+                                        {{ $wb['free'] }} · {{ $wb['allocated'] }}@if($wb['maturing'] > 0) · <span style="color: var(--state-maturing);">{{ $wb['maturing'] }}</span>@endif · {{ $wb['cut'] }} · {{ $wb['sold'] }}
                                         <span style="color: var(--faint);">/ {{ $wb['produced'] }}</span>
                                     </span>
                                 @endif
@@ -149,6 +154,25 @@
                                         <span style="color: var(--faint);">· {{ $pb['sold'] }} sold</span>
                                     @endif
                                 </span>
+                            </div>
+                        @endforeach
+                    </div>
+                @endif
+
+                @if($isCheese && ($batch->sourceBatch || $batch->matureBatches->isNotEmpty()))
+                    <div class="mt-2 text-[11.5px] space-y-0.5" style="color: var(--muted);" onclick="event.stopPropagation()">
+                        @if($batch->sourceBatch)
+                            <div>
+                                Matured from
+                                <a href="{{ route('batches.show', $batch->sourceBatch) }}" class="mf-link font-mono">{{ $batch->sourceBatch->batch_code }}</a>
+                                <span style="color: var(--faint);">({{ $batch->sourceBatch->product->name }})</span>
+                            </div>
+                        @endif
+                        @foreach($batch->matureBatches as $matureBatch)
+                            <div>
+                                Matured into
+                                <a href="{{ route('batches.show', $matureBatch) }}" class="mf-link font-mono">{{ $matureBatch->batch_code }}</a>
+                                <span style="color: var(--faint);">({{ $matureBatch->product->name }})</span>
                             </div>
                         @endforeach
                     </div>
@@ -189,6 +213,7 @@
                             <th class="mf-th text-right">Produced</th>
                             <th class="mf-th text-right">Remaining</th>
                             <th class="mf-th text-right" title="Of remaining, this many are reserved for open orders">Allocated</th>
+                            <th class="mf-th text-right" title="Of remaining, this many are set aside to mature (excluded from orders)">Maturing</th>
                             <th class="mf-th text-right">Sold</th>
                         </tr>
                     </thead>
@@ -213,6 +238,7 @@
                                     </span>
                                 </td>
                                 <td class="mf-td font-mono text-right" style="color: {{ $rowAllocated > 0 ? 'var(--warn-ink)' : 'var(--faint)' }};">{{ $rowAllocated }}</td>
+                                <td class="mf-td font-mono text-right" style="color: {{ (int) $item->quantity_maturing > 0 ? 'var(--state-maturing)' : 'var(--faint)' }};">{{ (int) $item->quantity_maturing }}</td>
                                 <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $item->quantity_sold }}</td>
                             </tr>
                         @endforeach

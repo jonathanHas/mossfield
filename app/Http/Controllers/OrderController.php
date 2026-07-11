@@ -89,6 +89,108 @@ class OrderController extends Controller
         return view('orders.show', compact('order', 'orderList', 'listFilters', 'listTotal', 'listLimit', 'availableBatchItems', 'productVariants'));
     }
 
+    /**
+     * Render the dispatch docket (packing slip) for the order. Opens as an HTML page
+     * by default (new window, with Print + Download buttons) so it always displays
+     * rather than being downloaded; `?download=1` returns the PDF as a file download.
+     * No prices — carries quantities and picked weights only, so factory can view/print it.
+     */
+    public function docket(Request $request, Order $order): \Symfony\Component\HttpFoundation\Response|View
+    {
+        $this->authorize('view', $order);
+
+        $order->load([
+            'customer',
+            'orderItems.productVariant.product',
+            'orderItems.orderAllocations.batchItem.batch',
+        ]);
+
+        if ($request->boolean('download')) {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.docket', ['order' => $order, 'pdf' => true]);
+
+            return $pdf->download('docket-'.$order->order_number.'.pdf');
+        }
+
+        return view('orders.docket', ['order' => $order, 'pdf' => false]);
+    }
+
+    /**
+     * Render the order invoice. Unlike the dispatch docket this carries prices, so it
+     * is office/admin only — the route is in the role:admin,office group and this also
+     * gates on `see-financials` for defence in depth. Opens as an HTML page by default
+     * (Print + Download buttons); `?download=1` returns the PDF as a file download.
+     */
+    public function invoice(Request $request, Order $order): \Symfony\Component\HttpFoundation\Response|View
+    {
+        $this->authorize('view', $order);
+        abort_unless($request->user()->can('see-financials'), 403);
+
+        if (! $order->hasReachedReady()) {
+            return redirect()->route('orders.show', $order)
+                ->with('error', 'An invoice is only available once the order has reached ready status.');
+        }
+
+        $order->load([
+            'customer',
+            'orderItems.productVariant.product',
+            'orderItems.orderAllocations.batchItem.batch',
+        ]);
+
+        if ($request->boolean('download')) {
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.invoice', ['order' => $order, 'pdf' => true]);
+
+            return $pdf->download('invoice-'.$order->order_number.'.pdf');
+        }
+
+        return view('orders.invoice', ['order' => $order, 'pdf' => false]);
+    }
+
+    /**
+     * Email a per-order document (invoice or docket) to the customer as a PDF attachment.
+     * Sends synchronously so the operator gets an immediate "sent" / "failed" flash.
+     * Emailing is a customer-facing office task, so the route sits in the role:admin,office
+     * group (factory can still view/print the docket, just not email it). Invoices carry the
+     * same see-financials + hasReachedReady() guards as OrderController::invoice().
+     */
+    public function emailDocument(Request $request, Order $order, string $document): RedirectResponse
+    {
+        $this->authorize('view', $order);
+
+        if ($document === 'invoice') {
+            abort_unless($request->user()->can('see-financials'), 403);
+
+            if (! $order->hasReachedReady()) {
+                return back()->with('error', 'An invoice is only available once the order has reached ready status.');
+            }
+        }
+
+        $order->load([
+            'customer',
+            'orderItems.productVariant.product',
+            'orderItems.orderAllocations.batchItem.batch',
+        ]);
+
+        $email = trim((string) $order->customer->email);
+        if ($email === '') {
+            return back()->with('error', 'This customer has no email address on file.');
+        }
+
+        try {
+            \Illuminate\Support\Facades\Mail::to($email)
+                ->send(new \App\Mail\OrderDocumentMail($order, $document));
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::channel('sync')->error('order document email failed', [
+                'order' => $order->order_number,
+                'document' => $document,
+                'error' => $e->getMessage(),
+            ]);
+
+            return back()->with('error', 'Could not send the email. Please try again or check the mail settings.');
+        }
+
+        return back()->with('success', ucfirst($document).' emailed to '.$email.'.');
+    }
+
     public function create(): View
     {
         $this->authorize('create', Order::class);
@@ -152,7 +254,10 @@ class OrderController extends Controller
                 'payment_status' => 'pending',
             ]);
 
-            // Add order items
+            // Add order items — price each line at the customer's rate
+            // (a per-variant special price if set, else the variant base_price).
+            $customer = Customer::find($validated['customer_id']);
+
             foreach ($validated['items'] as $itemData) {
                 $variant = ProductVariant::find($itemData['product_variant_id']);
 
@@ -160,7 +265,7 @@ class OrderController extends Controller
                     'order_id' => $order->id,
                     'product_variant_id' => $itemData['product_variant_id'],
                     'quantity_ordered' => $itemData['quantity'],
-                    'unit_price' => $variant->base_price,
+                    'unit_price' => $customer->unitPriceFor($variant),
                 ]);
             }
 

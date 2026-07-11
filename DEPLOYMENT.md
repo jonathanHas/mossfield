@@ -115,6 +115,8 @@ SESSION_ENCRYPT=true
 
 `MAIL_MAILER`, `MAIL_HOST`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD`, `MAIL_FROM_ADDRESS`, `MAIL_FROM_NAME`. Smoke-test with `php artisan mail:test <address>` after deploy — failure alerts depend on this.
 
+**Emailing order documents.** The order page's **Email invoice** / **Email docket** buttons send the PDF to the customer's email over SMTP. They need `MAIL_MAILER=smtp` (not the `log` default) plus a working host/port/username/password and a real `MAIL_FROM_ADDRESS`. Sends are synchronous; SMTP failures flash an error to the operator and are logged to `storage/logs/sync.log`.
+
 ### Office ↔ Mossorders integration (the important one)
 
 **Critical detail about the shared secret.** There are three `.env` values spread across the two hosts. They must hold the **same** hex-encoded token. Generate once with `openssl rand -hex 32` and copy into:

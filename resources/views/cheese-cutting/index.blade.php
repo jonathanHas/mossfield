@@ -3,7 +3,7 @@
         $subGroups = $readyBatches->groupBy(fn ($b) => $b->product->name)->sortKeys();
 
         $wheelStatsFor = function ($batch) {
-            $stats = ['produced' => 0, 'remaining' => 0, 'cut' => 0, 'sold' => 0];
+            $stats = ['produced' => 0, 'remaining' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
             foreach ($batch->batchItems as $item) {
                 if (! str_contains(strtolower($item->productVariant->name), 'wheel')) {
                     continue;
@@ -12,8 +12,11 @@
                 $cut = (int) ($item->source_cutting_logs_count ?? 0);
                 $sold = max(0, $produced - (int) $item->quantity_remaining - $cut);
                 $remaining = max(0, $produced - $cut - $sold);
+                $maturing = min($remaining, (int) $item->quantity_maturing);
+                $remaining = max(0, $remaining - $maturing);
                 $stats['produced'] += $produced;
                 $stats['remaining'] += $remaining;
+                $stats['maturing'] += $maturing;
                 $stats['cut'] += $cut;
                 $stats['sold'] += $sold;
             }
@@ -43,7 +46,7 @@
         @forelse ($subGroups as $subLabel => $subBatches)
             @php
                 $subBatchCount = $subBatches->count();
-                $subWheelTotals = ['produced' => 0, 'remaining' => 0, 'cut' => 0, 'sold' => 0];
+                $subWheelTotals = ['produced' => 0, 'remaining' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
                 foreach ($subBatches as $b) {
                     $s = $wheelStatsFor($b);
                     foreach ($subWheelTotals as $k => $v) {
@@ -66,6 +69,12 @@
                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600"></span>
                                     {{ $subWheelTotals['remaining'] }}
                                 </span>
+                                @if ($subWheelTotals['maturing'] > 0)
+                                    <span class="inline-flex items-center gap-1" title="Set aside to mature">
+                                        <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-maturing); border-color: oklch(0.42 0.11 56);"></span>
+                                        {{ $subWheelTotals['maturing'] }}
+                                    </span>
+                                @endif
                                 <span class="inline-flex items-center gap-1">
                                     <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-600"></span>
                                     {{ $subWheelTotals['cut'] }}

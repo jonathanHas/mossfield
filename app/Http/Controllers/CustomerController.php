@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Customer;
+use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -77,11 +78,22 @@ class CustomerController extends Controller
 
     public function show(Customer $customer): View
     {
-        $customer->load(['orders' => function ($query) {
-            $query->orderBy('order_date', 'desc');
-        }]);
+        $customer->load([
+            'orders' => function ($query) {
+                $query->orderBy('order_date', 'desc');
+            },
+            'specialPrices.productVariant.product',
+        ]);
 
-        return view('customers.show', compact('customer'));
+        // Active variants (grouped by product) for the "add special price" picker.
+        $productVariants = ProductVariant::with('product')
+            ->whereHas('product', fn ($q) => $q->where('is_active', true))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get()
+            ->groupBy('product.name');
+
+        return view('customers.show', compact('customer', 'productVariants'));
     }
 
     public function edit(Customer $customer): View

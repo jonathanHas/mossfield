@@ -302,6 +302,26 @@ class OrderItem extends Model
     }
 
     /**
+     * Distinct batch codes this line was picked/allocated from, for traceability
+     * on dockets and invoices. Requires orderAllocations.batchItem.batch to be
+     * loaded. Fulfilled allocations first; falls back to any allocation with a
+     * batch when nothing is fulfilled yet.
+     */
+    public function getBatchCodesAttribute(): array
+    {
+        $withBatch = $this->orderAllocations->filter(fn ($a) => $a->batchItem?->batch);
+
+        $fulfilled = $withBatch->filter(fn ($a) => $a->quantity_fulfilled > 0);
+        $source = $fulfilled->isNotEmpty() ? $fulfilled : $withBatch;
+
+        return $source
+            ->map(fn ($a) => $a->batchItem->batch->batch_code)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
      * Undo fulfillment for an allocation (restore stock to batch).
      */
     public function unfulfillAllocation(OrderAllocation $allocation, int $quantity): bool

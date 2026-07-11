@@ -42,6 +42,10 @@
     if ($canSeeCustomers) {
         $miscItems[] = ['id' => 'customers', 'label' => 'Customers', 'route' => 'customers.index', 'match' => 'customers.*', 'icon' => 'customer'];
     }
+    if ($canSeeProduction) {
+        $miscItems[] = ['id' => 'stock', 'label' => 'Stock', 'route' => 'stock.index', 'match' => 'stock.*', 'icon' => 'stock'];
+        $miscItems[] = ['id' => 'products', 'label' => 'Products', 'route' => 'products.index', 'match' => 'products.*', 'icon' => 'products'];
+    }
     if ($miscItems) $groups[] = ['label' => 'Miscellaneous', 'items' => $miscItems];
 
     if ($canSeeProduction) {
@@ -49,14 +53,13 @@
             ['id' => 'batches', 'label' => 'Batches', 'route' => 'batches.index', 'match' => 'batches.*', 'icon' => 'batch'],
             ['id' => 'cutting', 'label' => 'Cheese Cutting', 'route' => 'cheese-cutting.index', 'match' => 'cheese-cutting.*', 'icon' => 'cut'],
             ['id' => 'mature', 'label' => 'Mature Conversion', 'route' => 'cheese-conversion.index', 'match' => 'cheese-conversion.*', 'icon' => 'mature'],
-            ['id' => 'stock', 'label' => 'Stock', 'route' => 'stock.index', 'match' => 'stock.*', 'icon' => 'stock'],
-            ['id' => 'products', 'label' => 'Products', 'route' => 'products.index', 'match' => 'products.*', 'icon' => 'products'],
         ]];
     }
 
     if ($canSeeUsers) {
         $groups[] = ['label' => 'Admin', 'items' => [
             ['id' => 'users', 'label' => 'Users', 'route' => 'users.index', 'match' => 'users.*', 'icon' => 'users'],
+            ['id' => 'backup', 'label' => 'Backup & Restore', 'route' => 'backup.index', 'match' => 'backup.*', 'icon' => 'backup'],
         ]];
     }
 
@@ -73,6 +76,7 @@
         'package'   => ['M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z', 'M3.27 6.96L12 12.01l8.73-5.05', 'M12 22.08V12'],
         'online'    => ['M12 20h.01', 'M2 8.82a15 15 0 0 1 20 0', 'M5 12.859a10 10 0 0 1 14 0', 'M8.5 16.429a5 5 0 0 1 7 0'],
         'users'     => ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'],
+        'backup'    => ['M21 5c0 1.66-4 3-9 3S3 6.66 3 5s4-3 9-3 9 1.34 9 3z', 'M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5', 'M3 12c0 1.66 4 3 9 3s9-1.34 9-3'],
         'snow'      => ['M12 2v20', 'M2 12h20', 'M5.6 5.6l12.8 12.8', 'M18.4 5.6L5.6 18.4'],
         'truck'     => ['M1 5h13v11H1z', 'M14 9h4l3 3v4h-7V9z', 'M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
         'chevron'   => ['M6 9l6 6 6-6'],
