@@ -44,18 +44,30 @@
 
         {{-- Backup --}}
         <div class="mf-panel mb-5">
-            <div class="p-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3"
-                 style="border-bottom: 1px solid var(--line-2);">
-                <div>
-                    <h2 class="text-[15px] font-medium">Download backup</h2>
-                    <div class="mt-0.5 text-[12.5px]" style="color: var(--muted);">
-                        A single JSON file with every business table. Keep it somewhere safe.
-                    </div>
+            <div class="p-4" style="border-bottom: 1px solid var(--line-2);">
+                <h2 class="text-[15px] font-medium">Download backup</h2>
+                <div class="mt-0.5 text-[12.5px]" style="color: var(--muted);">
+                    A single encrypted <span class="font-mono">.mfbackup</span> file with every business
+                    table <strong>and product images</strong>. Set a password to protect it — you'll need
+                    the same password to restore.
                 </div>
-                <a href="{{ route('backup.download') }}" class="mf-btn-primary whitespace-nowrap">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
-                    Download backup
-                </a>
+
+                <form action="{{ route('backup.download') }}" method="POST" class="mt-3 flex flex-wrap items-end gap-3">
+                    @csrf
+                    <div>
+                        <label for="download_password" class="mf-label">Backup password</label>
+                        <input type="password" name="password" id="download_password" required minlength="8"
+                               autocomplete="new-password" placeholder="At least 8 characters"
+                               class="mf-input" style="max-width: 260px;">
+                    </div>
+                    <button type="submit" class="mf-btn-primary whitespace-nowrap">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" /></svg>
+                        Download backup
+                    </button>
+                </form>
+                <p class="mt-2 text-[11.5px]" style="color: var(--faint);">
+                    Keep the password safe — a backup can't be restored without it.
+                </p>
             </div>
 
             <div class="overflow-x-auto">
@@ -98,9 +110,16 @@
                 @csrf
 
                 <div class="mb-4">
-                    <label for="backup_file" class="mf-label">Backup file (.json)</label>
-                    <input type="file" name="backup_file" id="backup_file" accept="application/json,.json" required
+                    <label for="backup_file" class="mf-label">Backup file (.mfbackup)</label>
+                    <input type="file" name="backup_file" id="backup_file" accept=".mfbackup" required
                            class="mf-input">
+                </div>
+
+                <div class="mb-4">
+                    <label for="restore_password" class="mf-label">Backup password</label>
+                    <input type="password" name="password" id="restore_password" required
+                           autocomplete="off" placeholder="The password used to create this backup"
+                           class="mf-input" style="max-width: 320px;">
                 </div>
 
                 <div class="mb-4">
@@ -109,14 +128,6 @@
                            placeholder="RESTORE" class="mf-input" style="max-width: 220px;">
                 </div>
 
-                <label class="flex items-start gap-2 mb-4 text-[12.5px]" style="color: var(--muted);">
-                    <input type="checkbox" name="acknowledge_key_mismatch" value="1" class="mt-0.5">
-                    <span>
-                        This backup was made on a different install (different <span class="font-mono">APP_KEY</span>).
-                        I understand encrypted customer contact details (phone, address, notes) will be unreadable.
-                    </span>
-                </label>
-
                 <button type="submit" class="mf-btn-primary" style="background: var(--danger); border-color: var(--danger);">
                     Restore &amp; replace all data
                 </button>
@@ -124,8 +135,9 @@
         </div>
 
         <p class="mt-4 text-[11.5px]" style="color: var(--faint);">
-            Backups cover database records only (not uploaded product images), and assume the same schema version.
-            Current APP_KEY fingerprint: <span class="font-mono">{{ $appKeyFingerprint }}</span>.
+            Backups include database records and product images, and restore on any install (customer
+            contact details are re-encrypted automatically). They assume the same schema version — run
+            migrations first on a fresh install.
         </p>
     </div>
 </x-app-layout>

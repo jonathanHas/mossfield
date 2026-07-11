@@ -180,7 +180,7 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 
     // Backup & Restore.
     Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
-    Route::get('/backup/download', [BackupController::class, 'download'])->name('backup.download');
+    Route::post('/backup/download', [BackupController::class, 'download'])->name('backup.download');
     Route::post('/backup/restore', [BackupController::class, 'restore'])->name('backup.restore');
 });
 

@@ -3,17 +3,21 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\RestoreBackupRequest;
+use App\Services\BackupArchive;
 use App\Services\BackupService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\View\View;
-use Symfony\Component\HttpFoundation\StreamedResponse;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Throwable;
 
 class BackupController extends Controller
 {
-    public function __construct(private readonly BackupService $service) {}
+    public function __construct(
+        private readonly BackupService $service,
+        private readonly BackupArchive $archive,
+    ) {}
 
     public function index(Request $request): View
     {
@@ -21,58 +25,79 @@ class BackupController extends Controller
 
         return view('backup.index', [
             'rowCounts' => $this->service->currentRowCounts(),
-            'appKeyFingerprint' => BackupService::appKeyFingerprint(),
         ]);
     }
 
-    public function download(Request $request): StreamedResponse
+    public function download(Request $request): BinaryFileResponse|RedirectResponse
     {
         abort_unless($request->user()?->isAdmin(), 403);
 
-        $payload = $this->service->export();
-        $filename = 'mossfield-backup-'.now()->format('Y-m-d-His').'.json';
+        $request->validate([
+            'password' => ['required', 'string', 'min:8'],
+        ], [], ['password' => 'backup password']);
 
-        return response()->streamDownload(function () use ($payload) {
-            echo json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        }, $filename, [
-            'Content-Type' => 'application/json',
-        ]);
+        try {
+            BackupArchive::assertSupported();
+            $path = $this->archive->build($this->service->export(), $request->string('password'));
+        } catch (Throwable $e) {
+            Log::channel('sync')->error('backup download failed', ['error' => $e->getMessage()]);
+
+            return back()->with('error', 'Backup failed: '.$e->getMessage());
+        }
+
+        $filename = 'mossfield-backup-'.now()->format('Y-m-d-His').'.mfbackup';
+
+        return response()->download($path, $filename, [
+            'Content-Type' => 'application/octet-stream',
+        ])->deleteFileAfterSend();
     }
 
     public function restore(RestoreBackupRequest $request): RedirectResponse
     {
-        $contents = file_get_contents($request->file('backup_file')->getRealPath());
-        $payload = json_decode($contents, true);
-
-        if (! is_array($payload)) {
-            return back()->with('error', 'The uploaded file is not valid JSON.');
-        }
-
-        // A different APP_KEY means the encrypted Customer contact fields in the
-        // backup cannot be decrypted after restore — block unless acknowledged.
-        $backupFingerprint = $payload['meta']['app_key_fingerprint'] ?? null;
-        $keyMismatch = $backupFingerprint !== BackupService::appKeyFingerprint();
-
-        if ($keyMismatch && ! $request->boolean('acknowledge_key_mismatch')) {
-            return back()->with('error', 'This backup was made with a different APP_KEY. '
-                .'Customer contact details will be unreadable after restore. '
-                .'Tick the acknowledgement box to proceed anyway.');
-        }
-
         try {
-            $summary = $this->service->import($payload);
+            BackupArchive::assertSupported();
         } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        // Decrypt + open the archive (wrong password / corrupt file surface here).
+        try {
+            $opened = $this->archive->open(
+                $request->file('backup_file')->getRealPath(),
+                $request->string('password'),
+            );
+        } catch (Throwable $e) {
+            return back()->with('error', $e->getMessage().' No changes were made.');
+        }
+
+        // Load the data (transactional — any failure rolls back).
+        try {
+            $summary = $this->service->import($opened['payload']);
+        } catch (Throwable $e) {
+            @unlink($opened['zipPath']);
             Log::channel('sync')->error('backup restore failed', ['error' => $e->getMessage()]);
 
             return back()->with('error', 'Restore failed: '.$e->getMessage().' No changes were made.');
         }
 
-        $total = array_sum($summary);
-        $message = "Restore complete — {$total} rows loaded across ".count($summary).' tables.';
-        if ($keyMismatch) {
-            $message .= ' Warning: backup used a different APP_KEY, so encrypted customer contact details may be unreadable.';
+        // Restore images after the DB commit; a failure here is non-fatal.
+        $imageWarning = null;
+        try {
+            $images = $this->archive->extractImages($opened['zipPath']);
+        } catch (Throwable $e) {
+            $images = 0;
+            $imageWarning = ' Data restored, but images could not be written: '.$e->getMessage();
+            Log::channel('sync')->error('backup image restore failed', ['error' => $e->getMessage()]);
+        } finally {
+            @unlink($opened['zipPath']);
         }
 
-        return redirect()->route('backup.index')->with('success', $message);
+        $total = array_sum($summary);
+        $message = "Restore complete — {$total} rows loaded across ".count($summary)." tables, {$images} images restored.";
+
+        return redirect()->route('backup.index')->with(
+            $imageWarning ? 'error' : 'success',
+            $message.($imageWarning ?? '')
+        );
     }
 }

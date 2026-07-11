@@ -2,6 +2,8 @@
 
 namespace App\Services;
 
+use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -17,7 +19,17 @@ use RuntimeException;
 class BackupService
 {
     /** Current backup file format version. */
-    public const FORMAT_VERSION = 1;
+    public const FORMAT_VERSION = 2;
+
+    /**
+     * Customer columns encrypted at rest by App\Casts\EncryptedNullable (see the
+     * Customer model). They are DECRYPTED into the backup on export and
+     * RE-ENCRYPTED with the local APP_KEY on import, so a backup restores cleanly
+     * on any install regardless of the key it was taken with.
+     *
+     * @var list<string>
+     */
+    public const ENCRYPTED_CUSTOMER_COLUMNS = ['phone', 'address', 'city', 'postal_code', 'notes'];
 
     /**
      * Backed-up tables in foreign-key (insert) order. Restore deletes in the
@@ -68,6 +80,10 @@ class BackupService
                 ->map(fn ($row) => (array) $row)
                 ->all();
 
+            if ($table === 'customers') {
+                $rows = array_map([$this, 'decryptCustomerPii'], $rows);
+            }
+
             $tables[$table] = $rows;
             $counts[$table] = count($rows);
         }
@@ -76,6 +92,7 @@ class BackupService
             'meta' => [
                 'app' => 'mossfield',
                 'format_version' => self::FORMAT_VERSION,
+                'pii_format' => 'plaintext',
                 'generated_at' => now()->toIso8601String(),
                 'app_key_fingerprint' => self::appKeyFingerprint(),
                 'row_counts' => $counts,
@@ -113,16 +130,63 @@ class BackupService
                     $summary[$table] = count($rows);
 
                     foreach (array_chunk($rows, 200) as $chunk) {
-                        DB::table($table)->insert(array_map(
-                            static fn ($row) => (array) $row,
-                            $chunk
-                        ));
+                        $chunk = array_map(static fn ($row) => (array) $row, $chunk);
+
+                        if ($table === 'customers') {
+                            $chunk = array_map([$this, 'encryptCustomerPii'], $chunk);
+                        }
+
+                        DB::table($table)->insert($chunk);
                     }
                 }
             });
         });
 
         return $summary;
+    }
+
+    /**
+     * Decrypt the encrypted Customer columns into plaintext for the backup file,
+     * tolerating pre-migration plaintext exactly like EncryptedNullable::get().
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function decryptCustomerPii(array $row): array
+    {
+        foreach (self::ENCRYPTED_CUSTOMER_COLUMNS as $column) {
+            $value = $row[$column] ?? null;
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            try {
+                $row[$column] = Crypt::decryptString($value);
+            } catch (DecryptException) {
+                // Legacy plaintext row — already decrypted, leave as-is.
+            }
+        }
+
+        return $row;
+    }
+
+    /**
+     * Re-encrypt the plaintext Customer columns with the local APP_KEY before a
+     * raw insert, mirroring EncryptedNullable::set().
+     *
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function encryptCustomerPii(array $row): array
+    {
+        foreach (self::ENCRYPTED_CUSTOMER_COLUMNS as $column) {
+            $value = $row[$column] ?? null;
+            $row[$column] = ($value === null || $value === '')
+                ? $value
+                : Crypt::encryptString((string) $value);
+        }
+
+        return $row;
     }
 
     /**

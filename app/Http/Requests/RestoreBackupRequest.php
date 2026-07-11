@@ -19,10 +19,10 @@ class RestoreBackupRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // 50 MB ceiling; plain-text JSON often uploads as text/plain.
-            'backup_file' => ['required', 'file', 'mimetypes:application/json,text/plain', 'max:51200'],
+            // Opaque encrypted archive; 500 MB ceiling to allow bundled images.
+            'backup_file' => ['required', 'file', 'max:512000'],
+            'password' => ['required', 'string'],
             'confirm' => ['required', 'in:RESTORE'],
-            'acknowledge_key_mismatch' => ['boolean'],
         ];
     }
 
@@ -32,12 +32,5 @@ class RestoreBackupRequest extends FormRequest
             'confirm.in' => 'Type RESTORE to confirm you want to replace all data.',
             'confirm.required' => 'Type RESTORE to confirm you want to replace all data.',
         ];
-    }
-
-    protected function prepareForValidation(): void
-    {
-        $this->merge([
-            'acknowledge_key_mismatch' => $this->boolean('acknowledge_key_mismatch'),
-        ]);
     }
 }
