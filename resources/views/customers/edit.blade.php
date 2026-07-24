@@ -78,6 +78,13 @@
                         </select>
                         @error('payment_terms') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
+                    <div>
+                        <label for="delivery_charge_percent" class="mf-label">Delivery charge (%)</label>
+                        <input type="number" name="delivery_charge_percent" id="delivery_charge_percent"
+                               value="{{ old('delivery_charge_percent', $customer->delivery_charge_percent) }}" step="0.01" min="0" max="100" class="mf-input">
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">% of order value (VAT-inclusive) — overrides the fixed run charge. Leave blank for none.</p>
+                        @error('delivery_charge_percent') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
                 </div>
 
                 <h3 class="text-[14px] font-semibold mb-3">Online integration</h3>

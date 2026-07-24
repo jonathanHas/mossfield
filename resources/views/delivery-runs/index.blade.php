@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">Delivery Runs</x-slot>
 
-    <div class="px-6 py-5">
+    <div class="px-6 py-5" x-data="{ showCharges: {{ request()->boolean('charges') ? 'true' : 'false' }} }">
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
             <div>
                 <h1 class="text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">Delivery runs</h1>
@@ -10,14 +10,18 @@
                     The <a href="{{ route('chilled-runs.index') }}" class="mf-link">chilled run sheet</a> reads from these.
                 </div>
             </div>
-            @can('create', App\Models\DeliveryRun::class)
-                <a href="{{ route('delivery-runs.create') }}" class="mf-btn-primary">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M12 5v14M5 12h14" />
-                    </svg>
-                    New run
-                </a>
-            @endcan
+            <div class="flex items-center gap-2">
+                <button type="button" class="mf-btn-ghost text-[12px]" @click="showCharges = !showCharges"
+                        x-text="showCharges ? 'Hide charge settings' : 'Show charge settings'"></button>
+                @can('create', App\Models\DeliveryRun::class)
+                    <a href="{{ route('delivery-runs.create') }}" class="mf-btn-primary">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M12 5v14M5 12h14" />
+                        </svg>
+                        New run
+                    </a>
+                @endcan
+            </div>
         </div>
 
         @if (session('success'))
@@ -45,6 +49,9 @@
                             <span class="mf-tag mf-tag-neutral">Inactive</span>
                         @endunless
                         <span class="mf-eyebrow">{{ $run->driver ? 'Driver: '.$run->driver : '' }}</span>
+                        @if ($run->delivery_charge > 0)
+                            <span class="mf-tag mf-tag-neutral" x-show="showCharges" x-cloak>Charge €{{ number_format($run->delivery_charge, 2) }}</span>
+                        @endif
                         <div class="ml-auto flex items-center gap-3">
                             <a href="{{ route('delivery-runs.edit', $run) }}" class="mf-link text-[12px]">Edit</a>
                             <form method="POST" action="{{ route('delivery-runs.destroy', $run) }}"
@@ -70,6 +77,17 @@
                                     <li class="flex items-center gap-2 text-[13px] rounded px-2 py-1.5" style="background: var(--bg);">
                                         <span class="font-mono text-[11px] w-5 text-right" style="color: var(--faint);">{{ $index + 1 }}</span>
                                         <span class="font-medium flex-1">{{ $stop->name }}</span>
+
+                                        {{-- Delivery-charge toggle — hidden until "Show charge settings" --}}
+                                        <form method="POST" action="{{ route('delivery-runs.toggle-charge', $stop) }}" x-show="showCharges" x-cloak>
+                                            @csrf
+                                            <button type="submit" class="mf-btn-ghost text-[11px]" style="padding: 2px 6px;"
+                                                    title="Toggle the run's delivery charge for this stop">
+                                                <span style="color: {{ $stop->apply_delivery_charge ? 'var(--accent)' : 'var(--muted)' }};">
+                                                    € charge: {{ $stop->apply_delivery_charge ? 'on' : 'off' }}
+                                                </span>
+                                            </button>
+                                        </form>
 
                                         {{-- Move up: swap with previous stop --}}
                                         @if ($index > 0)

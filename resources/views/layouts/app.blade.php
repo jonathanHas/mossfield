@@ -15,9 +15,9 @@
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased" style="background: var(--app-bg); color: var(--ink);">
-        <div x-data="{ open: false }" class="min-h-screen flex">
+        <div x-data="{ open: false, collapsed: (localStorage.getItem('sidebar-collapsed') === '1') }" class="min-h-screen flex">
             <!-- Sidebar (desktop) -->
-            <div class="hidden md:flex flex-shrink-0">
+            <div class="hidden md:flex flex-shrink-0" :class="{ 'md:hidden': collapsed }">
                 @include('layouts.navigation')
             </div>
 

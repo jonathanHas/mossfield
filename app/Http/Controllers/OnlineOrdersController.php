@@ -189,6 +189,8 @@ class OnlineOrdersController extends Controller
                         'delivery_date' => null,
                         'status' => 'pending',
                         'payment_status' => 'pending',
+                        'delivery_charge' => $customer->currentDeliveryCharge(),
+                        'delivery_charge_percent' => $customer->deliveryChargePercent(),
                         'subtotal' => $payload['totals']['subtotal'] ?? 0,
                         'tax_amount' => $payload['totals']['tax'] ?? 0,
                         'total_amount' => $payload['totals']['grand_total'] ?? 0,
@@ -212,6 +214,9 @@ class OnlineOrdersController extends Controller
                             'notes' => $itemPayload['product_name'] ?? null,
                         ]);
                     }
+
+                    // Recompute totals from imported lines + delivery charge/VAT.
+                    $order->calculateTotals();
                 });
 
                 $stats['imported']++;

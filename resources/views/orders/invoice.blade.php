@@ -160,7 +160,7 @@
                         @endif
                     </td>
                     <td class="num">{{ $item->quantity_ordered }}</td>
-                    <td class="num">{{ $item->productVariant->price_label }}</td>
+                    <td class="num">{{ $item->unit_price_label }}</td>
                     <td class="num">€{{ number_format($item->invoiceable_total, 2) }}</td>
                 </tr>
             @empty
@@ -176,8 +176,14 @@
             <td class="label">Subtotal</td>
             <td class="val">€{{ number_format($order->subtotal, 2) }}</td>
         </tr>
+        @if($order->delivery_charge > 0)
+            <tr>
+                <td class="label">{{ $order->delivery_charge_percent ? 'Delivery charge ('.rtrim(rtrim(number_format($order->delivery_charge_percent, 2), '0'), '.').'%)' : 'Delivery charge' }}</td>
+                <td class="val">€{{ number_format($order->delivery_charge_net, 2) }}</td>
+            </tr>
+        @endif
         <tr>
-            <td class="label">Tax</td>
+            <td class="label">{{ $order->delivery_charge > 0 ? 'VAT (23%)' : 'Tax' }}</td>
             <td class="val">€{{ number_format($order->tax_amount, 2) }}</td>
         </tr>
         <tr class="grand">

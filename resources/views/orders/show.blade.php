@@ -23,6 +23,8 @@
         $statusFields = [
             'payment_status' => $order->payment_status,
             'delivery_date' => $order->delivery_date?->format('Y-m-d'),
+            'delivery_charge' => number_format((float) $order->delivery_charge, 2, '.', ''),
+            'delivery_charge_percent' => $order->delivery_charge_percent,
             'delivery_address' => $order->delivery_address,
             'notes' => $order->notes,
             'customer_reference' => $order->customer_reference,
@@ -410,8 +412,14 @@
                             <div style="color: var(--muted);">Subtotal</div>
                             <div class="text-right font-mono" style="color: var(--ink-2);">€{{ number_format($order->subtotal, 2) }}</div>
                         </div>
+                        @if($order->delivery_charge > 0)
+                            <div class="grid grid-cols-[120px_80px] gap-x-6">
+                                <div style="color: var(--muted);">{{ $order->delivery_charge_percent ? 'Delivery charge ('.rtrim(rtrim(number_format($order->delivery_charge_percent, 2), '0'), '.').'%)' : 'Delivery charge' }}</div>
+                                <div class="text-right font-mono" style="color: var(--ink-2);">€{{ number_format($order->delivery_charge_net, 2) }}</div>
+                            </div>
+                        @endif
                         <div class="grid grid-cols-[120px_80px] gap-x-6">
-                            <div style="color: var(--muted);">Tax</div>
+                            <div style="color: var(--muted);">{{ $order->delivery_charge > 0 ? 'VAT (23%)' : 'Tax' }}</div>
                             <div class="text-right font-mono" style="color: var(--ink-2);">€{{ number_format($order->tax_amount, 2) }}</div>
                         </div>
                         <div class="grid grid-cols-[120px_80px] gap-x-6 font-semibold text-[15px] mt-1.5 pt-2"

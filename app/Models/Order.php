@@ -15,6 +15,8 @@ class Order extends Model
         'delivery_date',
         'status',
         'subtotal',
+        'delivery_charge',
+        'delivery_charge_percent',
         'tax_amount',
         'total_amount',
         'payment_status',
@@ -34,10 +36,15 @@ class Order extends Model
         'delivered_at' => 'datetime',
         'loaded_at' => 'datetime',
         'subtotal' => 'decimal:2',
+        'delivery_charge' => 'decimal:2',
+        'delivery_charge_percent' => 'decimal:2',
         'tax_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
         'mossorders_order_id' => 'integer',
     ];
+
+    /** VAT rate applied to the delivery charge (products themselves are 0% VAT). */
+    public const DELIVERY_CHARGE_VAT_RATE = 0.23;
 
     protected static function boot()
     {
@@ -89,11 +96,33 @@ class Order extends Model
         // estimate. Computed in PHP because invoiceable_total isn't a column.
         $this->subtotal = round($this->orderItems()->get()->sum(fn ($item) => $item->invoiceable_total), 2);
 
-        // Products are 0% VAT - only courier costs would have VAT
-        $this->tax_amount = 0.00;
+        // A negotiated percentage charge recomputes from the current subtotal
+        // each time (live % of the order); a fixed charge keeps its snapshot.
+        if ($this->delivery_charge_percent !== null && (float) $this->delivery_charge_percent > 0) {
+            $this->delivery_charge = round($this->subtotal * (float) $this->delivery_charge_percent / 100, 2);
+        }
 
-        $this->total_amount = $this->subtotal + $this->tax_amount;
+        // Products are 0% VAT. The delivery charge is VAT-INCLUSIVE (gross), so
+        // back out the 23% VAT it contains: net + vat == gross by construction,
+        // so the total matches the entered figure exactly. The charge sits
+        // outside the subtotal (its own net invoice line).
+        $gross = round((float) ($this->delivery_charge ?? 0), 2);
+        $net = round($gross / (1 + self::DELIVERY_CHARGE_VAT_RATE), 2);
+        $this->tax_amount = round($gross - $net, 2);
+
+        $this->total_amount = round($this->subtotal + $gross, 2);
         $this->save();
+    }
+
+    /**
+     * The ex-VAT (net) portion of the VAT-inclusive delivery charge — what the
+     * invoice shows on its own line, alongside the VAT line. net + tax == the
+     * stored gross delivery_charge (products carry no VAT, so tax_amount is
+     * entirely the delivery VAT).
+     */
+    public function getDeliveryChargeNetAttribute(): float
+    {
+        return round((float) $this->delivery_charge - (float) $this->tax_amount, 2);
     }
 
     public function getStatusColorAttribute(): string

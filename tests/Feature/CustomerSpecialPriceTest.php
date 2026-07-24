@@ -132,6 +132,56 @@ class CustomerSpecialPriceTest extends TestCase
         $this->assertSame('80.00', (string) $line->line_total); // 2 × 4kg × €10
     }
 
+    public function test_invoice_unit_price_column_shows_the_special_price_not_the_base_price(): void
+    {
+        $office = User::factory()->create();
+
+        // €1.20 special on the bottle (base is €1.50).
+        $order = \App\Models\Order::create([
+            'order_number' => 'ORD-20260724-001',
+            'customer_id' => $this->customer->id,
+            'order_date' => now()->toDateString(),
+            'status' => 'ready',
+        ]);
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_variant_id' => $this->bottle->id,
+            'quantity_ordered' => 3,
+            'unit_price' => 1.20,
+        ]);
+
+        $this->actingAs($office)
+            ->get(route('orders.invoice', $order))
+            ->assertOk()
+            ->assertSee('€1.20')       // locked special price in the Unit price column
+            ->assertDontSee('€1.50');  // never the variant base_price
+    }
+
+    public function test_invoice_weight_priced_unit_price_shows_per_kg_special(): void
+    {
+        $office = User::factory()->create();
+
+        // €10/kg special on the wheel (base is €12/kg).
+        $order = \App\Models\Order::create([
+            'order_number' => 'ORD-20260724-002',
+            'customer_id' => $this->customer->id,
+            'order_date' => now()->toDateString(),
+            'status' => 'ready',
+        ]);
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_variant_id' => $this->wheel->id,
+            'quantity_ordered' => 2,
+            'unit_price' => 10.00,
+        ]);
+
+        $this->actingAs($office)
+            ->get(route('orders.invoice', $order))
+            ->assertOk()
+            ->assertSee('€10.00/kg')       // locked special €/kg
+            ->assertDontSee('€12.00/kg');  // never the variant base €/kg
+    }
+
     public function test_store_update_and_destroy_manage_routes(): void
     {
         $office = User::factory()->create();

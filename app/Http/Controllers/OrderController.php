@@ -242,21 +242,23 @@ class OrderController extends Controller
         ]);
 
         $order = DB::transaction(function () use ($validated) {
+            // Price lines at the customer's rate and snapshot their delivery
+            // charge (a per-variant special price if set, else base_price).
+            $customer = Customer::find($validated['customer_id']);
+
             // Create the order
             $order = Order::create([
                 'customer_id' => $validated['customer_id'],
                 'order_date' => $validated['order_date'],
                 'delivery_date' => $validated['delivery_date'],
+                'delivery_charge' => $customer->currentDeliveryCharge(),
+                'delivery_charge_percent' => $customer->deliveryChargePercent(),
                 'delivery_address' => $validated['delivery_address'],
                 'notes' => $validated['notes'],
                 'customer_reference' => $validated['customer_reference'] ?? null,
                 'status' => 'pending',
                 'payment_status' => 'pending',
             ]);
-
-            // Add order items — price each line at the customer's rate
-            // (a per-variant special price if set, else the variant base_price).
-            $customer = Customer::find($validated['customer_id']);
 
             foreach ($validated['items'] as $itemData) {
                 $variant = ProductVariant::find($itemData['product_variant_id']);
@@ -295,16 +297,29 @@ class OrderController extends Controller
             'delivery_date' => 'nullable|date|after_or_equal:order_date',
             'status' => 'required|in:pending,confirmed,preparing,ready,dispatched,delivered,cancelled',
             'payment_status' => 'required|in:pending,paid,partial,overdue',
+            'delivery_charge' => 'nullable|numeric|min:0|max:999999.99',
+            'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
             'delivery_address' => 'nullable|string',
             'notes' => 'nullable|string',
             'customer_reference' => 'nullable|string|max:255',
         ]);
+
+        // Blank/absent input zeroes the fixed charge (the column is NOT NULL).
+        $validated['delivery_charge'] = round((float) ($validated['delivery_charge'] ?? 0), 2);
+
+        // A percentage (when > 0) overrides the € amount — calculateTotals()
+        // recomputes delivery_charge from it. Blank clears it back to fixed.
+        $percent = $validated['delivery_charge_percent'] ?? null;
+        $validated['delivery_charge_percent'] = ($percent !== null && (float) $percent > 0) ? round((float) $percent, 2) : null;
 
         $isCancelling = $validated['status'] === 'cancelled' && $order->status !== 'cancelled';
         $releasedUnits = 0;
 
         DB::transaction(function () use ($order, $validated, $isCancelling, &$releasedUnits) {
             $order->update($validated);
+
+            // Re-derive tax/total from the (possibly edited) delivery charge.
+            $order->calculateTotals();
 
             if (! $isCancelling) {
                 return;

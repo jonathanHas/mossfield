@@ -21,6 +21,7 @@ class DeliveryRun extends Model
         'day_of_week',
         'driver',
         'capacity_note',
+        'delivery_charge',
         'sort_order',
         'is_active',
     ];
@@ -29,6 +30,7 @@ class DeliveryRun extends Model
         'day_of_week' => 'integer',
         'sort_order' => 'integer',
         'is_active' => 'boolean',
+        'delivery_charge' => 'decimal:2',
     ];
 
     public function customers(): HasMany

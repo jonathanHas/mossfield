@@ -261,13 +261,15 @@ class BackupArchive
 
     private function tempPath(string $label): string
     {
-        $dir = storage_path('app/private/backups/tmp');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
+        // Use the system temp dir: it is writable by any user, so this works the
+        // same under the CLI and the web-server user (avoids ownership clashes on
+        // a storage/ subdir). Files are transient and deleted right after use.
+        $path = tempnam(sys_get_temp_dir(), 'mfbk_'.$label.'_');
+
+        if ($path === false) {
+            throw new RuntimeException('Could not create a temporary file for the backup.');
         }
 
-        // tempnam creates the file atomically and returns a unique path; the
-        // $label is only a readability hint in the prefix.
-        return tempnam($dir, 'mfbk_'.$label.'_');
+        return $path;
     }
 }

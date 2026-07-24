@@ -208,6 +208,8 @@ class ImportOnlineOrders extends Command
                 'delivery_date' => null, // Will be set later if needed
                 'status' => 'pending', // All imported orders start as pending
                 'payment_status' => 'pending',
+                'delivery_charge' => $customer->currentDeliveryCharge(),
+                'delivery_charge_percent' => $customer->deliveryChargePercent(),
                 'subtotal' => $payload['totals']['subtotal'] ?? 0,
                 'tax_amount' => $payload['totals']['tax'] ?? 0,
                 'total_amount' => $payload['totals']['grand_total'] ?? 0,
@@ -254,10 +256,14 @@ class ImportOnlineOrders extends Command
                 throw new \Exception("No valid items to import for order {$orderNumber}");
             }
 
+            // Recompute totals from the actually-imported lines + delivery
+            // charge/VAT (the payload totals may include skipped items).
+            $order->calculateTotals();
+
             $this->line("  ✅ Imported {$order->order_number} (was {$orderNumber})");
             $this->line("     Customer: {$customer->name}");
             $this->line("     Items: {$itemsImported} imported".($itemsSkipped > 0 ? ", {$itemsSkipped} skipped" : ''));
-            $this->line("     Total: €".number_format($order->total_amount, 2));
+            $this->line('     Total: €'.number_format($order->total_amount, 2));
 
             $this->importedCount++;
         });

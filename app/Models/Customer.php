@@ -25,6 +25,8 @@ class Customer extends Model
         'mossorders_user_id',
         'delivery_run_id',
         'run_position',
+        'apply_delivery_charge',
+        'delivery_charge_percent',
     ];
 
     protected $casts = [
@@ -33,6 +35,8 @@ class Customer extends Model
         'requires_reference' => 'boolean',
         'mossorders_user_id' => 'integer',
         'run_position' => 'integer',
+        'apply_delivery_charge' => 'boolean',
+        'delivery_charge_percent' => 'decimal:2',
         // PII encrypted at rest. Name/email/country stay plaintext because
         // they are queried directly (unique checks, filtering).
         'phone' => EncryptedNullable::class,
@@ -70,6 +74,40 @@ class Customer extends Model
             ->value('price');
 
         return $special !== null ? (float) $special : (float) $variant->base_price;
+    }
+
+    /**
+     * The delivery charge (€, ex VAT) a NEW order for this customer should
+     * snapshot: the current run's charge when the customer is flagged, on a
+     * run, and the run has a charge set — otherwise 0. Snapshot semantics:
+     * changing the run's charge later never touches existing orders. This is
+     * the single leverage point applied at every order-creation site.
+     */
+    public function currentDeliveryCharge(): float
+    {
+        // A negotiated percentage overrides the fixed run charge; its € amount
+        // is computed in Order::calculateTotals() (it needs the order subtotal).
+        if ($this->deliveryChargePercent() !== null) {
+            return 0.0;
+        }
+
+        if (! $this->apply_delivery_charge) {
+            return 0.0;
+        }
+
+        return round(max(0, (float) ($this->deliveryRun?->delivery_charge ?? 0)), 2);
+    }
+
+    /**
+     * The customer's negotiated delivery-charge rate (% of order value), or
+     * null when they have none. Snapshotted onto new orders; when present it
+     * overrides the fixed run charge (see [[currentDeliveryCharge]]).
+     */
+    public function deliveryChargePercent(): ?float
+    {
+        $pct = (float) ($this->delivery_charge_percent ?? 0);
+
+        return $pct > 0 ? round($pct, 2) : null;
     }
 
     public function getFullAddressAttribute(): string

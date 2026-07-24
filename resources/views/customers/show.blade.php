@@ -18,6 +18,9 @@
                     @if($customer->requires_reference)
                         <span class="mf-tag mf-tag-warn">Ref required</span>
                     @endif
+                    @if($customer->delivery_charge_percent)
+                        <span class="mf-tag mf-tag-info">{{ rtrim(rtrim(number_format($customer->delivery_charge_percent, 2), '0'), '.') }}% delivery</span>
+                    @endif
                 </div>
             </div>
             <div class="flex gap-2">
@@ -91,6 +94,10 @@
                             default => $customer->payment_terms
                         } }}
                     </dd>
+                    @if($customer->delivery_charge_percent)
+                        <dt style="color: var(--muted);">Delivery charge</dt>
+                        <dd class="font-mono">{{ rtrim(rtrim(number_format($customer->delivery_charge_percent, 2), '0'), '.') }}% of order</dd>
+                    @endif
                     <dt style="color: var(--muted);">Outstanding</dt>
                     <dd class="font-mono">€{{ number_format($customer->outstanding_balance, 2) }}</dd>
                     <dt style="color: var(--muted);">Online</dt>

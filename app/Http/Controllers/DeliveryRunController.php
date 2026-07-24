@@ -153,6 +153,30 @@ class DeliveryRunController extends Controller
             ->with('success', "{$customer->name} removed from {$run->name}.");
     }
 
+    /**
+     * Toggle whether this stop's new orders get the run's delivery charge.
+     * Redirects with ?charges=1 so the reveal stays open for consecutive
+     * flags (a fresh visit always starts hidden).
+     */
+    public function toggleCharge(Customer $customer): RedirectResponse
+    {
+        $run = $customer->deliveryRun;
+
+        if (! $run) {
+            return redirect()->route('delivery-runs.index')
+                ->with('error', "{$customer->name} is not assigned to a run.");
+        }
+
+        $this->authorize('update', $run);
+
+        $customer->update(['apply_delivery_charge' => ! $customer->apply_delivery_charge]);
+
+        return redirect()->route('delivery-runs.index', ['charges' => 1])
+            ->with('success', $customer->apply_delivery_charge
+                ? "{$customer->name} will now get the {$run->name} delivery charge on new orders."
+                : "{$customer->name} will no longer get a delivery charge.");
+    }
+
     private function validateRun(Request $request): array
     {
         $validated = $request->validate([
@@ -160,10 +184,12 @@ class DeliveryRunController extends Controller
             'day_of_week' => 'nullable|integer|between:1,7',
             'driver' => 'nullable|string|max:255',
             'capacity_note' => 'nullable|string|max:255',
+            'delivery_charge' => 'nullable|numeric|min:0|max:999999.99',
             'sort_order' => 'nullable|integer|min:0',
             'is_active' => 'boolean',
         ]);
 
+        $validated['delivery_charge'] = round((float) ($validated['delivery_charge'] ?? 0), 2);
         $validated['sort_order'] = (int) ($validated['sort_order'] ?? 0);
         $validated['is_active'] = $request->boolean('is_active');
 

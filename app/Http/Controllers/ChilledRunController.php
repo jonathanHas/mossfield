@@ -207,6 +207,8 @@ class ChilledRunController extends Controller
                     'customer_id' => $customer->id,
                     'order_date' => now()->toDateString(),
                     'delivery_date' => $runDate->toDateString(),
+                    'delivery_charge' => $customer->currentDeliveryCharge(),
+                    'delivery_charge_percent' => $customer->deliveryChargePercent(),
                     'status' => 'pending',
                     'payment_status' => 'pending',
                 ]); // order_number auto-generated via Order::boot()

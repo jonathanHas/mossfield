@@ -41,6 +41,13 @@
                placeholder="e.g. 80 crates of milk is the max for delivery.">
         @error('capacity_note') <div class="mf-error">{{ $message }}</div> @enderror
     </div>
+    <div>
+        <label for="delivery_charge" class="mf-label">Delivery charge (€, incl VAT)</label>
+        <input type="number" name="delivery_charge" id="delivery_charge" class="mf-input" min="0" step="0.01"
+               value="{{ old('delivery_charge', isset($run) ? number_format((float) $run->delivery_charge, 2, '.', '') : '0.00') }}">
+        <p class="text-[12px] mt-1" style="color: var(--muted);">The total charged to flagged stops — enter it VAT-inclusive; the 23% VAT is broken out on the invoice. 0 = no charge.</p>
+        @error('delivery_charge') <div class="mf-error">{{ $message }}</div> @enderror
+    </div>
     <div class="sm:col-span-2">
         <label class="inline-flex items-center gap-2 text-[13px]">
             <input type="checkbox" name="is_active" value="1" class="mf-checkbox"

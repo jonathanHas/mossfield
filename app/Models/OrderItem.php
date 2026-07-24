@@ -302,6 +302,19 @@ class OrderItem extends Model
     }
 
     /**
+     * Formatted per-unit price for this line, sourced from the locked
+     * `unit_price` snapshot (which honours any customer special price) rather
+     * than the variant's live base_price. Mirrors ProductVariant::price_label —
+     * "€X.XX/kg" for weight-priced lines, "€X.XX" otherwise.
+     */
+    public function getUnitPriceLabelAttribute(): string
+    {
+        return $this->isPricedByWeight()
+            ? '€'.number_format($this->unit_price, 2).'/kg'
+            : '€'.number_format($this->unit_price, 2);
+    }
+
+    /**
      * Distinct batch codes this line was picked/allocated from, for traceability
      * on dockets and invoices. Requires orderAllocations.batchItem.batch to be
      * loaded. Fulfilled allocations first; falls back to any allocation with a

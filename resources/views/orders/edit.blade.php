@@ -65,6 +65,22 @@
                             :value="old('delivery_date', $order->delivery_date?->format('Y-m-d'))" />
                         <x-input-error :messages="$errors->get('delivery_date')" class="mt-1" />
                     </div>
+
+                    <div>
+                        <x-input-label for="delivery_charge" :value="__('Delivery charge (€, incl VAT)')" />
+                        <x-text-input id="delivery_charge" name="delivery_charge" type="number" min="0" step="0.01"
+                            :value="old('delivery_charge', number_format((float) $order->delivery_charge, 2, '.', ''))" />
+                        <p class="mt-1 text-[12px]" style="color: var(--muted);">Enter the VAT-inclusive total; the 23% VAT is broken out on the invoice. Set 0 to remove.</p>
+                        <x-input-error :messages="$errors->get('delivery_charge')" class="mt-1" />
+                    </div>
+
+                    <div>
+                        <x-input-label for="delivery_charge_percent" :value="__('Delivery charge (%)')" />
+                        <x-text-input id="delivery_charge_percent" name="delivery_charge_percent" type="number" min="0" max="100" step="0.01"
+                            :value="old('delivery_charge_percent', $order->delivery_charge_percent)" />
+                        <p class="mt-1 text-[12px]" style="color: var(--muted);">If set, overrides the € amount — recomputed as % of the order. Blank to use the € amount.</p>
+                        <x-input-error :messages="$errors->get('delivery_charge_percent')" class="mt-1" />
+                    </div>
                 </div>
 
                 <div class="mb-5">

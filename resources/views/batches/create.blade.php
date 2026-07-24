@@ -168,11 +168,11 @@
                                         ${isCheese && isWheelVariant ? 'required' : ''}>
                                 </div>
                                 <div>
-                                    <label class="mf-label" id="unit-weight-label-${index}">Unit weight (kg)</label>
-                                    <input type="number" step="0.001" name="batch_items[${index}][unit_weight_kg]"
-                                        value="${variant.weight_kg || ''}"
-                                        class="mf-input" placeholder="0.000"
-                                        id="unit-weight-${index}">
+                                    <label class="mf-label" id="unit-weight-label-${index}">Unit weight</label>
+                                    <p class="mf-input flex items-center" style="background: var(--line); color: var(--muted);"
+                                        id="unit-weight-${index}"
+                                        data-unit="kg">${variant.weight_kg ? Number(variant.weight_kg).toFixed(3) + ' kg' : '—'}</p>
+                                    <p class="text-[11.5px] mt-1" style="color: var(--muted);">Set on the product variant.</p>
                                 </div>
                             </div>
                         </div>
@@ -199,7 +199,9 @@
                 if (selectedOption.text && selectedOption.text.includes('(Milk)')) {
                     variants.forEach((variant, index) => {
                         const label = document.getElementById(`unit-weight-label-${index}`);
-                        if (label) label.textContent = 'Unit volume (L)';
+                        if (label) label.textContent = 'Unit volume';
+                        const value = document.getElementById(`unit-weight-${index}`);
+                        if (value) value.textContent = variant.weight_kg ? Number(variant.weight_kg).toFixed(3) + ' L' : '—';
                     });
                 }
             }
@@ -238,10 +240,10 @@
                     variantInstructions.innerHTML = '<strong>Required:</strong> Specify how many whole wheels were produced.';
                     rawMilkNote.textContent = 'Raw milk used to produce the cheese wheels (enables yield tracking).';
                 } else if (productText && productText.includes('(Milk)')) {
-                    variantInstructions.textContent = 'Specify how the raw milk was bottled into different sizes (1L, 2L bottles).';
+                    variantInstructions.textContent = 'Specify how the raw milk was bottled into different sizes (1L, 2L bottles). Leave blank any variant not produced.';
                     rawMilkNote.textContent = 'Raw milk that was bottled (for milk products this equals the finished volume).';
                 } else {
-                    variantInstructions.textContent = 'Specify how the finished yoghurt was packaged into different tub sizes.';
+                    variantInstructions.textContent = 'Specify how the finished yoghurt was packaged into different tub sizes. Leave blank any variant not produced.';
                     rawMilkNote.textContent = 'Raw milk used to produce the yoghurt (enables yield tracking).';
                 }
             }

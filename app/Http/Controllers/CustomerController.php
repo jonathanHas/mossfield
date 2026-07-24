@@ -61,12 +61,14 @@ class CustomerController extends Controller
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
             'is_active' => 'boolean',
             'requires_reference' => 'boolean',
+            'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string',
             'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id',
         ]);
 
         $validated['is_active'] = $request->has('is_active');
         $validated['requires_reference'] = $request->has('requires_reference');
+        $validated['delivery_charge_percent'] = $this->normalizeChargePercent($validated['delivery_charge_percent'] ?? null);
 
         $customer = Customer::create($validated);
 
@@ -115,12 +117,14 @@ class CustomerController extends Controller
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
             'is_active' => 'boolean',
             'requires_reference' => 'boolean',
+            'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string',
             'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id,'.$customer->id,
         ]);
 
         $validated['is_active'] = $request->has('is_active');
         $validated['requires_reference'] = $request->has('requires_reference');
+        $validated['delivery_charge_percent'] = $this->normalizeChargePercent($validated['delivery_charge_percent'] ?? null);
 
         $customer->update($validated);
 
@@ -128,6 +132,16 @@ class CustomerController extends Controller
             ->with('success', 'Customer updated successfully.');
 
         return $this->withDuplicateEmailWarning($redirect, $customer);
+    }
+
+    /**
+     * A blank delivery-charge % means "none" (null); any value is rounded to
+     * two decimals. Keeps the column null rather than 0.00 so "no percentage"
+     * is unambiguous downstream.
+     */
+    private function normalizeChargePercent(mixed $value): ?float
+    {
+        return $value !== null && $value !== '' ? round((float) $value, 2) : null;
     }
 
     /**

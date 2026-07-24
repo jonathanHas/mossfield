@@ -165,6 +165,7 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
     Route::post('/delivery-runs/{deliveryRun}/assign', [DeliveryRunController::class, 'assign'])->name('delivery-runs.assign');
     Route::post('/delivery-runs/{deliveryRun}/reorder', [DeliveryRunController::class, 'reorder'])->name('delivery-runs.reorder');
     Route::post('/customers/{customer}/unassign-run', [DeliveryRunController::class, 'unassign'])->name('delivery-runs.unassign');
+    Route::post('/delivery-runs/stops/{customer}/charge', [DeliveryRunController::class, 'toggleCharge'])->name('delivery-runs.toggle-charge');
 
     // Online orders (Mossorders integration)
     Route::get('/online-orders', [OnlineOrdersController::class, 'index'])->name('online-orders.index');
