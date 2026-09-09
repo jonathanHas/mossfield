@@ -93,6 +93,10 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::post('/orders/{order}/items', [\App\Http\Controllers\OrderController::class, 'storeItem'])->name('orders.items.store');
     Route::patch('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'updateItem'])->name('orders.items.update');
     Route::delete('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'destroyItem'])->name('orders.items.destroy');
+    // Short supply — close a line that can't be filled / reopen it. Office
+    // ability (authorize('update')), so factory 403s in the controller.
+    Route::post('/orders/{order}/items/{orderItem}/short', [\App\Http\Controllers\OrderController::class, 'shortCloseItem'])->name('orders.items.short');
+    Route::post('/orders/{order}/items/{orderItem}/reopen', [\App\Http\Controllers\OrderController::class, 'reopenItem'])->name('orders.items.reopen');
 
     Route::get('/cheese-cutting', [\App\Http\Controllers\CheeseCuttingController::class, 'index'])->name('cheese-cutting.index');
     Route::get('/cheese-conversion', [\App\Http\Controllers\CheeseConversionController::class, 'index'])->name('cheese-conversion.index');
@@ -106,6 +110,10 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::get('/picking/{order}/items/{orderItem}', [\App\Http\Controllers\PickingController::class, 'item'])->name('picking.item');
     Route::post('/picking/{order}/items/{orderItem}/pick', [\App\Http\Controllers\PickingController::class, 'pick'])->name('picking.pick');
     Route::post('/picking/{order}/items/{orderItem}/undo', [\App\Http\Controllers\PickingController::class, 'undo'])->name('picking.undo');
+    // Short supply from the floor — the picker holding the empty crate is the
+    // person who knows. Same narrow fulfill ability as picking itself.
+    Route::post('/picking/{order}/items/{orderItem}/short', [\App\Http\Controllers\PickingController::class, 'markShort'])->name('picking.short');
+    Route::post('/picking/{order}/items/{orderItem}/reopen', [\App\Http\Controllers\PickingController::class, 'reopenShort'])->name('picking.reopen');
 
     // Chilled run sheet — read view of a run's stops + quantities. The one
     // write is the "loaded onto van" tick, gated by the narrow
@@ -159,6 +167,9 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
     // Office/admin only (factory keeps the read view + loaded tick).
     Route::post('/chilled-runs/stops/{customer}/order', [ChilledRunController::class, 'saveStop'])->name('chilled-runs.save-stop');
     Route::post('/chilled-runs/confirm-all', [ChilledRunController::class, 'confirmAll'])->name('chilled-runs.confirm-all');
+    // FIFO stock reservation from the sheet — run-wide and per stop.
+    Route::post('/chilled-runs/allocate-all', [ChilledRunController::class, 'allocateAll'])->name('chilled-runs.allocate-all');
+    Route::post('/chilled-runs/stops/{customer}/allocate', [ChilledRunController::class, 'allocateStop'])->name('chilled-runs.allocate-stop');
 
     // Delivery run management — define runs and assign customers/stops.
     Route::resource('delivery-runs', DeliveryRunController::class)->except(['show']);

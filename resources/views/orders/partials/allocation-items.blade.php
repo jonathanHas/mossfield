@@ -13,6 +13,8 @@
 @foreach($order->orderItems as $orderItem)
     @php
         $fulfilled = $orderItem->isFullyFulfilled();
+        $short = $orderItem->isShortClosed();
+        $settled = $fulfilled || $short;
         $firstAlloc = $orderItem->orderAllocations->first();
         $fulfillPct = $orderItem->quantity_ordered > 0
             ? min(100, ($orderItem->quantity_fulfilled / $orderItem->quantity_ordered) * 100)
@@ -20,7 +22,7 @@
         $isOnlyLine = $order->orderItems->count() <= 1;
     @endphp
 
-    <x-order.item-row :item="$orderItem" :order="$order" x-data="{ open: {{ $fulfilled ? 'false' : 'true' }} }">
+    <x-order.item-row :item="$orderItem" :order="$order" x-data="{ open: {{ $settled ? 'false' : 'true' }} }">
         <x-slot:summary>
             <div class="flex items-center gap-3.5 mt-2.5 text-[12.5px] flex-wrap" style="color: var(--muted);">
                 @if($fulfilled)
@@ -40,6 +42,24 @@
                         <span style="color: var(--line);">·</span>
                         <button type="button" class="mf-link" style="color: var(--muted);" @click="open = ! open">Adjust</button>
                     @endcan
+                @elseif($short)
+                    <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--warn-ink);">
+                        <span class="inline-block rounded-full" style="width: 7px; height: 7px; background: var(--warn);"></span>
+                        Short — {{ $orderItem->quantity_short }} of {{ $orderItem->quantity_ordered }} not supplied
+                    </span>
+                    <span style="color: var(--line);">·</span>
+                    <span class="font-mono">{{ $orderItem->quantity_fulfilled }} supplied</span>
+                    @if(filled($orderItem->short_reason))
+                        <span style="color: var(--line);">·</span>
+                        <span>{{ $orderItem->short_reason }}</span>
+                    @endif
+                    @can('update', $order)
+                        <span style="color: var(--line);">·</span>
+                        <form method="POST" action="{{ route('orders.items.reopen', [$order, $orderItem]) }}" class="inline">
+                            @csrf
+                            <button type="submit" class="mf-link" style="color: var(--accent-ink);">Reopen</button>
+                        </form>
+                    @endcan
                 @else
                     <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--warn-ink);">
                         <span class="inline-block rounded-full" style="width: 7px; height: 7px; background: var(--warn);"></span>
@@ -51,8 +71,9 @@
             </div>
         </x-slot:summary>
 
-        {{-- Expanded fulfilment panel (collapsed by default for fully-fulfilled lines). --}}
-        <div class="mt-3.5" x-show="open" @if($fulfilled) style="display: none;" @endif>
+        {{-- Expanded fulfilment panel (collapsed by default for settled lines —
+             fully fulfilled, or closed short). --}}
+        <div class="mt-3.5" x-show="open" @if($settled) style="display: none;" @endif>
             <div class="rounded-lg p-4" style="background: var(--panel); border: 1px solid var(--line);">
                 <div class="flex items-center justify-between mb-2.5">
                     <span class="mf-eyebrow">Current allocations</span>
@@ -246,7 +267,8 @@
                             </svg>
                             <div>
                                 <strong>No available stock.</strong>
-                                No ready-to-sell stock available for this product variant. Check production status or create new batches.
+                                No ready-to-sell stock available for this product variant. Check production status or create new batches —
+                                or close this line short so the rest of the order can ship.
                             </div>
                         </div>
                     @endif
@@ -266,6 +288,19 @@
                             <button type="submit" class="mf-link" style="color: var(--danger);"
                                 onclick="return confirm('{{ $isOnlyLine ? 'This is the only item — removing it will cancel the order and return any picked stock to its batch. Continue?' : 'Remove this line? Any picked stock will be returned to its batch.' }}')">{{ $isOnlyLine ? 'Remove (cancels order)' : 'Remove line' }}</button>
                         </form>
+                        @unless($settled)
+                            {{-- Close short: available whenever the line still has
+                                 outstanding units, not just at the no-stock dead end —
+                                 "we sent what we had" is just as common as "we had none". --}}
+                            <span style="color: var(--line);">·</span>
+                            <form method="POST" action="{{ route('orders.items.short', [$order, $orderItem]) }}" class="flex items-center gap-1.5">
+                                @csrf
+                                <input type="text" name="short_reason" maxlength="255" placeholder="Reason (optional)"
+                                    class="mf-input w-40 px-2 py-0.5 text-[12px]">
+                                <button type="submit" class="mf-link" style="color: var(--warn-ink);"
+                                    onclick="return confirm('Close this line short? {{ $orderItem->quantity_remaining }} units will be released back to stock, and won\'t be supplied or billed.')">Close short</button>
+                            </form>
+                        @endunless
                     </div>
                 @endcan
             </div>

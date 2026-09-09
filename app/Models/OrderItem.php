@@ -19,6 +19,8 @@ class OrderItem extends Model
         'unit_price',
         'line_total',
         'fulfilled_total',
+        'short_closed_at',
+        'short_reason',
         'notes',
     ];
 
@@ -27,6 +29,7 @@ class OrderItem extends Model
         'quantity_allocated' => 'integer',
         'quantity_fulfilled' => 'integer',
         'weight_fulfilled_kg' => 'decimal:3',
+        'short_closed_at' => 'datetime',
         'unit_price' => 'decimal:2',
         'line_total' => 'decimal:2',
         'fulfilled_total' => 'decimal:2',
@@ -66,6 +69,43 @@ class OrderItem extends Model
     public function isFullyFulfilled(): bool
     {
         return $this->quantity_fulfilled >= $this->quantity_ordered;
+    }
+
+    /**
+     * Whether this line was deliberately closed short — we ordered more than
+     * could be supplied and the rest will never be sent. Self-healing: a line
+     * that later gets picked in full (stock arrived) stops reporting short even
+     * though short_closed_at stays set as the audit record. Every predicate and
+     * every render reads THIS, never the raw column.
+     */
+    public function isShortClosed(): bool
+    {
+        return $this->short_closed_at !== null && ! $this->isFullyFulfilled();
+    }
+
+    /**
+     * The line needs no more picking — either fully picked, or closed short.
+     * This is what gates the order's preparing → ready promotion (via
+     * Order::isPickingComplete); isFullyFulfilled() still means literally
+     * "100% supplied", so screens that celebrate a clean pick stay honest.
+     */
+    public function isSettled(): bool
+    {
+        return $this->isFullyFulfilled() || $this->isShortClosed();
+    }
+
+    /**
+     * Units ordered but never supplied, on a short-closed line. Derived rather
+     * than stored so it can't drift from quantity_fulfilled — picking more, or
+     * the office trimming quantity_ordered, both shrink it automatically. Zero
+     * on any line that isn't short-closed. Distinct from quantity_remaining,
+     * which means "still to pick".
+     */
+    public function getQuantityShortAttribute(): int
+    {
+        return $this->isShortClosed()
+            ? max(0, $this->quantity_ordered - $this->quantity_fulfilled)
+            : 0;
     }
 
     public function orderAllocations(): HasMany
@@ -288,17 +328,42 @@ class OrderItem extends Model
     }
 
     /**
-     * The amount to display/charge for this line: the actual fulfilled total
-     * (recorded weight × unit price for weight-priced items) once the line is
-     * FULLY fulfilled, otherwise the pre-fulfilment estimate (line_total, which
-     * covers the whole ordered quantity). Using the fulfilled total only when
-     * complete avoids understating a partially-picked line.
+     * The amount to display/charge for this line.
+     *
+     * A short-closed line bills ONLY what was actually supplied — the fulfilled
+     * total, or exactly zero when nothing was picked. That zero case must be
+     * explicit: fulfilled_total is NULL on a never-picked line, so the "> 0"
+     * fallback below would otherwise charge the full ordered line for goods
+     * that were never sent. The discriminator is quantity_fulfilled (not
+     * fulfilled_total) so a weight-priced line whose recorded weight rounds to
+     * €0.00 still bills €0.00 rather than falling back to the estimate.
+     *
+     * Otherwise: the actual fulfilled total (recorded weight × unit price for
+     * weight-priced items) once the line is FULLY fulfilled, else the
+     * pre-fulfilment estimate (line_total, covering the whole ordered
+     * quantity) — using the fulfilled total only when complete avoids
+     * understating a partially-picked line that's still being worked.
      */
     public function getInvoiceableTotalAttribute(): float
     {
+        if ($this->isShortClosed()) {
+            return $this->quantity_fulfilled > 0 ? (float) $this->fulfilled_total : 0.0;
+        }
+
         return $this->isFullyFulfilled() && $this->fulfilled_total > 0
             ? (float) $this->fulfilled_total
             : (float) $this->line_total;
+    }
+
+    /**
+     * The quantity to bill for this line — the paired half of
+     * invoiceable_total, so the invoice's Qty and Amount columns can never tell
+     * different stories. Identical to quantity_ordered on every non-short line,
+     * which is what makes it a safe drop-in on the existing invoice template.
+     */
+    public function getInvoiceableQuantityAttribute(): int
+    {
+        return $this->isShortClosed() ? $this->quantity_fulfilled : $this->quantity_ordered;
     }
 
     /**
@@ -463,5 +528,44 @@ class OrderItem extends Model
 
             return $units - $remaining;
         });
+    }
+
+    /**
+     * Close this line short: record that the outstanding units will never be
+     * supplied, and hand their reservation back to stock.
+     *
+     * Uses releaseUnits(), which releases reserved-but-unpicked units FIRST
+     * (pass 1 — a pure reservation drop, no BatchItem movement). Passing
+     * exactly the reserved count means its pass 2, which would unwind picked
+     * stock, never runs — so already-picked units and their batch decrements
+     * are untouched. Returns the units released.
+     *
+     * Callers own the transaction and MUST follow with Order::calculateTotals()
+     * + Order::reconcilePickingStatus().
+     */
+    public function closeShort(?string $reason = null): int
+    {
+        $reserved = max(0, $this->quantity_allocated - $this->quantity_fulfilled);
+
+        $released = $this->releaseUnits($reserved); // no-op when $reserved === 0
+
+        $this->short_closed_at = now();
+        $this->short_reason = $reason;
+        $this->save();
+
+        return $released;
+    }
+
+    /**
+     * Reopen a short-closed line — the shortfall becomes outstanding work
+     * again. Deliberately does NOT re-reserve stock (that's auto-allocate's
+     * job); the line simply re-enters the picking queue and the order drops
+     * back to preparing via Order::reconcilePickingStatus().
+     */
+    public function reopenShort(): void
+    {
+        $this->short_closed_at = null;
+        $this->short_reason = null;
+        $this->save();
     }
 }

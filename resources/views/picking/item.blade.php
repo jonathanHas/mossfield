@@ -4,6 +4,8 @@
         $product = $variant->product;
         $needed = $orderItem->quantity_remaining;
         $done = $orderItem->isFullyFulfilled();
+        $short = $orderItem->isShortClosed();
+        $shortQty = $orderItem->quantity_short;
         $isVariable = $orderItem->isVariableWeight();
         $isBulk = $orderItem->isBulkWeighed();
         $canSeeMoney = auth()->user()->can('see-financials');
@@ -51,7 +53,51 @@
         </div>
     </div>
 
-    @if ($done)
+    @if ($short)
+        {{-- ── Line closed short: what was supplied, and the way back in ── --}}
+        <div class="mob-section" style="margin-top: 18px;">
+            <div class="mob-card" style="background: var(--warn-soft); border-color: color-mix(in oklab, var(--warn) 35%, transparent);">
+                <div class="flex items-center gap-3">
+                    <div style="width: 28px; height: 28px; border-radius: 14px; background: var(--warn); color: #fff; display: grid; place-items: center; flex-shrink: 0;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>
+                    </div>
+                    <div style="color: var(--warn-ink);">
+                        <div style="font-weight: 500;">Short — {{ $orderItem->quantity_fulfilled }} of {{ $orderItem->quantity_ordered }} supplied</div>
+                        <div style="font-size: 12px; margin-top: 1px;">
+                            {{ $shortQty }} {{ Str::plural('unit', $shortQty) }} not available — not supplied, not billed.
+                            @if (filled($orderItem->short_reason))
+                                <br>{{ $orderItem->short_reason }}
+                            @endif
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="mob-section" style="margin-top: 14px;">
+            <form method="POST" action="{{ route('picking.reopen', [$order, $orderItem]) }}"
+                  onsubmit="return confirm('Reopen this line? It will need picking again and the order goes back to Preparing.')">
+                @csrf
+                @if ($pickable->isNotEmpty())
+                    {{-- Stock has since arrived — make picking it again the obvious move. --}}
+                    <button type="submit" class="mob-fab accent w-full justify-center">Stock arrived — reopen and pick</button>
+                @else
+                    <button type="submit" class="mf-btn-secondary w-full justify-center" style="padding: 12px; border-radius: 10px; color: var(--warn-ink);">
+                        Reopen line
+                    </button>
+                @endif
+            </form>
+        </div>
+
+        <div class="mob-footer">
+            <a href="{{ route('picking.show', $order) }}" class="mob-fab ghost">Back</a>
+            @if ($skipTo)
+                <a href="{{ route('picking.item', [$order, $skipTo]) }}" class="mob-fab">Next item →</a>
+            @else
+                <a href="{{ route('picking.show', $order) }}" class="mob-fab">Overview →</a>
+            @endif
+        </div>
+    @elseif ($done)
         {{-- ── Line fully picked: summary + undo ── --}}
         <div class="mob-section" style="margin-top: 18px;">
             <div class="mob-card" style="background: var(--accent-soft); border-color: oklch(0.88 0.06 150);">
@@ -100,6 +146,19 @@
                     No ready-to-sell stock for this product — check production status or ask the office.
                 </div>
             </div>
+        </div>
+
+        {{-- The way out of the dead end: settle the line so the order can ship
+             without it. Kept off the fixed footer so the decisive, harder-to-
+             reverse action isn't sitting under a thumb next to "Skip". --}}
+        <div class="mob-section" style="margin-top: 14px;">
+            <form method="POST" action="{{ route('picking.short', [$order, $orderItem]) }}"
+                  onsubmit="return confirm('Mark this line short? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won\'t be supplied or billed.')">
+                @csrf
+                <button type="submit" class="mf-btn-secondary w-full justify-center" style="padding: 12px; border-radius: 10px; color: var(--warn-ink);">
+                    Mark short — no stock
+                </button>
+            </form>
         </div>
 
         <div class="mob-footer">
@@ -271,6 +330,17 @@
                 </div>
             @endif
 
+            {{-- Partial short: the fridge has some, but not enough. Sits above
+                 the fixed footer rather than in it — three thumb-sized actions
+                 side by side is one too many, and this one is decisive. --}}
+            <div class="mob-section" style="margin-top: 22px;">
+                <button type="button" class="mf-btn-secondary w-full justify-center"
+                        style="padding: 11px; border-radius: 10px; color: var(--warn-ink); font-size: 13px;"
+                        onclick="if (confirm('Can\'t finish this line? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won\'t be supplied or billed.')) document.getElementById('short-line-form').submit();">
+                    Can't finish this line — mark short
+                </button>
+            </div>
+
             <div class="mob-footer">
                 @if ($skipTo)
                     <a href="{{ route('picking.item', [$order, $skipTo]) }}" class="mob-fab ghost">Skip</a>
@@ -288,5 +358,11 @@
                 @csrf
             </form>
         @endif
+
+        {{-- Same reason: the short button lives inside the pick form's markup,
+             so its form has to be a sibling. --}}
+        <form id="short-line-form" method="POST" action="{{ route('picking.short', [$order, $orderItem]) }}" class="hidden">
+            @csrf
+        </form>
     @endif
 </x-picking-layout>

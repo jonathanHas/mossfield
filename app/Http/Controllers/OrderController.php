@@ -503,4 +503,64 @@ class OrderController extends Controller
         return redirect()->route('orders.show', $order)
             ->with('success', 'Item removed. Any picked stock has been returned to its batch.');
     }
+
+    /**
+     * Office-side short close — the counterpart to PickingController::markShort()
+     * for lines the office already knows can't be filled (the "No available
+     * stock" dead end on the inline allocation block). Releases the line's
+     * reservation, settles it so the order can reach ready, and drops the
+     * unsupplied units out of the invoice.
+     */
+    public function shortCloseItem(Request $request, Order $order, OrderItem $orderItem): RedirectResponse
+    {
+        $this->authorize('update', $order);
+        abort_if($orderItem->order_id !== $order->id, 404);
+
+        if (in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true)) {
+            return redirect()->route('orders.show', $order)
+                ->with('error', "Items can't be changed on a {$order->status} order.");
+        }
+
+        if ($orderItem->isFullyFulfilled()) {
+            return redirect()->route('orders.show', $order)
+                ->with('error', 'That line is already fully fulfilled — nothing to mark short.');
+        }
+
+        $validated = $request->validate(['short_reason' => 'nullable|string|max:255']);
+        $shortQty = $orderItem->quantity_remaining;
+
+        DB::transaction(function () use ($order, $orderItem, $validated) {
+            $orderItem->closeShort(($validated['short_reason'] ?? null) ?: null);
+            $order->calculateTotals();
+            $order->reconcilePickingStatus();
+        });
+
+        return redirect()->route('orders.show', $order)
+            ->with('success', "Line closed short — {$shortQty} units released back to stock, not supplied and not billed.");
+    }
+
+    /**
+     * Reopen a short-closed line: the shortfall becomes outstanding work again
+     * and the order drops back to preparing. Does not re-reserve stock — run
+     * auto-allocate for that.
+     */
+    public function reopenItem(Order $order, OrderItem $orderItem): RedirectResponse
+    {
+        $this->authorize('update', $order);
+        abort_if($orderItem->order_id !== $order->id, 404);
+
+        if (in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true)) {
+            return redirect()->route('orders.show', $order)
+                ->with('error', "Items can't be changed on a {$order->status} order.");
+        }
+
+        DB::transaction(function () use ($order, $orderItem) {
+            $orderItem->reopenShort();
+            $order->calculateTotals();
+            $order->reconcilePickingStatus();
+        });
+
+        return redirect()->route('orders.show', $order)
+            ->with('success', 'Line reopened — it needs picking again.');
+    }
 }

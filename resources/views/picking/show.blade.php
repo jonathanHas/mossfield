@@ -2,9 +2,13 @@
     @php
         $items = $order->orderItems;
         $linesDone = $items->filter(fn ($item) => $item->isFullyFulfilled())->count();
+        $linesShort = $items->filter(fn ($item) => $item->isShortClosed())->count();
+        $shortUnits = (int) $items->sum('quantity_short');
         $linesTotal = $items->count();
-        $pct = $linesTotal > 0 ? round($linesDone / $linesTotal * 100) : 0;
-        $isReady = $order->isFullyFulfilled() && $linesTotal > 0;
+        // Short lines are resolved, not outstanding — otherwise the bar sticks
+        // below 100% on an order that's actually finished.
+        $pct = $linesTotal > 0 ? round(($linesDone + $linesShort) / $linesTotal * 100) : 0;
+        $isReady = $order->isPickingComplete();
         $totalWeight = (float) $items->sum('weight_fulfilled_kg');
         $deliverySub = $order->delivery_date
             ? ($order->delivery_date->isToday() ? 'today' : $order->delivery_date->format('D j M'))
@@ -13,28 +17,61 @@
 
     @if ($isReady)
         {{-- ── Order ready · celebration / handoff ── --}}
-        {{-- Full-viewport green wash behind the content (the shell itself keeps the cream bg). --}}
-        <div style="position: fixed; inset: 0; background: var(--accent-soft); z-index: -1;"></div>
+        {{-- Full-viewport wash behind the content (the shell itself keeps the
+             cream bg). Amber, not green, when anything went short — the screen
+             must not celebrate an order the customer is missing items from. --}}
+        @php $wash = $linesShort > 0 ? 'var(--warn-soft)' : 'var(--accent-soft)'; @endphp
+        <div style="position: fixed; inset: 0; background: {{ $wash }}; z-index: -1;"></div>
         <div>
-            <div class="mob-head" style="background: var(--accent-soft); border-bottom: 0;">
+            <div class="mob-head" style="background: {{ $wash }}; border-bottom: 0;">
                 <a href="{{ route('picking.index') }}" class="iconbtn" style="background: rgba(255,255,255,0.6); width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-2);">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
                 </a>
             </div>
 
+            @php
+                $tone = $linesShort > 0 ? 'var(--warn)' : 'var(--accent)';
+                $toneInk = $linesShort > 0 ? 'var(--warn-ink)' : 'var(--accent-ink)';
+            @endphp
             <div style="padding: 20px 22px 0; text-align: center;">
-                <div style="width: 76px; height: 76px; border-radius: 38px; background: var(--accent); color: #fff; display: grid; place-items: center; margin: 12px auto 0; box-shadow: 0 8px 24px -8px color-mix(in oklab, var(--accent) 60%, transparent);">
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                <div style="width: 76px; height: 76px; border-radius: 38px; background: {{ $tone }}; color: #fff; display: grid; place-items: center; margin: 12px auto 0; box-shadow: 0 8px 24px -8px color-mix(in oklab, {{ $tone }} 60%, transparent);">
+                    @if ($linesShort > 0)
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                    @else
+                        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+                    @endif
                 </div>
-                <h1 style="font-family: Fraunces, Georgia, serif; font-size: 28px; font-weight: 500; letter-spacing: -0.6px; margin: 16px 0 0; color: var(--accent-ink);">
-                    Order ready.
+                <h1 style="font-family: Fraunces, Georgia, serif; font-size: 28px; font-weight: 500; letter-spacing: -0.6px; margin: 16px 0 0; color: {{ $toneInk }};">
+                    {{ $linesShort > 0 ? 'Order closed — short.' : 'Order ready.' }}
                 </h1>
-                <div style="font-size: 14px; color: var(--accent-ink); opacity: 0.75; margin-top: 6px;">
-                    {{ $linesTotal }} {{ Str::plural('line', $linesTotal) }} picked{{ $totalWeight > 0 ? ' · '.number_format($totalWeight, 1).' kg total' : '' }}
+                <div style="font-size: 14px; color: {{ $toneInk }}; opacity: 0.75; margin-top: 6px;">
+                    @if ($linesShort > 0)
+                        {{ $linesDone }} of {{ $linesTotal }} {{ Str::plural('line', $linesTotal) }} picked ·
+                        {{ $linesShort }} short ({{ $shortUnits }} {{ Str::plural('unit', $shortUnits) }})
+                    @else
+                        {{ $linesTotal }} {{ Str::plural('line', $linesTotal) }} picked{{ $totalWeight > 0 ? ' · '.number_format($totalWeight, 1).' kg total' : '' }}
+                    @endif
                 </div>
             </div>
 
             <div style="padding: 22px 18px 0;">
+                @if ($linesShort > 0)
+                    {{-- Each short line is one tap from being reopened, so a
+                         mis-tap on the floor is cheap to undo. --}}
+                    <div class="mob-card" style="background: var(--panel); margin-bottom: 10px;">
+                        <div class="mf-eyebrow">Not supplied</div>
+                        @foreach ($items->filter(fn ($item) => $item->isShortClosed()) as $shortItem)
+                            <a href="{{ route('picking.item', [$order, $shortItem]) }}" class="flex items-center justify-between gap-3 no-underline"
+                               style="color: var(--ink); margin-top: 8px;">
+                                <div class="min-w-0">
+                                    <div style="font-size: 14px; font-weight: 500;">{{ $shortItem->productVariant->product->name }}</div>
+                                    <div style="font-size: 12px; color: var(--muted);">{{ $shortItem->productVariant->name }}</div>
+                                </div>
+                                <span class="mf-tag mf-tag-warn">Short {{ $shortItem->quantity_short }}</span>
+                            </a>
+                        @endforeach
+                    </div>
+                @endif
                 <div class="mob-card" style="background: var(--panel);">
                     <div class="flex items-center justify-between gap-3">
                         <div>
@@ -50,7 +87,13 @@
                         <div style="color: var(--muted);">Delivery</div>
                         <div class="text-right">{{ $deliverySub ?? '—' }}</div>
                         <div style="color: var(--muted);">Status</div>
-                        <div class="text-right"><span class="mf-tag mf-tag-accent">Ready</span></div>
+                        <div class="text-right">
+                            @if ($linesShort > 0)
+                                <span class="mf-tag mf-tag-warn">Ready · short</span>
+                            @else
+                                <span class="mf-tag mf-tag-accent">Ready</span>
+                            @endif
+                        </div>
                         <div style="color: var(--muted);">Payment</div>
                         <div class="text-right"><span class="mf-tag mf-tag-{{ $order->payment_status === 'paid' ? 'accent' : 'warn' }}">{{ ucfirst($order->payment_status) }}</span></div>
                     </div>
@@ -111,6 +154,9 @@
                 @foreach ($items as $i => $item)
                     @php
                         $done = $item->isFullyFulfilled();
+                        // Three states, not two: a short line is closed, not
+                        // picked — it must not wear the green tick.
+                        $short = $item->isShortClosed();
                         $current = $nextItem && $item->id === $nextItem->id;
                         $firstAlloc = $item->orderAllocations->first();
                         $qtyLabel = $item->isVariableWeight() && $item->weight_fulfilled_kg > 0
@@ -120,26 +166,30 @@
                     <a href="{{ route('picking.item', [$order, $item]) }}" class="mob-tap-row"
                        style="{{ $current ? 'background: color-mix(in oklab, var(--accent-soft) 40%, var(--panel)); border-left: 3px solid var(--accent); padding-left: 15px;' : 'border-left: 3px solid transparent; padding-left: 15px;' }}">
                         <div class="font-mono" style="width: 28px; height: 28px; border-radius: 14px; flex-shrink: 0; display: grid; place-items: center; font-size: 11px;
-                            background: {{ $done ? 'var(--accent)' : ($current ? 'var(--panel)' : 'var(--line-2)') }};
+                            background: {{ $short ? 'var(--warn)' : ($done ? 'var(--accent)' : ($current ? 'var(--panel)' : 'var(--line-2)')) }};
                             border: {{ $current ? '2px solid var(--accent)' : '0' }};
-                            color: {{ $done ? '#fff' : 'var(--muted)' }};">
-                            @if ($done)
+                            color: {{ ($done || $short) ? '#fff' : 'var(--muted)' }};">
+                            @if ($short)
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></svg>
+                            @elseif ($done)
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
                             @else
                                 {{ str_pad($i + 1, 2, '0', STR_PAD_LEFT) }}
                             @endif
                         </div>
                         <div class="flex-1 min-w-0">
-                            <div style="font-size: 15px; font-weight: 500; color: {{ $done ? 'var(--muted)' : 'var(--ink)' }}; {{ $done ? 'text-decoration: line-through;' : '' }}">
+                            <div style="font-size: 15px; font-weight: 500; color: {{ $short ? 'var(--warn-ink)' : ($done ? 'var(--muted)' : 'var(--ink)') }}; {{ $done ? 'text-decoration: line-through;' : '' }}">
                                 {{ $item->productVariant->product->name }}
                             </div>
                             <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">
                                 {{ $item->productVariant->name }}@if ($firstAlloc) · <span class="font-mono">{{ $firstAlloc->batchItem->batch->batch_code }}</span> @endif
                             </div>
                         </div>
-                        <div class="font-mono text-right" style="font-size: 13px; font-weight: 500; color: {{ $done ? 'var(--accent-ink)' : 'var(--ink)' }};">
+                        <div class="font-mono text-right" style="font-size: 13px; font-weight: 500; color: {{ $short ? 'var(--warn-ink)' : ($done ? 'var(--accent-ink)' : 'var(--ink)') }};">
                             {{ $qtyLabel }}
-                            @if ($item->isVariableWeight())
+                            @if ($short)
+                                <div style="font-size: 10px; margin-top: 1px; font-weight: 400;">short {{ $item->quantity_short }}</div>
+                            @elseif ($item->isVariableWeight())
                                 <div style="font-size: 10px; color: var(--muted); margin-top: 1px; font-weight: 400;">variable</div>
                             @endif
                         </div>
@@ -158,7 +208,7 @@
                         @if ($suggestedBatch)
                             <br>From batch <span class="font-mono">{{ $suggestedBatch['batchItem']->batch->batch_code }}</span> · {{ $suggestedBatch['max'] }} in stock
                         @else
-                            <br><span style="color: var(--warn-ink);">No available stock for this line.</span>
+                            <br><span style="color: var(--warn-ink);">No available stock for this line — open it to mark it short.</span>
                         @endif
                     </div>
                 </div>

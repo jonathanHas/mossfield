@@ -2,9 +2,49 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-07-11
+**Last Updated**: 2026-07-27
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Short supply — closing a line that can't be filled (2026-07-27)
+
+Order 3 surfaced the gap: 4 lines picked, 2 lines with **no stock in the system at all**, and no way forward. `preparing → ready` needed every line fully picked, dispatch needed `ready`, and the invoice needed `hasReachedReady()` — so the order was stuck permanently. `/picking` said "No available stock for this line." and offered nothing but Skip; `/orders/{order}` showed the same warning with no action. The only escapes were to cut the line down (erasing what the customer ordered) or force the status on the edit form's unguarded `<select>`.
+
+A line can now be **closed short** from either surface: the outstanding units are recorded as never-supplied, the line's reservation goes back to stock, the order completes and ships, and the customer is billed only for what went on the van.
+
+- **Derived shortfall, not a stored counter** — `order_items.short_closed_at` + `short_reason`; `quantity_short` computes as `max(0, ordered − fulfilled)`. It can't drift from `quantity_fulfilled`, and `isShortClosed()` self-heals (a line later picked in full stops reporting short, keeping the column as the audit record).
+- **Fixes a live billing bug.** `invoiceable_total` fell back to `line_total` — the *full ordered* quantity — on any not-fully-fulfilled line, so a short order forced through the edit form invoiced goods that were never sent. On order 3 that was **€95 of cheese that has never existed**; its subtotal drops 531.00 → 436.00. The zero branch is explicit because `fulfilled_total` is NULL on a never-picked line.
+- **Three distinct predicates** — `OrderItem::isFullyFulfilled()` (100% picked, unchanged), `isSettled()` (picked or short), `Order::isPickingComplete()` (every line settled). The status boundary moved to the last of these; `Order::isFullyFulfilled()` deliberately kept its meaning so the `/picking` celebration screen doesn't claim a clean pick — it goes amber and reads **"Order closed — short."**
+- **`Order::isFullyAllocated()` also had to learn about it** — a zero-stock short line is `0 >= 10` forever, which would have stranded the auto-allocate banner and the chilled-run "Allocate" offer permanently.
+- **Pre-existing bug fixed alongside**: `MutatesOrderLines::setLineQuantity()` released `old − newQty` instead of `quantity_allocated − newQty`. On an *under-committed* line (ordered 10, picked 4, trimmed to 4) that unwound all the picked stock. The two formulas agree on a fully-committed line, which is why no existing test caught it — there's one now.
+- `short_labels` in `AllocatesOrderStock` (written since the chilled-run work, read nowhere) now names the under-allocated products in the allocate flash instead of "Some lines could not be fully allocated."
+
+Docket gains a **Short** column (`colspan` bumped to 5); the invoice bills the supplied quantity and prints "Not supplied — not charged." rather than dropping the line, so it still reconciles against the customer's PO. Still no € on `/picking` or the chilled-run sheet.
+
+25 new `OrderShortSupplyTest` cases + 1 regression case in `OrderItemEditTest`. Full Feature suite green apart from the 7 known Breeze auth failures.
+
+**Operator action**: none — `php artisan migrate` runs on deploy.
+
+**Follow-up, deliberately not done**: `OrderController::update()` still lets the office set any status from the edit form's free `<select>` with no fulfilment guard and no `reconcilePickingStatus()` call. This feature removes the *need* for that workaround; closing the hole is a separate change with its own blast radius.
+
+---
+
+## Recently Completed: Allocation + day state on the Chilled Run Sheet (2026-07-26)
+
+`/chilled-runs` was the order-**entry** surface but stopped at "Confirm all" — reserving stock meant opening each order page one stop at a time, and a row showed only a "Pending" tag so you couldn't see which stops still needed work. The sheet is now the day's control surface: **enter → Confirm all → Allocate all → floor picks**.
+
+- **Shared FIFO allocator** extracted to `App\Http\Controllers\Concerns\AllocatesOrderStock::autoAllocateOrder()`, returning a result struct so each caller owns its own redirect/flash. Fixes three defects in the old `OrderAllocationController::autoAllocate()`: it had **no `authorize()`** (relied solely on route middleware), no transaction, and counted **allocation rows** rather than units — so a line filled from three batches reported "3 order items". `autoAllocate()` is now a thin caller; behaviour on `orders/show` is unchanged apart from the corrected flash wording.
+- **`BatchItem::allocatable()` scope** — the same 5-clause candidate query was duplicated byte-for-byte in `BuildsAllocationData`, `PickingController::batchOptionsFor()` and `autoAllocate()`. All three now share the scope (each keeps its own PHP predicate).
+- **Run-wide "Allocate all"** (beside Confirm all) + **per-stop "Allocate"**, both office/admin (`chilled-runs.allocate-all` / `.allocate-stop`). Pending orders are deliberately **skipped and named in the flash** — `markPickingStarted()` only promotes from `confirmed`, so allocating a pending order would strand reservations invisible to `/picking`.
+- **Per-row tags** (`Not allocated` / `N/M allocated` / `Allocated` / `N/M picked` / `Ready`) using the `/picking` tone vocabulary, an **Allocated progress bar** in the summary strip, and clickable **order numbers** — previously a dispatched/delivered stop rendered no link at all, so the only route to it was searching `/orders`.
+- **"Stock available" footer row**: free stock per column from **one** `withSum` query (never `available_quantity` in a loop — that accessor fires a SUM per access). Verified flat at 11 queries for both 3 and 30 stops. A column goes red when *still-to-allocate* demand exceeds free stock, so the flag clears once the run is covered.
+- **Unsaved-changes guard generalised** to form buttons, closing a pre-existing gap where "Confirm all" discarded an in-progress row edit via the browser's generic dialog.
+
+Still €-free — the no-€ test now has a sibling covering a sheet with stock, allocations and a pick present. 20 new `ChilledRunTest` cases + a new `AutoAllocateTest`.
+
+**Operator action**: none.
 
 ---
 
@@ -382,6 +422,7 @@ All migrations are up to date including:
 - `2026_01_10_144238_add_variable_weight_to_product_variants_table`
 - `2026_01_10_144304_add_actual_weight_to_order_allocations_table`
 - `2026_01_10_144316_add_fulfilled_weight_to_order_items_table`
+- `2026_07_27_120000_add_short_close_to_order_items_table`
 
 ### Cheese Variants Configuration
 All cheese wheel variants are marked as variable weight:
@@ -402,6 +443,21 @@ Vacuum packs remain fixed weight (variable: no, by_weight: no).
 2. **Test full fulfillment flow** - Enter weights, submit, verify database
 3. **Test undo fulfillment** - Verify stock restoration works
 4. **Online Orders testing** - Test preview and import with live Mossorders instance
+
+### Follow-ups left open by the 2026-07-26 allocation work
+
+Both are pre-existing divergences that predate that change; it deliberately didn't widen its blast radius to fix them.
+
+5. **`BatchItem::available_quantity` double-counts partially-fulfilled allocations.** `getHoldableQuantityAttribute()` sums `quantity_allocated WHERE fulfilled_at IS NULL`, but the already-fulfilled portion of such an allocation has *already* decremented `quantity_remaining`. `StockOverviewService` uses the corrected `quantity_allocated - quantity_fulfilled`. **So `/stock` and the allocator disagree today.** The chilled-run stock footer deliberately mirrors the **allocator** (so it truthfully predicts what "Allocate all" will take), which means `/chilled-runs` can show slightly *less* free stock than `/stock` for the same variant. Fixing the accessor is the real repair but touches every allocation path.
+6. **Expiry `>` vs `>=`.** Every allocation path (now `BatchItem::allocatable()`) uses strict `>`, matching `Batch::isExpired()`; `StockOverviewService` uses `>=`. One-line divergence, needs an owner.
+
+---
+
+## Known Test Noise
+
+`php artisan test` reports **7 pre-existing failures** in `tests/Feature/Auth/{AuthenticationTest,EmailVerificationTest,RegistrationTest}.php` and `tests/Feature/ProfileTest.php`. These are stale Laravel Breeze scaffolding tests for **registration and email verification — both deliberately disabled in this app** (see `CLAUDE.md` → Authentication Flow; the routes were removed, the controllers left behind).
+
+They fail on a clean tree — verified by `git stash`. Don't chase them when a change looks like it broke something; check whether the failing test names are in that set first. Worth deleting or rewriting them at some point so the suite reads green.
 
 ---
 

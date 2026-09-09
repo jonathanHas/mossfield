@@ -21,6 +21,26 @@
         @endif
         <div class="mf-crate-cell" style="flex: 1.4;">
             <div class="flex items-center justify-between gap-3">
+                <span class="mf-eyebrow">Allocated</span>
+                <span class="font-mono text-[12px] font-medium" style="color: {{ $sheet['allocatedPct'] === 100 && $sheet['allocStopsTotal'] > 0 ? 'var(--accent-ink)' : 'var(--ink)' }};">
+                    {{ $sheet['allocatedStops'] }}/{{ $sheet['allocStopsTotal'] }}
+                </span>
+            </div>
+            <div class="mf-bar" style="margin-top: 10px;">
+                <i style="width: {{ $sheet['allocatedPct'] }}%;"></i>
+            </div>
+            <div class="font-mono" style="font-size: 10.5px; color: var(--muted); margin-top: 6px;">
+                @if ($sheet['allocStopsTotal'] === 0)
+                    No orders to allocate this day
+                @elseif ($sheet['allocatedPct'] === 100)
+                    All stops covered &mdash; ready to pick
+                @else
+                    {{ $sheet['allocatedUnits'] }} of {{ $sheet['orderedUnits'] }} units reserved
+                @endif
+            </div>
+        </div>
+        <div class="mf-crate-cell" style="flex: 1.4;">
+            <div class="flex items-center justify-between gap-3">
                 <span class="mf-eyebrow">Loaded</span>
                 <span class="font-mono text-[12px] font-medium" style="color: {{ $sheet['loadedPct'] === 100 && $sheet['loadableCount'] > 0 ? 'var(--accent-ink)' : 'var(--ink)' }};">
                     {{ $sheet['loadedCount'] }}/{{ $sheet['loadableCount'] }}

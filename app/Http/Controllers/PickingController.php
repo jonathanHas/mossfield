@@ -8,6 +8,7 @@ use App\Models\OrderItem;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -39,14 +40,18 @@ class PickingController extends Controller
             ->get();
 
         $pickedUnits = (int) $orders->sum(fn ($order) => $order->orderItems->sum('quantity_fulfilled'));
-        $totalUnits = (int) $orders->sum(fn ($order) => $order->orderItems->sum('quantity_ordered'));
+        // Short-closed units leave the denominator — they're never going to be
+        // picked, so counting them would peg the day's bar below 100% for good.
+        $totalUnits = (int) $orders->sum(
+            fn ($order) => $order->orderItems->sum(fn ($item) => $item->quantity_ordered - $item->quantity_short)
+        );
 
         return view('picking.index', compact('orders', 'pickedUnits', 'totalUnits'));
     }
 
     /**
      * Order overview — line-by-line picking state. Renders the "order ready"
-     * celebration variant once every line is fulfilled.
+     * celebration variant once every line is settled (picked, or closed short).
      */
     public function show(Order $order): View|RedirectResponse
     {
@@ -62,7 +67,9 @@ class PickingController extends Controller
             'orderItems.orderAllocations.batchItem.batch',
         ]);
 
-        $nextItem = $order->orderItems->first(fn ($item) => ! $item->isFullyFulfilled());
+        // Settled, not fulfilled: a short-closed line must drop out of the
+        // queue or the picker is looped back to an impossible line forever.
+        $nextItem = $order->orderItems->first(fn ($item) => ! $item->isSettled());
 
         // FIFO batch suggestion for the "next up" hint.
         $suggestedBatch = $nextItem
@@ -71,7 +78,7 @@ class PickingController extends Controller
 
         // The order after this one in the queue, for the ready screen's "next up" card.
         $nextOrder = null;
-        if ($order->isFullyFulfilled()) {
+        if ($order->isPickingComplete()) {
             $nextOrder = Order::with('orderItems')
                 ->whereIn('status', ['confirmed', 'preparing'])
                 ->whereKeyNot($order->id)
@@ -104,7 +111,7 @@ class PickingController extends Controller
 
         $position = $order->orderItems->search(fn ($item) => $item->id === $orderItem->id) + 1;
         $skipTo = $order->orderItems
-            ->first(fn ($item) => ! $item->isFullyFulfilled() && $item->id !== $orderItem->id);
+            ->first(fn ($item) => ! $item->isSettled() && $item->id !== $orderItem->id);
 
         return view('picking.item', compact('order', 'orderItem', 'batchOptions', 'position', 'skipTo'));
     }
@@ -163,9 +170,9 @@ class PickingController extends Controller
             $message = "Picked {$quantity} × {$orderItem->productVariant->name} ({$weight} kg) from batch {$batchItem->batch->batch_code}.";
         }
 
-        // Advance to the next unpicked line (the current one again if the pick
+        // Advance to the next unsettled line (the current one again if the pick
         // was partial), or back to the overview — which celebrates when done.
-        $next = $order->orderItems->first(fn ($item) => ! $item->isFullyFulfilled());
+        $next = $order->orderItems->first(fn ($item) => ! $item->isSettled());
 
         return $next
             ? redirect()->route('picking.item', [$order, $next])->with('success', $message)
@@ -211,6 +218,70 @@ class PickingController extends Controller
     }
 
     /**
+     * Close the line short — the outstanding units can't be supplied. Releases
+     * the line's reserved-but-unpicked reservation back to stock (picked units
+     * are untouched) and settles the line, so an order whose remaining lines
+     * can never be filled still leaves preparing for ready. Same narrow
+     * fulfill ability as picking itself.
+     */
+    public function markShort(Request $request, Order $order, OrderItem $orderItem): RedirectResponse
+    {
+        $this->authorize('fulfill', $order);
+        abort_if($orderItem->order_id !== $order->id, 404);
+
+        if ($redirect = $this->ensureInQueue($order)) {
+            return $redirect;
+        }
+
+        if ($orderItem->isFullyFulfilled()) {
+            return redirect()->route('picking.item', [$order, $orderItem])
+                ->withErrors(['short' => 'This line is already fully picked — nothing to mark short.']);
+        }
+
+        $validated = $request->validate(['short_reason' => 'nullable|string|max:255']);
+        $shortQty = $orderItem->quantity_remaining;
+
+        DB::transaction(function () use ($order, $orderItem, $validated) {
+            $orderItem->closeShort(($validated['short_reason'] ?? null) ?: 'No stock');
+            $order->calculateTotals();
+            $order->reconcilePickingStatus();
+        });
+
+        $next = $order->fresh()->load('orderItems')->orderItems
+            ->first(fn ($item) => ! $item->isSettled());
+
+        $message = "Marked short — {$shortQty} × {$orderItem->productVariant->name} won't be supplied or billed.";
+
+        return $next
+            ? redirect()->route('picking.item', [$order, $next])->with('success', $message)
+            : redirect()->route('picking.show', $order)->with('success', $message);
+    }
+
+    /**
+     * Reopen a short-closed line — stock arrived, or it was closed by mistake.
+     * The shortfall becomes outstanding work again and the order drops back to
+     * preparing via reconcilePickingStatus(). Does not re-reserve stock.
+     */
+    public function reopenShort(Order $order, OrderItem $orderItem): RedirectResponse
+    {
+        $this->authorize('fulfill', $order);
+        abort_if($orderItem->order_id !== $order->id, 404);
+
+        if ($redirect = $this->ensureInQueue($order)) {
+            return $redirect;
+        }
+
+        DB::transaction(function () use ($order, $orderItem) {
+            $orderItem->reopenShort();
+            $order->calculateTotals();
+            $order->reconcilePickingStatus();
+        });
+
+        return redirect()->route('picking.item', [$order, $orderItem])
+            ->with('success', 'Line reopened — it needs picking again.');
+    }
+
+    /**
      * Orders outside the picking statuses bounce back to the queue.
      */
     private function ensureInQueue(Order $order): ?RedirectResponse
@@ -243,16 +314,9 @@ class PickingController extends Controller
                 fn ($allocation) => $allocation->quantity_allocated - $allocation->quantity_fulfilled
             ));
 
-        return BatchItem::with('batch')
+        return BatchItem::allocatable()
+            ->with('batch')
             ->where('product_variant_id', $orderItem->product_variant_id)
-            ->where('quantity_remaining', '>', 0)
-            ->whereHas('batch', function ($q) {
-                $q->where('status', 'active')
-                    ->where(function ($q) {
-                        $q->whereNull('expiry_date')
-                            ->orWhere('expiry_date', '>', now()->toDateString());
-                    });
-            })
             ->get()
             ->filter(fn ($batchItem) => $reservedByBatchItem->has($batchItem->id) || $batchItem->isAvailableForAllocation())
             ->sortBy(fn ($batchItem) => $batchItem->batch->production_date)

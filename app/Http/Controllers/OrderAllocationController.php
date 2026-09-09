@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AllocatesOrderStock;
 use App\Http\Controllers\Concerns\BuildsAllocationData;
 use App\Models\BatchItem;
 use App\Models\Order;
@@ -13,6 +14,7 @@ use Illuminate\View\View;
 
 class OrderAllocationController extends Controller
 {
+    use AllocatesOrderStock;
     use BuildsAllocationData;
 
     public function index(Request $request): View
@@ -177,80 +179,32 @@ class OrderAllocationController extends Controller
             ->with('success', "Undid fulfillment of {$validated['quantity']} units. Stock has been restored.");
     }
 
+    /**
+     * Reserve available stock across the order, FIFO. The loop itself lives in
+     * AllocatesOrderStock so the chilled run sheet can drive it too.
+     */
     public function autoAllocate(Order $order): RedirectResponse
     {
-        $allocatedItems = 0;
-        $errors = [];
+        $result = $this->autoAllocateOrder($order);
 
-        foreach ($order->orderItems as $orderItem) {
-            $remainingToAllocate = $orderItem->quantity_ordered - $orderItem->quantity_allocated;
-
-            if ($remainingToAllocate <= 0) {
-                continue; // Already fully allocated
-            }
-
-            // Find available batch items (FIFO - First In, First Out)
-            $batchItems = BatchItem::with('batch')
-                ->where('product_variant_id', $orderItem->product_variant_id)
-                ->where('quantity_remaining', '>', 0)
-                ->whereHas('batch', function ($q) {
-                    $q->where('status', 'active')
-                        ->where(function ($q) {
-                            $q->whereNull('expiry_date')
-                                ->orWhere('expiry_date', '>', now()->toDateString());
-                        });
-                })
-                ->get()
-                ->filter(fn ($batchItem) => $batchItem->isAvailableForAllocation())
-                ->sortBy('batch.production_date');
-
-            foreach ($batchItems as $batchItem) {
-                if ($remainingToAllocate <= 0) {
-                    break;
-                }
-
-                $quantityToAllocate = min($remainingToAllocate, $batchItem->available_quantity);
-
-                if ($quantityToAllocate > 0) {
-                    $allocation = $orderItem->allocateFromBatchItem($batchItem, $quantityToAllocate);
-
-                    if ($allocation) {
-                        $allocatedItems++;
-                        $remainingToAllocate -= $quantityToAllocate;
-                    }
-                }
-            }
-
-            if ($remainingToAllocate > 0) {
-                $errors[] = "Could not fully allocate {$orderItem->productVariant->name} - insufficient stock.";
-            }
+        if ($result['units'] === 0) {
+            return redirect()->route('orders.show', $order)
+                ->withErrors(['auto_allocate' => 'No items could be allocated. Check stock availability.']);
         }
 
-        if ($allocatedItems > 0) {
-            $this->markPickingStarted($order);
+        $message = "Auto-allocated {$result['units']} ".str('unit')->plural($result['units'])
+            .' across '.$result['lines_filled'].' '.str('line')->plural($result['lines_filled']).'.';
 
-            $message = "Auto-allocated {$allocatedItems} order items.";
-            if (! empty($errors)) {
-                $message .= ' Some items could not be fully allocated.';
-            }
-
-            return redirect()->route('orders.show', $order)->with('success', $message);
+        if ($result['lines_short'] > 0) {
+            // Name them — these are the lines the office may need to chase or
+            // close short, and "some lines" sent them hunting through the page.
+            $named = array_slice($result['short_labels'], 0, 3);
+            $extra = count($result['short_labels']) - count($named);
+            $message .= ' Not fully allocated: '.implode(', ', $named)
+                .($extra > 0 ? " +{$extra} more" : '').'.';
         }
 
-        return redirect()->route('orders.show', $order)
-            ->withErrors(['auto_allocate' => 'No items could be allocated. Check stock availability.']);
-    }
-
-    /**
-     * Bump a confirmed order to "preparing" once any stock has been allocated.
-     * Keeps the order detail's status stepper in sync with reality so the
-     * user doesn't have to manually flip status via the edit form.
-     */
-    private function markPickingStarted(Order $order): void
-    {
-        if ($order->status === 'confirmed') {
-            $order->update(['status' => 'preparing']);
-        }
+        return redirect()->route('orders.show', $order)->with('success', $message);
     }
 
     /**
@@ -266,7 +220,7 @@ class OrderAllocationController extends Controller
 
         $order->load('orderItems');
 
-        if ($order->isFullyFulfilled()) {
+        if ($order->isPickingComplete()) {
             $order->update(['status' => 'ready']);
         }
     }

@@ -20,16 +20,9 @@ trait BuildsAllocationData
         $availableBatchItems = [];
 
         foreach ($order->orderItems as $orderItem) {
-            $availableBatchItems[$orderItem->id] = BatchItem::with(['batch', 'productVariant'])
+            $availableBatchItems[$orderItem->id] = BatchItem::allocatable()
+                ->with(['batch', 'productVariant'])
                 ->where('product_variant_id', $orderItem->product_variant_id)
-                ->where('quantity_remaining', '>', 0)
-                ->whereHas('batch', function ($q) {
-                    $q->where('status', 'active')
-                        ->where(function ($q) {
-                            $q->whereNull('expiry_date')
-                                ->orWhere('expiry_date', '>', now()->toDateString());
-                        });
-                })
                 ->get()
                 ->filter(fn ($batchItem) => $batchItem->isAvailableForAllocation())
                 ->sortBy('batch.production_date');

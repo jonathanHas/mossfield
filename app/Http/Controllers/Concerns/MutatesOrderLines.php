@@ -17,6 +17,10 @@ use App\Models\ProductVariant;
  *  - Removing a line returns ALL its committed stock before deleting.
  *  - Cancelling keeps the lines as history (never deletes them) while
  *    returning all committed stock — consistent with every other cancel path.
+ *  - Raising a short-closed line's quantity (or dropping it to at most what
+ *    was already picked) clears the short close — new demand must re-enter
+ *    picking instead of riding along as "settled", and a line with no
+ *    shortfall left must stop reporting one.
  *  - line_total recompute is automatic via OrderItem::boot()'s saving hook;
  *    unit_price is locked at line creation from the customer's rate for the
  *    variant (Customer::unitPriceFor — a per-variant special price if set,
@@ -35,11 +39,31 @@ trait MutatesOrderLines
     {
         $old = (int) $line->quantity_ordered;
 
-        if ($qty < $old) {
-            $line->releaseUnits($old - $qty);
+        // Release only what no longer fits — committed units beyond the new
+        // quantity — NOT the drop in ordered quantity. On an under-committed
+        // line the two differ: ordered 10 with 4 picked, trimmed to 4, must
+        // release nothing (the 4 picks still fit), where releasing old − qty
+        // would have unwound all four and handed the stock back. They coincide
+        // whenever the line is fully committed, which is why this never showed
+        // before short-closed lines made under-committed edits routine.
+        $excess = (int) $line->quantity_allocated - $qty;
+
+        if ($excess > 0) {
+            $line->releaseUnits($excess);
         }
 
         $line->quantity_ordered = $qty;
+
+        // Raising the quantity on a short-closed line adds demand nobody has
+        // assessed — reopen it so it re-enters picking rather than riding along
+        // as "settled" on a ready order that nobody will pick again. Dropping to
+        // (or below) what was actually picked leaves no shortfall at all, so the
+        // close is moot: clear it too rather than leave a "Short 0" badge.
+        if ($line->short_closed_at !== null && ($qty > $old || $line->quantity_fulfilled >= $qty)) {
+            $line->short_closed_at = null;
+            $line->short_reason = null;
+        }
+
         $line->save(); // saving() hook recomputes line_total
     }
 

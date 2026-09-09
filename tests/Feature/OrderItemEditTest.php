@@ -128,6 +128,29 @@ class OrderItemEditTest extends TestCase
         $this->assertSame('ready', $order->fresh()->status);
     }
 
+    public function test_reduce_qty_on_an_under_committed_line_keeps_the_picks(): void
+    {
+        // Regression: the release amount is committed-units-that-no-longer-fit,
+        // not the drop in ordered quantity. Ordered 5 with only 2 picked, cut
+        // to 2 — the 2 picks still fit, so nothing may be unwound. Releasing
+        // old − qty (3) would have handed back all the picked stock.
+        $office = User::factory()->create();
+        $order = $this->makeOrder('preparing');
+        $item = $this->addItem($order, $this->variantA, 5);
+        $alloc = $item->allocateFromBatchItem($this->batchItemA, 2);
+        $item->fulfillAllocation($alloc, 2); // batch remaining 10 → 8
+
+        $this->actingAs($office)
+            ->patch(route('orders.items.update', [$order, $item]), ['quantity' => 2])
+            ->assertRedirect(route('orders.show', $order));
+
+        $item->refresh();
+        $this->assertSame(2, $item->quantity_ordered);
+        $this->assertSame(2, $item->quantity_fulfilled);
+        $this->assertSame(8, (int) $this->batchItemA->fresh()->quantity_remaining);
+        $this->assertSame('ready', $order->fresh()->status);
+    }
+
     public function test_increase_qty_on_ready_order_reverts_to_preparing(): void
     {
         $office = User::factory()->create();

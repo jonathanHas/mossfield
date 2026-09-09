@@ -792,4 +792,410 @@ class ChilledRunTest extends TestCase
         $order = Order::where('customer_id', $shop->id)->sole();
         $this->assertSame($nextTuesday->toDateString(), $order->delivery_date->toDateString());
     }
+
+    // ── Allocation ───────────────────────────────────────────────────
+
+    /** Stock for a variant, on its own active batch (older date = earlier FIFO). */
+    private function stock(ProductVariant $variant, int $quantity, array $batchAttrs = []): BatchItem
+    {
+        $batch = Batch::create(array_merge([
+            'product_id' => $variant->product_id,
+            'production_date' => now()->subDay()->toDateString(),
+            'raw_milk_litres' => 100,
+            'status' => 'active',
+        ], $batchAttrs));
+
+        return BatchItem::create([
+            'batch_id' => $batch->id,
+            'product_variant_id' => $variant->id,
+            'quantity_produced' => $quantity,
+            'quantity_remaining' => $quantity,
+            'unit_weight_kg' => 1.0,
+        ]);
+    }
+
+    public function test_allocate_all_reserves_stock_for_the_runs_confirmed_orders(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+
+        $shopA = $this->customerOnRun($run, 'Shop A', 1);
+        $shopB = $this->customerOnRun($run, 'Shop B', 2);
+        $orderA = $this->orderFor($shopA, [[$oneL, 6]], 'confirmed');
+        $orderB = $this->orderFor($shopB, [[$oneL, 4]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertRedirect()
+            ->assertSessionHas('success', fn ($m) => str_contains($m, '10 units')
+                && str_contains($m, '2 orders'));
+
+        $this->assertSame(6, $orderA->orderItems()->sole()->quantity_allocated);
+        $this->assertSame(4, $orderB->orderItems()->sole()->quantity_allocated);
+        // First reservation promotes confirmed → preparing.
+        $this->assertSame('preparing', $orderA->refresh()->status);
+    }
+
+    public function test_allocate_all_skips_pending_orders_and_says_so(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+
+        $shop = $this->customerOnRun($run, 'Unconfirmed Shop');
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'pending');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertRedirect()
+            ->assertSessionHas('error', fn ($m) => str_contains($m, 'Confirm them first'));
+
+        $this->assertSame(0, $order->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_allocate_all_leaves_other_runs_and_other_dates_alone(): void
+    {
+        $run = $this->makeRun();
+        $otherRun = $this->makeRun(['name' => 'Cork', 'sort_order' => 2]);
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 100);
+
+        $onRun = $this->customerOnRun($run, 'On Run');
+        $offRun = $this->customerOnRun($otherRun, 'Other Run');
+
+        $today = $this->orderFor($onRun, [[$oneL, 3]], 'confirmed');
+        $nextWeek = $this->orderFor($onRun, [[$oneL, 3]], 'confirmed', now()->addWeek()->toDateString());
+        $elsewhere = $this->orderFor($offRun, [[$oneL, 3]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertRedirect();
+
+        $this->assertSame(3, $today->orderItems()->sole()->quantity_allocated);
+        $this->assertSame(0, $nextWeek->orderItems()->sole()->quantity_allocated);
+        $this->assertSame(0, $elsewhere->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_allocate_all_draws_from_the_oldest_batch_first(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $older = $this->stock($oneL, 4, ['production_date' => now()->subDays(5)->toDateString()]);
+        $newer = $this->stock($oneL, 20, ['production_date' => now()->subDay()->toDateString()]);
+
+        $shop = $this->customerOnRun($run, 'FIFO Shop');
+        $order = $this->orderFor($shop, [[$oneL, 6]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertRedirect();
+
+        $item = $order->orderItems()->sole();
+        $this->assertSame(4, (int) $item->orderAllocations()->where('batch_item_id', $older->id)->sum('quantity_allocated'));
+        $this->assertSame(2, (int) $item->orderAllocations()->where('batch_item_id', $newer->id)->sum('quantity_allocated'));
+    }
+
+    public function test_allocate_all_reports_shortfall_when_stock_runs_out(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 4);
+
+        $shop = $this->customerOnRun($run, 'Hungry Shop');
+        $order = $this->orderFor($shop, [[$oneL, 10]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertSessionHas('success', fn ($m) => str_contains($m, '4 units')
+                && str_contains($m, 'short of stock'));
+
+        $this->assertSame(4, $order->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_allocate_all_is_idempotent(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+
+        $shop = $this->customerOnRun($run, 'Covered Shop');
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'confirmed');
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->post(route('chilled-runs.allocate-all'), ['run' => $run->id]);
+
+        $this->actingAs($office)
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'already covered'));
+
+        $this->assertSame(5, $order->orderItems()->sole()->quantity_allocated);
+        $this->assertSame(1, $order->orderItems()->sole()->orderAllocations()->count());
+    }
+
+    public function test_allocate_all_ignores_maturing_and_expired_stock(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+
+        $held = $this->stock($oneL, 10);
+        $held->update(['quantity_maturing' => 10]);
+        $this->stock($oneL, 10, ['expiry_date' => now()->subDay()->toDateString()]);
+
+        $shop = $this->customerOnRun($run, 'Blocked Shop');
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertSessionHas('error');
+
+        $this->assertSame(0, $order->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_factory_cannot_allocate_all(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+        $shop = $this->customerOnRun($run, 'Shop');
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'confirmed');
+
+        $factory = User::factory()->factoryWorker()->create();
+
+        $this->actingAs($factory)
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertDontSee('Allocate all');
+
+        $this->actingAs($factory)
+            ->post(route('chilled-runs.allocate-all'), ['run' => $run->id])
+            ->assertForbidden();
+
+        $this->assertSame(0, $order->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_allocate_stop_allocates_only_that_customers_order(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+
+        $mine = $this->customerOnRun($run, 'Mine', 1);
+        $theirs = $this->customerOnRun($run, 'Theirs', 2);
+        $myOrder = $this->orderFor($mine, [[$oneL, 5]], 'confirmed');
+        $theirOrder = $this->orderFor($theirs, [[$oneL, 5]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-stop', $mine), ['run' => $run->id])
+            ->assertRedirect();
+
+        $this->assertSame(5, $myOrder->orderItems()->sole()->quantity_allocated);
+        $this->assertSame(0, $theirOrder->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_allocate_stop_ignores_a_dispatched_order(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+
+        $shop = $this->customerOnRun($run, 'Gone Shop');
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'dispatched');
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.allocate-stop', $shop), ['run' => $run->id])
+            ->assertRedirect();
+
+        $this->assertSame(0, $order->orderItems()->sole()->quantity_allocated);
+        $this->assertSame('dispatched', $order->refresh()->status);
+    }
+
+    public function test_factory_cannot_allocate_a_stop(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+        $shop = $this->customerOnRun($run, 'Shop');
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'confirmed');
+
+        $this->actingAs(User::factory()->factoryWorker()->create())
+            ->post(route('chilled-runs.allocate-stop', $shop), ['run' => $run->id])
+            ->assertForbidden();
+
+        $this->assertSame(0, $order->orderItems()->sole()->quantity_allocated);
+    }
+
+    public function test_allocating_then_editing_down_releases_the_reservation(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $batchItem = $this->stock($oneL, 20);
+
+        $shop = $this->customerOnRun($run, 'Shrinking Shop');
+        $order = $this->orderFor($shop, [[$oneL, 10]], 'confirmed');
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->post(route('chilled-runs.allocate-all'), ['run' => $run->id]);
+        $this->assertSame(10, $order->orderItems()->sole()->quantity_allocated);
+        // Reservations never move stock — only picks do.
+        $this->assertSame(20, $batchItem->refresh()->quantity_remaining);
+        $this->assertSame(10, $batchItem->refresh()->available_quantity);
+
+        $this->actingAs($office)
+            ->post(route('chilled-runs.save-stop', $shop), [
+                'run' => $run->id,
+                'qty' => [$oneL->id => 3],
+            ])
+            ->assertRedirect();
+
+        $this->assertSame(3, $order->orderItems()->sole()->quantity_allocated);
+        $this->assertSame(20, $batchItem->refresh()->quantity_remaining);
+        $this->assertSame(17, $batchItem->refresh()->available_quantity);
+    }
+
+    // ── Allocation display ───────────────────────────────────────────
+
+    public function test_row_shows_allocation_and_pick_progress_tags(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $batchItem = $this->stock($oneL, 20);
+
+        $shop = $this->customerOnRun($run, 'Progress Shop');
+        $order = $this->orderFor($shop, [[$oneL, 10]], 'confirmed');
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->get(route('chilled-runs.index'))->assertSee('Not allocated');
+
+        $item = $order->orderItems()->sole();
+        $allocation = $item->allocateFromBatchItem($batchItem, 4);
+        $this->actingAs($office)->get(route('chilled-runs.index'))->assertSee('4/10 allocated');
+
+        $item->fulfillAllocation($allocation, 4);
+        $this->actingAs($office)->get(route('chilled-runs.index'))->assertSee('4/10 picked');
+    }
+
+    public function test_summary_strip_shows_allocated_progress(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+
+        $covered = $this->customerOnRun($run, 'Covered', 1);
+        $this->customerOnRun($run, 'Bare', 2);
+        $this->orderFor($covered, [[$oneL, 5]], 'confirmed');
+        $this->orderFor($this->customerOnRun($run, 'Waiting', 3), [[$oneL, 5]], 'confirmed');
+
+        $office = User::factory()->create();
+        $this->actingAs($office)->post(route('chilled-runs.allocate-all'), ['run' => $run->id]);
+
+        $this->actingAs($office)
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee('Allocated')
+            ->assertSee('2/2');
+    }
+
+    public function test_stock_footer_shows_available_units_per_column(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 42);
+        $this->customerOnRun($run, 'Shop');
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee('Stock available')
+            ->assertSee('42');
+    }
+
+    public function test_stock_footer_flags_a_column_short_of_stock(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 10);
+
+        $shop = $this->customerOnRun($run, 'Greedy Shop');
+        $this->orderFor($shop, [[$oneL, 30]], 'confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee('1 column short');
+    }
+
+    /**
+     * Regression guard for the "free stock" reading: the shortfall is measured
+     * against what's STILL to allocate, so a covered column must go quiet even
+     * though the run's own reservations have just eaten the free stock.
+     */
+    public function test_stock_footer_does_not_flag_a_column_already_fully_allocated(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 10);
+
+        $shop = $this->customerOnRun($run, 'Exact Shop');
+        $this->orderFor($shop, [[$oneL, 10]], 'confirmed');
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->post(route('chilled-runs.allocate-all'), ['run' => $run->id]);
+
+        $this->actingAs($office)
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertDontSee('column short');
+    }
+
+    public function test_order_numbers_link_to_the_order_page(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $shop = $this->customerOnRun($run, 'Linked Shop');
+        // Dispatched: the row has no Edit link, so this is the only way through.
+        $order = $this->orderFor($shop, [[$oneL, 5]], 'dispatched');
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee(route('orders.show', $order), false);
+    }
+
+    public function test_allocate_all_button_hidden_when_nothing_to_allocate(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 50);
+        $shop = $this->customerOnRun($run, 'Pending Shop');
+        $this->orderFor($shop, [[$oneL, 5]], 'pending');
+        $office = User::factory()->create();
+
+        // Pending orders aren't allocatable — confirm first.
+        $this->actingAs($office)->get(route('chilled-runs.index'))->assertDontSee('Allocate all');
+
+        $this->actingAs($office)->post(route('chilled-runs.confirm-all'), ['run' => $run->id]);
+        $this->actingAs($office)->get(route('chilled-runs.index'))->assertSee('Allocate all');
+
+        $this->actingAs($office)->post(route('chilled-runs.allocate-all'), ['run' => $run->id]);
+        $this->actingAs($office)->get(route('chilled-runs.index'))->assertDontSee('Allocate all');
+    }
+
+    public function test_no_euro_amounts_with_stock_and_allocations_present(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $batchItem = $this->stock($oneL, 20);
+
+        $shop = $this->customerOnRun($run, 'Priced Shop');
+        $order = $this->orderFor($shop, [[$oneL, 10]], 'confirmed');
+        $item = $order->orderItems()->sole();
+        $item->fulfillAllocation($item->allocateFromBatchItem($batchItem, 4), 4);
+        $order->calculateTotals();
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertDontSee('€');
+    }
 }

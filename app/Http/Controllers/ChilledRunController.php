@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AllocatesOrderStock;
 use App\Http\Controllers\Concerns\MutatesOrderLines;
+use App\Models\BatchItem;
 use App\Models\Customer;
 use App\Models\DeliveryRun;
 use App\Models\Order;
@@ -39,10 +41,22 @@ use Illuminate\View\View;
  */
 class ChilledRunController extends Controller
 {
+    use AllocatesOrderStock;
     use MutatesOrderLines;
 
     /** Order statuses a row can still be edited in. */
     private const OPEN_STATUSES = ['pending', 'confirmed', 'preparing', 'ready'];
+
+    /**
+     * Statuses in which an order can be auto-allocated from the sheet.
+     *
+     * Pending is deliberately excluded: markPickingStarted() only promotes
+     * from confirmed, so a pending order would sit on reservations while
+     * staying invisible to /picking. It also keeps the day's flow honest —
+     * enter, Confirm all, Allocate all, pick — and matches the gate on the
+     * order page's own banner (orders/show.blade.php).
+     */
+    private const ALLOCATABLE_STATUSES = ['confirmed', 'preparing'];
 
     /**
      * Day tabs + the selected run's sheet. ?run= selects a run, ?date= anchors
@@ -135,6 +149,154 @@ class ChilledRunController extends Controller
         ]))->with('success', $pending->isEmpty()
             ? 'No pending orders to confirm on this run.'
             : $pending->count().' '.str('order')->plural($pending->count()).' confirmed — now on the picking queue.');
+    }
+
+    /**
+     * Reserve available stock (FIFO, oldest batch first) for every allocatable
+     * order on the selected run/date — the step between "Confirm all" and the
+     * floor picking the load. Office/admin only.
+     */
+    public function allocateAll(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run' => 'required|exists:delivery_runs,id',
+            'date' => 'nullable|date',
+        ]);
+
+        $run = DeliveryRun::findOrFail($validated['run']);
+        $runDate = $run->dateFor($request->filled('date')
+            ? CarbonImmutable::parse($validated['date'])
+            : CarbonImmutable::now());
+
+        $orders = Order::with('orderItems.productVariant')
+            ->whereIn('customer_id', $run->customers()->where('is_active', true)->pluck('id'))
+            ->whereDate('delivery_date', $runDate->toDateString())
+            ->whereIn('status', array_merge(self::ALLOCATABLE_STATUSES, ['pending']))
+            ->get();
+
+        $stats = $this->freshAllocationStats();
+
+        foreach ($orders as $order) {
+            $this->allocateOrderInto($order, $stats);
+        }
+
+        [$key, $message] = $this->allocationFlash($stats);
+
+        return redirect()->route('chilled-runs.index', array_filter([
+            'run' => $run->id,
+            'date' => $request->input('date'),
+        ]))->with($key, $message);
+    }
+
+    /**
+     * Same as allocateAll() for a single stop. Unlike saveStop() this doesn't
+     * refuse when the customer has two orders that day — allocating across
+     * both is unambiguous; only editing them inline is.
+     */
+    public function allocateStop(Request $request, Customer $customer): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run' => 'required|exists:delivery_runs,id',
+            'date' => 'nullable|date',
+        ]);
+
+        $run = DeliveryRun::findOrFail($validated['run']);
+        $runDate = $run->dateFor($request->filled('date')
+            ? CarbonImmutable::parse($validated['date'])
+            : CarbonImmutable::now());
+
+        $stats = $this->freshAllocationStats();
+
+        foreach ($this->ordersFor($customer, $runDate) as $order) {
+            $this->allocateOrderInto($order, $stats);
+        }
+
+        [$key, $message] = $this->allocationFlash($stats);
+
+        return redirect()->to(route('chilled-runs.index', array_filter([
+            'run' => $run->id,
+            'date' => $request->input('date'),
+        ])).'#stop-'.$customer->id)->with($key, "{$customer->name}: {$message}");
+    }
+
+    /** @return array{orders: int, units: int, short: int, skipped_pending: int, already: int} */
+    private function freshAllocationStats(): array
+    {
+        return ['orders' => 0, 'units' => 0, 'short' => 0, 'skipped_pending' => 0, 'already' => 0];
+    }
+
+    /**
+     * Run one order through the shared FIFO allocator, folding the outcome
+     * into the caller's running totals.
+     */
+    private function allocateOrderInto(Order $order, array &$stats): void
+    {
+        if ($order->status === 'pending') {
+            $stats['skipped_pending']++;
+
+            return;
+        }
+
+        if (! in_array($order->status, self::ALLOCATABLE_STATUSES, true)) {
+            return;
+        }
+
+        $order->loadMissing('orderItems');
+
+        // NB isFullyAllocated() is true for an order with no lines, so the
+        // emptiness check has to come first.
+        if ($order->orderItems->isEmpty() || $order->isFullyAllocated()) {
+            $stats['already']++;
+
+            return;
+        }
+
+        $result = $this->autoAllocateOrder($order);
+
+        if ($result['units'] > 0) {
+            $stats['orders']++;
+            $stats['units'] += $result['units'];
+        }
+
+        if ($result['lines_short'] > 0) {
+            $stats['short']++;
+        }
+    }
+
+    /**
+     * Turn the accumulated outcome into one flash. Partial results are named
+     * rather than swallowed — the operator needs to know *why* nothing moved.
+     *
+     * @return array{0: string, 1: string}
+     */
+    private function allocationFlash(array $stats): array
+    {
+        if ($stats['units'] === 0) {
+            if ($stats['skipped_pending'] > 0) {
+                return ['error', "Nothing allocated — {$stats['skipped_pending']} "
+                    .str('order')->plural($stats['skipped_pending']).' still pending. Confirm them first.'];
+            }
+
+            if ($stats['short'] > 0) {
+                return ['error', 'Nothing could be allocated — no free stock for the outstanding lines.'];
+            }
+
+            return ['success', 'Nothing to allocate — every order here is already covered.'];
+        }
+
+        $message = "Allocated {$stats['units']} ".str('unit')->plural($stats['units'])
+            ." across {$stats['orders']} ".str('order')->plural($stats['orders']).'.';
+
+        if ($stats['short'] > 0) {
+            $message .= " {$stats['short']} still short of stock.";
+        }
+
+        if ($stats['skipped_pending'] > 0) {
+            $message .= " {$stats['skipped_pending']} pending "
+                .str('order')->plural($stats['skipped_pending']).' skipped — confirm them first.';
+        }
+
+        return ['success', $message];
     }
 
     /**
@@ -268,12 +430,43 @@ class ChilledRunController extends Controller
         // "edit on the order page" link instead.
         $rows = $customers->map(function ($customer) use ($ordersByCustomer) {
             $orders = $ordersByCustomer->get($customer->id, collect());
+            $items = $orders->flatMap->orderItems;
+
+            // Short-closed units come out of "ordered" for STATS ONLY — they'll
+            // never be allocated or picked, so leaving them in would peg a
+            // settled stop at "partial" and the run's progress bar below 100%
+            // for good. The entry grid ($qtyMap below) keeps raw
+            // quantity_ordered — that's what the customer actually asked for.
+            $short = (int) $items->sum('quantity_short');
+            $ordered = (int) $items->sum('quantity_ordered') - $short;
+            $allocated = (int) $items->sum('quantity_allocated');
+            $picked = (int) $items->sum('quantity_fulfilled');
+
+            // quantity_allocated/_fulfilled are columns on order_items and the
+            // orders are already eager-loaded, so all of this is in-memory —
+            // no query per row.
+            $canAllocate = $orders->contains(fn ($order) => in_array($order->status, self::ALLOCATABLE_STATUSES, true)
+                && $order->orderItems->isNotEmpty()
+                && ! $order->isFullyAllocated());
 
             return [
                 'customer' => $customer,
                 'orders' => $orders,
                 'editable' => $orders->count() <= 1
                     && ($orders->isEmpty() || in_array($orders->first()->status, self::OPEN_STATUSES, true)),
+                'stats' => [
+                    'ordered' => $ordered,
+                    'allocated' => $allocated,
+                    'picked' => $picked,
+                    'short' => $short,
+                    'allocState' => $items->isEmpty() ? 'none'
+                        : ($allocated >= $ordered ? 'allocated' : ($allocated > 0 ? 'partial' : 'unallocated')),
+                    // Same vocabulary as the /picking queue.
+                    'pickState' => $orders->isNotEmpty() && $orders->every(fn ($o) => $o->status === 'ready')
+                        ? 'ready'
+                        : ($picked > 0 ? 'picking' : 'todo'),
+                    'canAllocate' => $canAllocate,
+                ],
             ];
         });
 
@@ -310,13 +503,21 @@ class ChilledRunController extends Controller
 
         // Per-cell quantities: [customer_id][variant_id] => units (sums across
         // multiple same-day orders for the same customer).
+        // $allocatedByVariant rides along in the same pass — it's what the
+        // stock footer compares against free stock (see $stock below).
         $qtyMap = [];
+        $allocatedByVariant = [];
+        $shortByVariant = [];
         foreach ($rows as $row) {
             foreach ($row['orders'] as $order) {
                 foreach ($order->orderItems as $item) {
                     if (isset($columnIds[$item->product_variant_id])) {
                         $qtyMap[$row['customer']->id][$item->product_variant_id] =
                             ($qtyMap[$row['customer']->id][$item->product_variant_id] ?? 0) + $item->quantity_ordered;
+                        $allocatedByVariant[$item->product_variant_id] =
+                            ($allocatedByVariant[$item->product_variant_id] ?? 0) + $item->quantity_allocated;
+                        $shortByVariant[$item->product_variant_id] =
+                            ($shortByVariant[$item->product_variant_id] ?? 0) + $item->quantity_short;
                     }
                 }
             }
@@ -349,6 +550,13 @@ class ChilledRunController extends Controller
             ];
         }
 
+        // Stock footer: free stock per column, and whether this run's still-to-
+        // allocate demand exceeds it. "Free" is what's genuinely left in the
+        // fridge — net of every reservation, this run's included — so once
+        // Allocate all succeeds the shortfall clears and the row re-reads as
+        // what's left for other days.
+        $stock = $this->stockByVariant($fixedCols->merge($cheeseCols), $totals, $allocatedByVariant, $shortByVariant);
+
         $milkUnits = $milkCols->sum(fn ($v) => $totals[$v->id]['units']);
         $milkCrates = $milkCols->sum(fn ($v) => $totals[$v->id]['crates']);
         $yogUnits = $yogCols->sum(fn ($v) => $totals[$v->id]['units']);
@@ -365,6 +573,20 @@ class ChilledRunController extends Controller
             ->count();
         $loadableCount = $stopsWithOrders->count();
 
+        // Allocation progress — same denominator set as the loaded bar, so the
+        // two read consistently.
+        $allocatableCount = $rows->sum(fn ($row) => $row['orders']->filter(
+            fn ($o) => in_array($o->status, self::ALLOCATABLE_STATUSES, true)
+                && $o->orderItems->isNotEmpty()
+                && ! $o->isFullyAllocated()
+        )->count());
+        $allocatedStops = $stopsWithOrders->filter(
+            fn ($row) => $row['stats']['ordered'] > 0
+                && $row['stats']['allocated'] >= $row['stats']['ordered']
+        )->count();
+        $orderedUnits = (int) $rows->sum(fn ($row) => $row['stats']['ordered']);
+        $allocatedUnits = (int) $rows->sum(fn ($row) => $row['stats']['allocated']);
+
         // Edit-mode context for the one row being edited (if any).
         $editRow = $editCustomerId
             ? $rows->first(fn ($row) => $row['customer']->id === $editCustomerId && $row['editable'])
@@ -380,6 +602,7 @@ class ChilledRunController extends Controller
             'yogCols' => $yogCols,
             'cheeseCols' => $cheeseCols,
             'totals' => $totals,
+            'stock' => $stock,
             'milkUnits' => $milkUnits,
             'milkCrates' => $milkCrates,
             'yogUnits' => $yogUnits,
@@ -390,12 +613,79 @@ class ChilledRunController extends Controller
             'loadedCount' => $loadedCount,
             'loadableCount' => $loadableCount,
             'loadedPct' => $loadableCount > 0 ? (int) round($loadedCount / $loadableCount * 100) : 0,
+            'allocatableCount' => $allocatableCount,
+            'allocatedStops' => $allocatedStops,
+            'allocStopsTotal' => $loadableCount,
+            'allocatedPct' => $loadableCount > 0 ? (int) round($allocatedStops / $loadableCount * 100) : 0,
+            'orderedUnits' => $orderedUnits,
+            'allocatedUnits' => $allocatedUnits,
             'editCustomerId' => $editRow ? $editCustomerId : 0,
             'editQuantities' => $editRow ? ($qtyMap[$editCustomerId] ?? []) : [],
             'editCustomerReference' => $editRow ? ($references[$editCustomerId] ?? null) : null,
             'history' => $editRow ? $this->historyFor($editRow['customer'], $editRow['orders']->first()) : [],
             'addLineVariants' => $editRow ? $this->addLineVariants($fixedCols, $cheeseCols) : collect(),
         ];
+    }
+
+    /**
+     * Free stock per column variant, plus whether this run's outstanding
+     * demand exceeds it.
+     *
+     * One query for every column (plus the two eager loads), NOT a read of
+     * BatchItem::available_quantity per row — that accessor fires a SUM on
+     * every access (see getHoldableQuantityAttribute), which would be an N+1
+     * across the sheet's columns. The arithmetic below mirrors it exactly:
+     * remaining − unfulfilled reservations − maturing hold.
+     *
+     * @param  Collection<int, ProductVariant>  $columns
+     * @return array<int, array{free: int, outstanding: int, short: bool}>
+     */
+    private function stockByVariant(Collection $columns, array $totals, array $allocatedByVariant, array $shortByVariant = []): array
+    {
+        if ($columns->isEmpty()) {
+            return [];
+        }
+
+        // No column list on get() — withSum() populates the select via
+        // selectSub, so restricting columns here would be ignored and doing it
+        // earlier would drop batch_id and break the eager load.
+        $byVariant = BatchItem::allocatable()
+            ->whereIn('product_variant_id', $columns->pluck('id'))
+            ->with('batch.product')
+            ->withSum([
+                'orderAllocations as reserved_units' => fn ($q) => $q->whereNull('fulfilled_at'),
+            ], 'quantity_allocated')
+            ->get()
+            ->groupBy('product_variant_id');
+
+        $stock = [];
+
+        foreach ($columns as $variant) {
+            $free = (int) $byVariant->get($variant->id, collect())
+                // The same PHP predicates allocation applies, so the footer can
+                // never promise more than Allocate all will actually take.
+                ->filter(fn ($batchItem) => $batchItem->isReadyToSell() && ! $batchItem->batch->isExpired())
+                ->sum(fn ($batchItem) => max(0, (int) $batchItem->quantity_remaining
+                    - (int) ($batchItem->reserved_units ?? 0)
+                    - (int) $batchItem->quantity_maturing));
+
+            // Short-closed units are no longer demand — nothing will ever be
+            // reserved against them, so leaving them in would light the column
+            // red for good. (The Total units / crates rows above deliberately
+            // keep the raw ordered figures so they still tie back to the cells
+            // in the grid, which is the order-entry surface.)
+            $outstanding = max(0, ($totals[$variant->id]['units'] ?? 0)
+                - ($allocatedByVariant[$variant->id] ?? 0)
+                - ($shortByVariant[$variant->id] ?? 0));
+
+            $stock[$variant->id] = [
+                'free' => $free,
+                'outstanding' => $outstanding,
+                'short' => $outstanding > $free,
+            ];
+        }
+
+        return $stock;
     }
 
     /** The customer's non-cancelled orders for one delivery date. */

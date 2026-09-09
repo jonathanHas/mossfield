@@ -219,10 +219,32 @@
                                         <div class="ad">{{ collect([$customer->address, $customer->city, $customer->postal_code])->filter()->implode(', ') }}</div>
                                     @endif
                                     @if ($hasOrders)
+                                        @php $st = $row['stats']; @endphp
                                         <div class="so">
-                                            {{ $orders->pluck('order_number')->implode(' · ') }}
+                                            @foreach ($orders as $order)
+                                                @can('view', $order)
+                                                    <a href="{{ route('orders.show', $order) }}" data-confirm-unsaved>{{ $order->order_number }}</a>
+                                                @else
+                                                    {{ $order->order_number }}
+                                                @endcan
+                                                @if (! $loop->last) &middot; @endif
+                                            @endforeach
+                                        </div>
+                                        <div class="tags">
                                             @if ($orders->contains(fn ($o) => $o->status === 'pending'))
-                                                <span class="mf-tag mf-tag-warn" style="margin-left: 4px;">Pending</span>
+                                                <span class="mf-tag mf-tag-warn">Pending</span>
+                                            @endif
+                                            @if ($st['allocState'] === 'unallocated')
+                                                <span class="mf-tag mf-tag-neutral">Not allocated</span>
+                                            @elseif ($st['allocState'] === 'partial')
+                                                <span class="mf-tag mf-tag-warn">{{ $st['allocated'] }}/{{ $st['ordered'] }} allocated</span>
+                                            @elseif ($st['allocState'] === 'allocated' && $st['pickState'] === 'todo')
+                                                <span class="mf-tag mf-tag-info">Allocated</span>
+                                            @endif
+                                            @if ($st['pickState'] === 'ready')
+                                                <span class="mf-tag mf-tag-accent">Ready</span>
+                                            @elseif ($st['pickState'] === 'picking')
+                                                <span class="mf-tag mf-tag-info">{{ $st['picked'] }}/{{ $st['ordered'] }} picked</span>
                                             @endif
                                         </div>
                                     @endif
@@ -230,14 +252,24 @@
                                         <div class="so" style="color: var(--muted);">Ref: {{ $sheet['references'][$customer->id] }}</div>
                                     @endif
                                     @if ($canEnter)
-                                        <div class="mt-1.5">
+                                        <div class="acts">
                                             @if ($row['editable'])
                                                 <a class="mf-link text-[12px]" data-confirm-unsaved
                                                    href="{{ route('chilled-runs.index', array_merge($sheetParams, ['edit' => $customer->id])) }}#stop-{{ $customer->id }}">
                                                     {{ $hasOrders ? 'Edit' : 'Enter order' }}
                                                 </a>
                                             @elseif ($orders->count() > 1)
-                                                <a class="mf-link text-[12px]" data-confirm-unsaved href="{{ route('orders.show', $orders->first()) }}">Multiple orders — open</a>
+                                                <span class="text-[12px]" style="color: var(--muted);">Multiple orders &mdash; edit above</span>
+                                            @endif
+                                            @if ($row['stats']['canAllocate'])
+                                                <form method="POST" action="{{ route('chilled-runs.allocate-stop', $customer) }}" style="display: inline-block;">
+                                                    @csrf
+                                                    <input type="hidden" name="run" value="{{ $activeRun->id }}">
+                                                    <input type="hidden" name="date" value="{{ request('date') }}">
+                                                    <button type="submit" class="mf-btn-ghost text-[12px]" style="padding: 2px 8px;"
+                                                            data-confirm-unsaved
+                                                            title="Reserve available stock for this stop, oldest batches first">Allocate</button>
+                                                </form>
                                             @endif
                                         </div>
                                     @endif
@@ -290,6 +322,25 @@
                                 <td class="tot {{ $tint }}">{{ $sheet['totals'][$variant->id]['extra'] ?: '—' }}</td>
                             @endforeach
                             <td></td>
+                        </tr>
+                        {{-- Free stock per column: what's genuinely left after every
+                             reservation. Red where this run still can't be covered. --}}
+                        @php $shortCols = collect($sheet['stock'])->filter(fn ($s) => $s['short'])->count(); @endphp
+                        <tr class="sub-tot">
+                            <td class="lbl" colspan="2">Stock available</td>
+                            @foreach ($milkCols->concat($yogCols)->concat($cheeseCols) as $variant)
+                                @php
+                                    $tint = $variant->product->type === 'milk' ? 'col-milk' : ($variant->product->type === 'yoghurt' ? 'col-yog' : 'col-cheese');
+                                    $s = $sheet['stock'][$variant->id] ?? ['free' => 0, 'outstanding' => 0, 'short' => false];
+                                @endphp
+                                <td class="tot {{ $tint }} {{ $s['short'] ? 'short' : '' }}"
+                                    title="{{ $s['free'] }} free · {{ $s['outstanding'] }} still to allocate">{{ $s['free'] ?: '—' }}</td>
+                            @endforeach
+                            <td class="lbl" style="padding-left: 12px;">
+                                @if ($shortCols > 0)
+                                    <span style="color: var(--danger);">{{ $shortCols }} {{ Str::plural('column', $shortCols) }} short</span>
+                                @endif
+                            </td>
                         </tr>
                     </tfoot>
                 @endif
@@ -378,29 +429,32 @@
                 }
 
                 // In-app guard: before leaving the edit row via a run-sheet link
-                // (other rows' Edit/Enter order, day tabs, week nav), show a labelled
-                // modal ("Keep editing" / "Discard changes") instead of the browser's
-                // generic OK/Cancel confirm.
-                let __stopPendingHref = null;
+                // (other rows' Edit/Enter order, day tabs, week nav) OR a form button
+                // that navigates away (Confirm all, Allocate all, per-stop Allocate),
+                // show a labelled modal ("Keep editing" / "Discard changes") instead of
+                // the browser's generic OK/Cancel confirm.
+                let __stopPendingAction = null;
                 document.addEventListener('click', function (e) {
-                    const a = e.target.closest('a[data-confirm-unsaved]');
-                    if (!a || !window.__stopDirty) return;
+                    const el = e.target.closest('[data-confirm-unsaved]');
+                    if (!el || !window.__stopDirty) return;
                     e.preventDefault();
-                    __stopPendingHref = a.href;
+                    __stopPendingAction = el.tagName === 'A'
+                        ? () => { window.location.href = el.href; }
+                        : () => { el.closest('form')?.submit(); };
                     const nameEl = document.getElementById('stop-discard-name');
                     if (nameEl) nameEl.textContent = window.__stopCustomer || 'this customer';
                     window.dispatchEvent(new CustomEvent('open-modal', { detail: 'discard-stop' }));
                 }, true);
 
                 // "Discard changes": clear the dirty flag (so the beforeunload net stays
-                // silent) and proceed to the link the user clicked. "Keep editing" just
+                // silent) and carry out the action the user clicked. "Keep editing" just
                 // closes the modal via Alpine ($dispatch('close')). Delegated so it works
                 // regardless of where the modal markup sits relative to this script.
                 document.addEventListener('click', function (e) {
                     if (!e.target.closest('#stop-discard-confirm')) return;
                     window.__stopDirty = false;
                     window.dispatchEvent(new CustomEvent('close-modal', { detail: 'discard-stop' }));
-                    if (__stopPendingHref) window.location.href = __stopPendingHref;
+                    if (__stopPendingAction) __stopPendingAction();
                 });
             </script>
 

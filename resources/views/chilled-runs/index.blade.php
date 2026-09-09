@@ -18,11 +18,27 @@
                                 @csrf
                                 <input type="hidden" name="run" value="{{ $activeRun->id }}">
                                 <input type="hidden" name="date" value="{{ request('date') }}">
-                                <button type="submit" class="mf-btn-primary">
+                                <button type="submit" class="mf-btn-primary" data-confirm-unsaved>
                                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
                                         <path d="M20 6L9 17l-5-5" />
                                     </svg>
                                     Confirm all ({{ $sheet['pendingCount'] }})
+                                </button>
+                            </form>
+                        @endcan
+                    @endif
+                    @if ($sheet['allocatableCount'] > 0)
+                        @can('create', App\Models\Order::class)
+                            <form method="POST" action="{{ route('chilled-runs.allocate-all') }}"
+                                  onsubmit="return confirm('Reserve available stock (oldest batches first) for {{ $sheet['allocatableCount'] }} {{ Str::plural('order', $sheet['allocatableCount']) }} on this run?');">
+                                @csrf
+                                <input type="hidden" name="run" value="{{ $activeRun->id }}">
+                                <input type="hidden" name="date" value="{{ request('date') }}">
+                                <button type="submit" class="mf-btn-secondary" data-confirm-unsaved>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
+                                    </svg>
+                                    Allocate all ({{ $sheet['allocatableCount'] }})
                                 </button>
                             </form>
                         @endcan

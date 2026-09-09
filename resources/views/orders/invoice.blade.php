@@ -48,6 +48,7 @@
         table.items .num { text-align: right; font-family: 'DejaVu Sans Mono', monospace; }
         .muted { color: #999; }
         .batch { font-size: 10px; color: #666; margin-top: 2px; font-family: 'DejaVu Sans Mono', monospace; }
+        .short-note { font-size: 10px; color: #8a6d3b; margin-top: 2px; font-style: italic; }
 
         table.totals { margin-top: 14px; margin-left: auto; border-collapse: collapse; }
         table.totals td { padding: 4px 8px; font-size: 12px; }
@@ -158,8 +159,21 @@
                         @if(count($item->batch_codes))
                             <div class="batch">Batch: {{ implode(', ', $item->batch_codes) }}</div>
                         @endif
+                        @if($item->isShortClosed())
+                            {{-- The line stays on the invoice even at €0.00: the
+                                 customer ordered it and needs to see it was
+                                 acknowledged and not charged, and it has to agree
+                                 with the docket, which shows it. --}}
+                            <div class="short-note">
+                                @if($item->quantity_fulfilled === 0)
+                                    Not supplied — not charged.
+                                @else
+                                    {{ $item->quantity_short }} of {{ $item->quantity_ordered }} not supplied — not charged.
+                                @endif
+                            </div>
+                        @endif
                     </td>
-                    <td class="num">{{ $item->quantity_ordered }}</td>
+                    <td class="num">{{ $item->invoiceable_quantity }}</td>
                     <td class="num">{{ $item->unit_price_label }}</td>
                     <td class="num">€{{ number_format($item->invoiceable_total, 2) }}</td>
                 </tr>

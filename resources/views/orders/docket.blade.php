@@ -122,8 +122,9 @@
         <thead>
             <tr>
                 <th>Product</th>
-                <th style="text-align: right; width: 90px;">Ordered</th>
-                <th style="text-align: right; width: 90px;">Picked</th>
+                <th style="text-align: right; width: 80px;">Ordered</th>
+                <th style="text-align: right; width: 80px;">Picked</th>
+                <th style="text-align: right; width: 70px;">Short</th>
                 <th style="text-align: right; width: 100px;">Weight (kg)</th>
             </tr>
         </thead>
@@ -135,9 +136,22 @@
                         @if(count($item->batch_codes))
                             <div class="batch">Batch: {{ implode(', ', $item->batch_codes) }}</div>
                         @endif
+                        @if($item->isShortClosed())
+                            {{-- Spelled out as well as columned, so it survives a
+                                 black-and-white print where a column of numbers
+                                 doesn't read at a glance. --}}
+                            <div class="batch" style="color: #b45309;">Short supplied — {{ $item->quantity_short }} not sent</div>
+                        @endif
                     </td>
                     <td class="num">{{ $item->quantity_ordered }}</td>
                     <td class="num">{{ $item->quantity_fulfilled }}</td>
+                    <td class="num">
+                        @if($item->quantity_short > 0)
+                            {{ $item->quantity_short }}
+                        @else
+                            <span class="muted">—</span>
+                        @endif
+                    </td>
                     <td class="num">
                         @if($item->isVariableWeight() && $item->weight_fulfilled_kg)
                             {{ number_format($item->weight_fulfilled_kg, 3) }}
@@ -148,7 +162,7 @@
                 </tr>
             @empty
                 <tr>
-                    <td colspan="4" class="muted" style="text-align: center; padding: 16px;">No items on this order.</td>
+                    <td colspan="5" class="muted" style="text-align: center; padding: 16px;">No items on this order.</td>
                 </tr>
             @endforelse
         </tbody>

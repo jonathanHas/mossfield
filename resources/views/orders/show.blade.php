@@ -261,6 +261,33 @@
                     </div>
                 @endif
 
+                {{-- Short supply — shown at every status, not just during picking:
+                     the invoice and docket carry the shortfall long after the
+                     order has shipped. --}}
+                @php $shortLines = $order->orderItems->filter(fn ($item) => $item->isShortClosed()); @endphp
+                @if($shortLines->isNotEmpty())
+                    <div class="mf-flash mf-flash-warn mb-6">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;">
+                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" /><path d="M12 9v4" /><path d="M12 17h.01" />
+                        </svg>
+                        <div>
+                            <b>Supplied short.</b>
+                            {{ $shortLines->sum('quantity_short') }} units across
+                            {{ $shortLines->count() }} {{ Str::plural('line', $shortLines->count()) }} weren't supplied.
+                            @can('see-financials') They're excluded from the invoice. @endcan
+                            <ul class="mt-1.5 ml-4 list-disc text-[12.5px]">
+                                @foreach($shortLines as $shortLine)
+                                    <li>
+                                        {{ $shortLine->productVariant->full_name }} —
+                                        {{ $shortLine->quantity_short }} of {{ $shortLine->quantity_ordered }} not supplied
+                                        @if(filled($shortLine->short_reason)) ({{ $shortLine->short_reason }}) @endif
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    </div>
+                @endif
+
                 {{-- Items --}}
                 <div class="flex items-center justify-between mb-3.5">
                     <h2 class="text-[15px] font-semibold" style="letter-spacing: -0.01em;">
@@ -291,7 +318,7 @@
 
                     {{-- Handoff cue: fully allocated, awaiting weigh/pack. Complement of the
                          auto-allocate banner above, so the two never show together. --}}
-                    @if(in_array($order->status, ['confirmed', 'preparing'], true) && $order->orderItems->isNotEmpty() && $order->isFullyAllocated() && ! $order->isFullyFulfilled())
+                    @if(in_array($order->status, ['confirmed', 'preparing'], true) && $order->orderItems->isNotEmpty() && $order->isFullyAllocated() && ! $order->isPickingComplete())
                         <div class="mf-flash mf-flash-success mb-4">
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" /><path d="M22 4 12 14.01l-3-3" /></svg>
                             <div>
@@ -316,6 +343,11 @@
                                             <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--accent-ink);">
                                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3 3 5-6"/></svg>
                                                 {{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} fulfilled
+                                            </span>
+                                        @elseif($item->isShortClosed())
+                                            <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--warn-ink);">
+                                                <span class="inline-block rounded-full" style="width: 7px; height: 7px; background: var(--warn);"></span>
+                                                Short {{ $item->quantity_short }} — {{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} supplied
                                             </span>
                                         @else
                                             <span class="font-mono">{{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} fulfilled</span>

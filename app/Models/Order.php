@@ -153,7 +153,11 @@ class Order extends Model
     public function isFullyAllocated(): bool
     {
         return $this->orderItems->every(function ($item) {
-            return $item->quantity_allocated >= $item->quantity_ordered;
+            // A short-closed line will never be allocated any further, so
+            // treating it as outstanding would leave the auto-allocate banner
+            // and the chilled-run sheet's "Allocate" offer up forever.
+            return $item->quantity_allocated >= $item->quantity_ordered
+                || $item->isShortClosed();
         });
     }
 
@@ -163,6 +167,28 @@ class Order extends Model
             && $this->orderItems->every(function ($item) {
                 return $item->quantity_fulfilled >= $item->quantity_ordered;
             });
+    }
+
+    /**
+     * Every line is done with picking — fully picked OR closed short. This, not
+     * isFullyFulfilled(), is what gates the preparing → ready promotion: an
+     * order whose remaining lines can never be filled must still be able to
+     * ship. isFullyFulfilled() deliberately keeps meaning "100% supplied" so
+     * screens that celebrate a clean pick don't start lying about short orders.
+     */
+    public function isPickingComplete(): bool
+    {
+        return $this->orderItems->isNotEmpty()
+            && $this->orderItems->every(fn ($item) => $item->isSettled());
+    }
+
+    /**
+     * Whether any line was closed short — drives the short-supply banners and
+     * keeps the picking celebration screen honest.
+     */
+    public function hasShortLines(): bool
+    {
+        return $this->orderItems->contains(fn ($item) => $item->isShortClosed());
     }
 
     public function canBeCancelled(): bool
@@ -187,14 +213,18 @@ class Order extends Model
      * change: a ready order with unpicked work drops to preparing, and a
      * fully-picked preparing order advances to ready. Intentionally one-
      * directional around that boundary — never demotes preparing → confirmed.
+     *
+     * Short-closed lines count as settled (isPickingComplete), so an order
+     * whose remaining lines can never be filled still promotes to ready and
+     * can be dispatched and invoiced.
      */
     public function reconcilePickingStatus(): void
     {
         $this->load('orderItems');
 
-        if ($this->status === 'ready' && ! $this->isFullyFulfilled()) {
+        if ($this->status === 'ready' && ! $this->isPickingComplete()) {
             $this->update(['status' => 'preparing']);
-        } elseif ($this->status === 'preparing' && $this->isFullyFulfilled()) {
+        } elseif ($this->status === 'preparing' && $this->isPickingComplete()) {
             $this->update(['status' => 'ready']);
         }
     }

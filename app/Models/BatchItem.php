@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -23,6 +24,27 @@ class BatchItem extends Model
         'quantity_maturing' => 'integer',
         'unit_weight_kg' => 'decimal:3',
     ];
+
+    /**
+     * Candidates for allocation: stock left, on an active, non-expired batch.
+     *
+     * This is only the SQL half of "available" — the maturing hold, the cheese
+     * ready_date and the reservation arithmetic stay in PHP (see
+     * isAvailableForAllocation() / getAvailableQuantityAttribute()), so every
+     * caller still filters the result. Expiry is strict (`>`), matching
+     * Batch::isExpired(): a batch expiring today is already expired.
+     */
+    public function scopeAllocatable(Builder $query): Builder
+    {
+        return $query->where('quantity_remaining', '>', 0)
+            ->whereHas('batch', function ($q) {
+                $q->where('status', 'active')
+                    ->where(function ($q) {
+                        $q->whereNull('expiry_date')
+                            ->orWhere('expiry_date', '>', now()->toDateString());
+                    });
+            });
+    }
 
     public function batch(): BelongsTo
     {

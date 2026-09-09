@@ -558,6 +558,19 @@
     font-size: 9px; letter-spacing: 0.4px; color: var(--warn-ink);
 }
 
+/* Order-number links in the stop cell — keep the mono/faint treatment, just
+   signal they're clickable. */
+.mf-run .cust .so a { color: inherit; text-decoration: underline; text-decoration-style: dotted; text-underline-offset: 2px; }
+.mf-run .cust .so a:hover { color: var(--ink); text-decoration-style: solid; }
+
+/* Status/progress tags and the office action row under the stop name. */
+.mf-run .cust .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin-top: 5px; }
+.mf-run .cust .acts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+
+/* Stock-available footer: a column whose outstanding demand exceeds free
+   stock. Out-specifies the .col-* column tints above. */
+.mf-run tfoot tr.sub-tot .tot.short { color: var(--danger); background: var(--danger-soft); font-weight: 600; }
+
 /* ── Mature conversion (/cheese-conversion) — wheel allocator ───────────── */
 .mc-scope {
     /* farmhouse (young) wheel — straw; mature (aged) — deep amber */
