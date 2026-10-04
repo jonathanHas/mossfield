@@ -98,13 +98,14 @@
                                 };
                             @endphp
                             <tr style="border-top: 1px solid var(--line-2);">
-                                <td class="mf-td font-mono text-[12.5px]">
+                                {{-- nowrap: order numbers and statuses broke mid-word at phone width (F-31); the table scrolls sideways instead. --}}
+                                <td class="mf-td font-mono text-[12.5px] whitespace-nowrap">
                                     <a href="{{ route('orders.show', array_merge($rowFilters, ['order' => $order->id])) }}" class="mf-link">{{ $order->order_number }}</a>
                                 </td>
                                 <td class="mf-td">{{ $order->customer->name }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d/m/Y') }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->delivery_date ? $order->delivery_date->format('d/m/Y') : '—' }}</td>
-                                <td class="mf-td">
+                                <td class="mf-td whitespace-nowrap">
                                     <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span>
                                     @if($order->hasReachedReady())
                                         <a href="{{ route('orders.docket', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View dispatch docket in a new window">Docket</a>

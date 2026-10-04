@@ -61,7 +61,7 @@
                 </div>
                 <div>
                     <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Raw milk used</dt>
-                    <dd class="mt-0.5 font-mono">{{ number_format($batch->raw_milk_litres, 2) }} L</dd>
+                    <dd class="mt-0.5 font-mono">{{ $batch->hasNoRawMilkOfItsOwn() ? '—' : number_format($batch->raw_milk_litres, 2).' L' }}</dd>
                     @if($batch->wheels_produced && $batch->product->type === 'cheese')
                         <div class="text-[11.5px] mt-0.5" style="color: var(--muted);">{{ $batch->wheels_produced }} wheels produced</div>
                     @endif
@@ -98,7 +98,7 @@
                     <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Ready date</dt>
                     <dd class="mt-0.5 font-mono">{{ $batch->ready_date->format('d/m/Y') }}</dd>
                     @if(!$batch->isReadyToSell())
-                        <div class="text-[11.5px] mt-0.5" style="color: var(--warn-ink);">{{ $batch->ready_date->diffForHumans() }}</div>
+                        <div class="text-[11.5px] mt-0.5" style="color: var(--warn-ink);">{{ $batch->readyIn() }}</div>
                     @else
                         <div class="text-[11.5px] mt-0.5" style="color: var(--accent-ink);">Ready now</div>
                     @endif
@@ -118,7 +118,7 @@
                 <div>
                     <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Stock remaining</dt>
                     <dd class="mt-0.5 font-mono font-semibold text-[15px]" style="color: {{ $batch->remaining_stock > 0 ? 'var(--accent-ink)' : 'var(--danger)' }};">
-                        {{ $batch->remaining_stock }} units
+                        {{ $batch->remaining_label }}
                     </dd>
                 </div>
             </dl>
@@ -156,7 +156,8 @@
                             @foreach($batch->batchItems as $item)
                                 <tr style="border-top: 1px solid var(--line-2);">
                                     <td class="mf-td font-medium">{{ $item->productVariant->name }}</td>
-                                    <td class="mf-td" style="color: var(--muted);">{{ $item->productVariant->size }} {{ $item->productVariant->unit }}</td>
+                                    {{-- "wheel wheel" when size and unit are the same word (F-11). --}}
+                                    <td class="mf-td" style="color: var(--muted);">{{ $item->productVariant->size }}@if(strcasecmp((string) $item->productVariant->size, (string) $item->productVariant->unit) !== 0) {{ $item->productVariant->unit }}@endif</td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $item->unit_weight_kg ? number_format($item->unit_weight_kg, 3) . ' kg' : '—' }}</td>
                                     @php
                                         // Every unit in exactly one state — the same breakdown the

@@ -98,6 +98,11 @@ class OrderAllocationController extends Controller
             return "This line is already fully allocated ({$allocated} of {$orderItem->quantity_ordered}).";
         }
 
+        $needed = $orderItem->quantity_ordered - $allocated;
+        if ($quantity > $needed) {
+            return "This line only needs {$needed} more — allocate at most that many.";
+        }
+
         $available = $batchItem->fresh()->available_quantity;
         if ($available < $quantity) {
             return 'Only '.$available.' '.Str::plural('unit', $available).' '.($available === 1 ? 'is' : 'are').' available in this batch right now.';

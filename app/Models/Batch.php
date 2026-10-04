@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Str;
 
 class Batch extends Model
 {
@@ -145,6 +146,129 @@ class Batch extends Model
     public function isExpired(): bool
     {
         return $this->expiry_date ? $this->expiry_date->lt(now()) : false;
+    }
+
+    /**
+     * What's left, per variant: "10 wheels · 18 packs" (F-14) — summing
+     * wheels and packs into "29 units" said nothing. Uses the loaded
+     * batchItems.productVariant when present. Variants sharing a unit (1L
+     * and 2L bottles) are named instead: "214 × 1L Bottle · 80 × 2L Bottle".
+     * A single-variant batch keeps "N units".
+     */
+    public function getRemainingLabelAttribute(): string
+    {
+        $items = ($this->relationLoaded('batchItems') ? $this->batchItems : $this->batchItems()->get())
+            ->loadMissing('productVariant')
+            ->filter(fn ($item) => (int) $item->quantity_produced > 0)
+            ->values();
+
+        if ($items->count() <= 1) {
+            $qty = (int) $items->sum('quantity_remaining');
+
+            return $qty.' '.Str::plural('unit', $qty);
+        }
+
+        $units = $items->map(fn ($item) => strtolower((string) $item->productVariant?->unit));
+        $byUnit = $units->unique()->count() === $items->count() && $units->every(fn ($unit) => $unit !== '');
+
+        return $items->map(function ($item) use ($byUnit) {
+            $qty = (int) $item->quantity_remaining;
+
+            return $byUnit
+                ? $qty.' '.Str::plural($item->productVariant->unit, $qty)
+                : $qty.' × '.$item->productVariant->name;
+        })->implode(' · ');
+    }
+
+    /**
+     * The ready-date countdown: exact days inside ~3 months ("in 60 days" —
+     * diffForHumans() said "1 month from now"), the relative phrase beyond.
+     */
+    public function readyIn(): ?string
+    {
+        if (! $this->ready_date) {
+            return null;
+        }
+
+        $days = (int) today()->diffInDays($this->ready_date->copy()->startOfDay(), false);
+
+        return match (true) {
+            $days === 0 => 'today',
+            abs($days) >= 90 => $this->ready_date->diffForHumans(),
+            $days > 0 => 'in '.$days.' '.Str::plural('day', $days),
+            default => abs($days).' '.Str::plural('day', abs($days)).' ago',
+        };
+    }
+
+    /** A converted Mature batch carries no raw milk of its own (it came from its source). */
+    public function hasNoRawMilkOfItsOwn(): bool
+    {
+        return $this->source_batch_id !== null && (float) $this->raw_milk_litres == 0.0;
+    }
+
+    /**
+     * Why this batch can't be deleted, or null when it can. The one place the
+     * rule lives: the /batches card hides Delete on it, BatchController::destroy()
+     * refuses on it.
+     */
+    public function deletionBlocker(): ?string
+    {
+        ['allocations' => $allocations, 'cuts' => $cuts, 'conversions' => $conversions] = $this->dependentCounts();
+
+        $reasons = [];
+        if ($allocations) {
+            $reasons[] = $allocations.' order '.($allocations === 1 ? 'allocation' : 'allocations');
+        }
+        if ($cuts) {
+            $reasons[] = $cuts.' cheese-cutting '.($cuts === 1 ? 'record' : 'records');
+        }
+        if ($conversions) {
+            $reasons[] = $conversions.' mature-conversion '.($conversions === 1 ? 'record' : 'records');
+        }
+
+        if (! $reasons) {
+            return null;
+        }
+
+        return 'Batch '.$this->batch_code.' can\'t be deleted — '.implode(' and ', $reasons).
+            ' depend on it, and deleting it would destroy that traceability. '.
+            'Set its status to sold out or expired instead to take it out of circulation.';
+    }
+
+    /** How many records hold the batch in place (the card's "Can't delete — N records …"). */
+    public function dependentRecordCount(): int
+    {
+        return array_sum($this->dependentCounts());
+    }
+
+    /**
+     * Allocations, cutting logs and conversion logs under this batch's items.
+     * Reads the *_count attributes from loaded batchItems when the caller
+     * eager-loaded them (BatchController::index()), else one withCount query.
+     *
+     * @return array{allocations: int, cuts: int, conversions: int}
+     */
+    private function dependentCounts(): array
+    {
+        $keys = ['order_allocations_count', 'source_cutting_logs_count', 'target_cutting_logs_count',
+            'source_conversion_logs_count', 'target_conversion_logs_count'];
+
+        $items = $this->relationLoaded('batchItems')
+            && $this->batchItems->every(fn ($item) => collect($keys)->every(fn ($k) => array_key_exists($k, $item->getAttributes())))
+            ? $this->batchItems
+            : $this->batchItems()->withCount([
+                'orderAllocations',
+                'sourceCuttingLogs',
+                'targetCuttingLogs',
+                'sourceConversionLogs',
+                'targetConversionLogs',
+            ])->get();
+
+        return [
+            'allocations' => (int) $items->sum('order_allocations_count'),
+            'cuts' => (int) $items->sum('source_cutting_logs_count') + (int) $items->sum('target_cutting_logs_count'),
+            'conversions' => (int) $items->sum('source_conversion_logs_count') + (int) $items->sum('target_conversion_logs_count'),
+        ];
     }
 
     public function getRemainingStockAttribute(): int

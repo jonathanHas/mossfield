@@ -13,13 +13,21 @@
     $feedbackErrors = $errors->getBag('default')->all();
 @endphp
 @if ($feedbackFlashes->isNotEmpty() || $feedbackErrors)
-    <div class="px-6 pt-5 flex flex-col gap-2" role="status" aria-live="polite">
+    {{-- Sticky (.mf-feedback): a redirect that lands on #line-… / #stop-…
+         scrolls the page, and the message must still be in view. Each one
+         can be dismissed. --}}
+    <div class="mf-feedback px-6 pt-5 pb-2 flex flex-col gap-2" role="status" aria-live="polite"
+         x-data="{ open: {{ $feedbackFlashes->count() + ($feedbackErrors ? 1 : 0) }} }" x-show="open > 0">
         @foreach ($feedbackFlashes as $flash)
-            <div class="mf-flash mf-flash-{{ $flash['tone'] }}" style="margin-bottom: 0;">{{ $flash['text'] }}</div>
+            <div class="mf-flash mf-flash-{{ $flash['tone'] }}" style="margin-bottom: 0;" x-data="{ show: true }" x-show="show">
+                <div class="flex-1">{{ $flash['text'] }}</div>
+                <button type="button" class="mf-feedback-close" @click="show = false; open--" aria-label="Dismiss message">&times;</button>
+            </div>
         @endforeach
         @if ($feedbackErrors)
-            <div class="mf-flash mf-flash-error" style="margin-bottom: 0;">
-                <div>
+            <div class="mf-flash mf-flash-error" style="margin-bottom: 0;" x-data="{ show: true }" x-show="show">
+                <button type="button" class="mf-feedback-close order-last" @click="show = false; open--" aria-label="Dismiss message">&times;</button>
+                <div class="flex-1">
                     @if (count($feedbackErrors) > 1)
                         <strong>Please fix the following:</strong>
                         <ul class="mt-1 list-disc list-inside text-[12.5px]">

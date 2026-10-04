@@ -8,7 +8,8 @@
 //   <a href="…" data-confirm="Message">              confirm before navigating
 //
 // Optional: data-confirm-title, data-confirm-label (OK button text),
-// data-confirm-danger (red OK button).
+// data-confirm-cancel-label (Cancel button text, default "Cancel"),
+// data-confirm-danger (red OK button). Each is reset on every open.
 //
 // Confirmed submits go through form.requestSubmit(submitter) so the clicked
 // button's name/value is still posted and submit listeners still run.
@@ -29,6 +30,7 @@ function open(el, action) {
     const title = document.getElementById('confirm-action-title');
     const message = document.getElementById('confirm-action-message');
     const ok = document.getElementById('confirm-action-ok');
+    const cancel = document.getElementById('confirm-action-cancel');
     if (!title || !message || !ok) {
         // A page outside both layouts has no dialog markup: never let a
         // destructive action through unasked — fall back to the browser.
@@ -38,6 +40,9 @@ function open(el, action) {
     title.textContent = el.dataset.confirmTitle || 'Are you sure?';
     message.textContent = el.dataset.confirm || '';
     ok.textContent = el.dataset.confirmLabel || 'Confirm';
+    if (cancel) {
+        cancel.textContent = el.dataset.confirmCancelLabel || 'Cancel';
+    }
     const danger = el.hasAttribute('data-confirm-danger');
     ok.classList.toggle('mf-btn-danger', danger);
     ok.classList.toggle('mf-btn-primary', !danger);

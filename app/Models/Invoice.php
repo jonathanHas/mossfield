@@ -195,7 +195,9 @@ class Invoice extends Model implements EmailableDocument
             'void' => 'Void',
             'paid' => 'Paid',
             'overdue' => 'Overdue',
-            'partial' => 'Part paid',
+            // Credit notes alone also make an invoice "partial" — that isn't a
+            // payment, so don't call it one (F-38). The state value is unchanged.
+            'partial' => (float) $this->amount_paid == 0.0 ? 'Credited' : 'Part paid',
             default => 'Unpaid',
         };
     }

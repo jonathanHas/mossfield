@@ -154,4 +154,29 @@ class OrderAllocationConcurrencyTest extends TestCase
             'batch_item_id' => $this->batchItem->id, 'quantity' => 9,
         ])->assertSessionHasErrors(['quantity' => 'Only 8 units are available in this batch right now.']);
     }
+
+    public function test_asking_for_more_than_the_line_needs_says_how_many_it_needs(): void
+    {
+        $office = \App\Models\User::factory()->create();
+        $this->batchItem->update(['quantity_produced' => 50, 'quantity_remaining' => 50]);
+        $line = $this->makeOrderItem(quantityOrdered: 10);
+        $line->allocateFromBatchItem($this->batchItem, 6);
+
+        $this->actingAs($office)->post(route('order-allocations.allocate', $line), [
+            'batch_item_id' => $this->batchItem->id, 'quantity' => 5,
+        ])->assertSessionHasErrors(['quantity' => 'This line only needs 4 more — allocate at most that many.']);
+        $this->assertSame(6, (int) $line->fresh()->quantity_allocated);
+
+        // Exactly what it needs allocates. (A second batch: topping up the
+        // same batch's reservation through allocate() hits the unique
+        // (order_item, batch_item) index — a separate, pre-existing gap.)
+        $second = BatchItem::create([
+            'batch_id' => $this->batch->id, 'product_variant_id' => $this->variant->id,
+            'quantity_produced' => 50, 'quantity_remaining' => 50, 'unit_weight_kg' => 1.030,
+        ]);
+        $this->actingAs($office)->post(route('order-allocations.allocate', $line), [
+            'batch_item_id' => $second->id, 'quantity' => 4,
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(10, (int) $line->fresh()->quantity_allocated);
+    }
 }

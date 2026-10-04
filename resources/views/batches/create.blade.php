@@ -156,7 +156,7 @@
                                 <div>
                                     <label class="mf-label">${variant.name}</label>
                                     <input type="hidden" name="batch_items[${index}][variant_id]" value="${variant.id}">
-                                    <p class="text-[12px]" style="color: var(--muted);">${variant.size} ${variant.unit}</p>
+                                    <p class="text-[12px]" style="color: var(--muted);">${variant.size}${String(variant.size).toLowerCase() === String(variant.unit).toLowerCase() ? '' : ' ' + variant.unit}</p>
                                     ${isCheese && isWheelVariant ? '<p class="text-[11.5px] mt-1" style="color: var(--accent-ink);">✓ Produced during initial batch</p>' : ''}
                                 </div>
                                 <div>

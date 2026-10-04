@@ -497,6 +497,7 @@
                                     <input type="hidden" name="{{ $name }}" value="{{ $value }}">
                                 @endforeach
                                 <button type="submit" class="mf-link" style="color: var(--danger);"
+                                    data-confirm-title="Cancel this order?" data-confirm-cancel-label="Keep order"
                                     data-confirm="Are you sure you want to cancel this order? Any picked stock will be returned to its batch." data-confirm-label="Cancel order" data-confirm-danger>
                                     Cancel order
                                 </button>

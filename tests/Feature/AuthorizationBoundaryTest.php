@@ -42,8 +42,11 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
         'logout', 'password.update', 'password.confirm',
     ];
 
-    /** `/` redirects by auth state; `up` is the health check. Neither is a page. */
-    private const UNGUARDED_URIS = ['/', 'up'];
+    /**
+     * `/` redirects by auth state; `up` is the health check; the fallback
+     * (`Route::fallback`, last in web.php) only ever aborts 404. None is a page.
+     */
+    private const UNGUARDED_URIS = ['/', 'up', '{fallbackPlaceholder}'];
 
     /** Shared-group writes factory may perform — the only two policy carve-outs. */
     private const FACTORY_WRITE_CARVE_OUTS = [

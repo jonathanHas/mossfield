@@ -176,4 +176,17 @@ class LayoutFeedbackTest extends TestCase
 
         $this->assertSame(2, $wheel->fresh()->quantity_maturing, 'nothing was released');
     }
+
+    public function test_the_feedback_region_is_sticky_and_dismissible(): void
+    {
+        $html = $this->actingAs($this->office)
+            ->withSession(['success' => 'Item quantity updated.'])
+            ->get(route('orders.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertSame(1, substr_count($html, 'Item quantity updated.'));
+        $this->assertStringContainsString('class="mf-feedback ', $html);
+        $this->assertStringContainsString('aria-label="Dismiss message"', $html);
+    }
 }

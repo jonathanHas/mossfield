@@ -58,6 +58,9 @@ class DispatchConfirmationTest extends InvoicingTestCase
         $this->assertSame('application/pdf', $response->headers->get('content-type'));
         $this->assertStringContainsString('dispatch-confirmation-'.$order->order_number.'.pdf', $response->headers->get('content-disposition'));
         $this->assertStringStartsWith('%PDF', $response->getContent());
+        // Fonts are subset (config/dompdf.php), not embedded whole: a one-page
+        // document was ~1.4 MB (E2E F-34).
+        $this->assertLessThan(300 * 1024, strlen($response->getContent()));
     }
 
     public function test_it_is_unavailable_before_the_order_is_ready(): void

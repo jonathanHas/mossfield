@@ -84,11 +84,14 @@ Display, Routing and Infrastructure). Both are real UX work, not polish.*
   add-as-you-weigh, or a bulk-weight mode for uniform units.
   *Source: browser pass, cosmetic list.*
 
-- [ ] **Destructive actions use native `confirm()` via inline `onclick`.**
+- [x] **Destructive actions use native `confirm()` via inline `onclick`.**
   Functional, but unstyleable, untestable, and it blocks browser automation
   outright (it froze two testing sessions before the cause was identified).
   A modal component would fix all three.
   *Source: browser pass, cosmetic list.*
+  *Done 2026-10-04 (Plan/Implement cycle 1): `data-confirm` + the shared
+  in-app dialog (`resources/js/confirm.js`); `ConfirmDialogTest` fails on any
+  `confirm(` left in a view.*
 
 ## Infrastructure
 

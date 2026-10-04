@@ -172,4 +172,29 @@ class StockOverviewTest extends TestCase
             ->assertOk()
             ->assertSeeInOrder(['No sellable milk.', '1 expired batch', '30 units']);
     }
+
+    public function test_less_than_a_case_reads_loose_and_full_cases_are_counted_down(): void
+    {
+        $milk = Product::create(['name' => 'Test Organic Milk', 'type' => 'milk', 'is_active' => true]);
+        $variant = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle',
+            'weight_kg' => 1.0, 'base_price' => 2.50, 'case_size' => 16, 'is_active' => true,
+        ]);
+        foreach ([[12, 3], [40, 4]] as [$units, $ago]) {
+            $batch = Batch::create([
+                'product_id' => $milk->id, 'production_date' => now()->subDays($ago),
+                'expiry_date' => now()->addDays(5), 'raw_milk_litres' => 100, 'status' => 'active',
+            ]);
+            BatchItem::create([
+                'batch_id' => $batch->id, 'product_variant_id' => $variant->id,
+                'quantity_produced' => $units, 'quantity_remaining' => $units, 'unit_weight_kg' => 1.0,
+            ]);
+        }
+
+        $this->actingAs(User::factory()->admin()->create())->get('/stock')
+            ->assertOk()
+            ->assertSee('12 loose — less than a case of 16')
+            ->assertSee('2 cases × 16 + 8 loose')
+            ->assertDontSee('1 cases × 16');
+    }
 }

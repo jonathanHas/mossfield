@@ -707,6 +707,41 @@ class ChilledRunTest extends TestCase
             ->assertSee('Multiple orders');
     }
 
+    public function test_a_multi_order_stop_shows_every_ref_and_names_each_tick(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Two Order Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $first = $this->orderFor($shop, [[$oneL, 4]]);
+        $first->update(['customer_reference' => 'PO-E2E-1']);
+        $second = $this->orderFor($shop, [[$oneL, 2]]);
+        $second->update(['customer_reference' => 'PO-E2E-2', 'loaded_at' => now()]);
+
+        $response = $this->actingAs(User::factory()->create())->get(route('chilled-runs.index', ['run' => $run->id]))
+            ->assertOk()
+            ->assertSee('Ref: PO-E2E-1 · PO-E2E-2')
+            ->assertSee('aria-label="Mark '.$first->order_number.' loaded"', false)
+            ->assertSee('aria-label="'.$second->order_number.' loaded — tap to unmark"', false);
+        $this->assertSame(2, substr_count($response->getContent(), 'data-tick-order'));
+
+        $this->actingAs(User::factory()->create())->get(route('chilled-runs.index', ['run' => $run->id, 'edit' => $shop->id]))
+            ->assertOk()
+            ->assertSee('Multiple orders &mdash; open each to edit', false);
+    }
+
+    public function test_a_single_order_stop_keeps_the_plain_tick(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'One Order Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->orderFor($shop, [[$oneL, 4]]);
+
+        $response = $this->actingAs(User::factory()->create())->get(route('chilled-runs.index', ['run' => $run->id]))
+            ->assertOk()
+            ->assertSee('aria-label="Mark loaded"', false);
+        $this->assertSame(0, substr_count($response->getContent(), 'data-tick-order'));
+    }
+
     public function test_factory_gets_no_entry_ui_and_cannot_save(): void
     {
         $run = $this->makeRun();

@@ -112,4 +112,33 @@ class PaymentStateTest extends InvoicingTestCase
         $this->assertSame(0.0, $this->shop->fresh()->outstanding_balance);
         $this->assertSame(0, Invoice::open()->count());
     }
+
+    public function test_a_credit_only_invoice_reads_credited_not_part_paid(): void
+    {
+        $invoice = $this->issue($this->deliveredOrder(10)); // €15
+
+        app(\App\Services\CreditNoteService::class)->issue($invoice, [
+            ['description' => 'Returned', 'quantity' => 1, 'amount' => 1.50, 'vat_rate' => 0],
+        ], 'Damaged');
+        $invoice->refresh();
+
+        $this->assertSame('partial', $invoice->payment_state);
+        $this->assertSame('Credited', $invoice->payment_state_label);
+
+        // A real payment on top makes it "Part paid" again.
+        app(PaymentService::class)->record($this->shop, [
+            'amount' => 5.00, 'received_at' => today()->toDateString(), 'method' => 'bank_transfer',
+        ], [$invoice->id => 5.00]);
+        $invoice->refresh();
+        $this->assertSame('partial', $invoice->payment_state);
+        $this->assertSame('Part paid', $invoice->payment_state_label);
+    }
+
+    public function test_the_customer_form_carries_the_immediate_terms_hint(): void
+    {
+        $this->actingAs(User::factory()->create())->get(route('customers.create'))
+            ->assertOk()
+            ->assertSee('data-terms-hint', false)
+            ->assertSee("Consolidated invoices are due the day they're issued with Immediate terms", false);
+    }
 }

@@ -8,7 +8,9 @@
         <!-- Username or Email -->
         <div>
             <x-input-label for="login" :value="__('Username or Email')" />
-            <x-text-input id="login" class="block mt-1 w-full" type="text" name="login" :value="old('login')" required autofocus autocomplete="username" />
+            {{-- After a failed attempt the username comes back; the password is
+                 what needs retyping, so it takes the focus (F-04). --}}
+            <x-text-input id="login" class="block mt-1 w-full" type="text" name="login" :value="old('login')" required :autofocus="blank(old('login'))" autocomplete="username" />
             <x-input-error :messages="$errors->get('login')" class="mt-2" />
         </div>
 
@@ -19,7 +21,7 @@
             <x-text-input id="password" class="block mt-1 w-full"
                             type="password"
                             name="password"
-                            required autocomplete="current-password" />
+                            required :autofocus="filled(old('login'))" autocomplete="current-password" />
 
             <x-input-error :messages="$errors->get('password')" class="mt-2" />
         </div>

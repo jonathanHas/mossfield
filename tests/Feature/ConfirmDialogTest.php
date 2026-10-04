@@ -58,4 +58,21 @@ class ConfirmDialogTest extends TestCase
             ->assertOk()
             ->assertSee('data-confirm-danger', false);
     }
+
+    public function test_the_cancel_order_dialog_names_both_choices(): void
+    {
+        $customer = \App\Models\Customer::create([
+            'name' => 'Shop', 'email' => 's@example.ie', 'address' => 'Main St', 'city' => 'Bray', 'postal_code' => 'A98', 'is_active' => true,
+        ]);
+        $order = \App\Models\Order::create([
+            'customer_id' => $customer->id, 'order_date' => today(), 'status' => 'pending',
+            'payment_status' => 'pending', 'subtotal' => 0, 'tax_amount' => 0, 'total_amount' => 0,
+        ]);
+
+        $this->actingAs(User::factory()->create())->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('data-confirm-title="Cancel this order?"', false)
+            ->assertSee('data-confirm-cancel-label="Keep order"', false)
+            ->assertSee('data-confirm-label="Cancel order"', false);
+    }
 }

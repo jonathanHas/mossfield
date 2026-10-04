@@ -151,6 +151,13 @@ Line / stop / panel actions redirect `->withFragment(...)` to the element they e
 ### Error pages
 `resources/views/errors/{layout,404,403}.blade.php` — a standalone page (not `x-app-layout`: guests hit it, and an unmatched URL 404s before the web middleware, so there may be no user) with one link home: factory → `/picking`, other signed-in users → dashboard, guest → login. JSON requests still get JSON. `ErrorPagesTest`.
 
+### Feedback, fallbacks, dialogs and PDFs
+- **The flash region is sticky** (`.mf-feedback` in `app.css`: `position: sticky; top: 0; z-index: 30` — under the mobile drawer's z-40 and the modal's z-50), so a fragment redirect still shows its message; each flash has a × dismiss (Alpine). The element a fragment lands on (`.scroll-mt-20:target`) flashes the accent tint once. `LayoutFeedbackTest` pins exactly-once rendering.
+- **`Route::fallback(fn () => abort(404))`** is the **last** line of `routes/web.php` (after `require auth.php`), so an unmatched URL 404s inside the `web` group and the error page sees the signed-in user. Keep it last. `AuthorizationBoundaryTest` lists its `{fallbackPlaceholder}` URI as unguarded.
+- **`confirm.js`** also reads `data-confirm-cancel-label` (default "Cancel", reset on every open) beside `data-confirm-title` / `-label` / `-danger`.
+- **PDFs subset their fonts**: `config/dompdf.php` (published) sets `'enable_font_subsetting' => true`. Whole DejaVu fonts made every one-page PDF 1.4–1.8 MB; subset, a dispatch confirmation is ~36 KB. `DispatchConfirmationTest` asserts < 300 KB.
+- **`Batch::deletionBlocker()`** is the one place the batch-delete rule lives: the `/batches` card hides Delete when it returns a reason (reading the `*_count`s `BatchController::index()` eager-loads — no per-card query), and `BatchController::destroy()` refuses on it.
+
 ### Fonts & the root URL
 - Fonts (Inter, JetBrains Mono, Fraunces, Figtree) are **self-hosted**: imported from `@fontsource/*` at the top of `resources/css/app.css` and bundled by Vite. No layout links to fonts.bunny.net — the app runs on a LAN. Add weights by importing another `@fontsource/<family>/<weight>.css`.
 - `/` redirects to `dashboard` (signed in) or `login`; there is no welcome page.

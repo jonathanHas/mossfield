@@ -61,7 +61,7 @@
                         @if($batch->ready_date)
                             <span class="font-mono">{{ $batch->ready_date->format('d/m/Y') }}</span>
                             @if(!$isReady)
-                                <span style="color: var(--warn-ink);">({{ $batch->ready_date->diffForHumans() }})</span>
+                                <span style="color: var(--warn-ink);">({{ $batch->readyIn() }})</span>
                             @endif
                         @else
                             <span class="font-medium" style="color: var(--accent-ink);">Now</span>
@@ -69,11 +69,12 @@
                     </div>
                     <div>
                         <span style="color: var(--muted);">Raw milk:</span>
-                        <span class="font-mono">{{ number_format($batch->raw_milk_litres, 1) }}L</span>
+                        {{-- A converted Mature batch has no raw milk of its own; the lineage line says where it came from. --}}
+                        <span class="font-mono">{{ $batch->hasNoRawMilkOfItsOwn() ? '—' : number_format($batch->raw_milk_litres, 1).'L' }}</span>
                     </div>
                     <div>
                         <span style="color: var(--muted);">Stock:</span>
-                        <span class="font-mono">{{ $batch->remaining_stock }}</span>
+                        <span class="font-mono">{{ $batch->remaining_label }}</span>
                     </div>
                     @if($batch->wheels_produced && $isCheese)
                         <div>
@@ -154,11 +155,20 @@
                 @endcan
                 @can('delete', $batch)
                     <span style="color: var(--faint);">·</span>
-                    <form action="{{ route('batches.destroy', $batch) }}" method="POST" class="inline">
-                        @csrf @method('DELETE')
-                        <button type="submit" class="mf-link" style="color: var(--danger);"
-                                data-confirm="Are you sure?" data-confirm-label="Delete" data-confirm-danger>Delete</button>
-                    </form>
+                    {{-- Batch::deletionBlocker() is the rule; the counts ride the index's eager-load. --}}
+                    @if($deletionBlocker = $batch->deletionBlocker())
+                        @php $dependents = $batch->dependentRecordCount(); @endphp
+                        <span class="text-[12px]" style="color: var(--muted);" title="{{ $deletionBlocker }}" data-delete-blocked>
+                            Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it
+                        </span>
+                    @else
+                        <form action="{{ route('batches.destroy', $batch) }}" method="POST" class="inline">
+                            @csrf @method('DELETE')
+                            <button type="submit" class="mf-link" style="color: var(--danger);"
+                                    data-confirm-title="Delete batch?"
+                                    data-confirm="Delete batch {{ $batch->batch_code }}? This can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
+                        </form>
+                    @endif
                 @endcan
             </div>
         </div>

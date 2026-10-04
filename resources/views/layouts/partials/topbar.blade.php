@@ -45,7 +45,8 @@
                 <path d="M13.73 21a2 2 0 0 1-3.46 0" />
             </svg>
         </button>
-        <div style="width: 1px; height: 18px; background: var(--line);"></div>
+        {{-- Hides with the date chip it separates (F-05). --}}
+        <div class="hidden sm:block" style="width: 1px; height: 18px; background: var(--line);"></div>
         <span class="hidden sm:inline text-[12px] font-mono" style="color: var(--muted);">
             {{ now()->format('D, j M · H:i') }}
         </span>

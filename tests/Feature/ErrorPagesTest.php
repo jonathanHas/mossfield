@@ -51,4 +51,23 @@ class ErrorPagesTest extends TestCase
             ->assertNotFound()
             ->assertJsonStructure(['message']);
     }
+
+    public function test_an_unmatched_url_still_knows_who_is_signed_in(): void
+    {
+        $this->actingAs(User::factory()->create())->get('/no-such-page')
+            ->assertNotFound()
+            ->assertSee('Back to the dashboard')
+            ->assertSee('href="'.route('dashboard').'"', false);
+
+        $this->actingAs(User::factory()->factoryWorker()->create())->get('/no-such-page')
+            ->assertNotFound()
+            ->assertSee('Back to picking');
+    }
+
+    public function test_an_unmatched_json_request_gets_json(): void
+    {
+        $this->getJson('/no-such-page')
+            ->assertNotFound()
+            ->assertJsonStructure(['message']);
+    }
 }

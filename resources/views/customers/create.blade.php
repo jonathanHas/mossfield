@@ -58,7 +58,8 @@
                 </div>
 
                 <h3 class="text-[14px] font-semibold mb-3">Business terms</h3>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
+                     x-data="{ terms: '', mode: '' }" x-init="terms = $refs.terms.value; mode = $refs.mode.value">
                     <div>
                         <label for="credit_limit" class="mf-label">Credit limit (€) <span style="color: var(--danger);">*</span></label>
                         <input type="number" name="credit_limit" id="credit_limit" value="{{ old('credit_limit', '0.00') }}"
@@ -67,12 +68,16 @@
                     </div>
                     <div>
                         <label for="payment_terms" class="mf-label">Payment terms <span style="color: var(--danger);">*</span></label>
-                        <select name="payment_terms" id="payment_terms" required class="mf-select">
+                        <select name="payment_terms" id="payment_terms" required class="mf-select" x-ref="terms" x-on:change="terms = $event.target.value">
                             <option value="immediate" {{ old('payment_terms') === 'immediate' ? 'selected' : '' }}>Immediate</option>
                             <option value="net_7" {{ old('payment_terms') === 'net_7' ? 'selected' : '' }}>Net 7 days</option>
                             <option value="net_14" {{ old('payment_terms') === 'net_14' ? 'selected' : '' }}>Net 14 days</option>
                             <option value="net_30" {{ old('payment_terms') === 'net_30' ? 'selected' : '' }}>Net 30 days</option>
                         </select>
+                        {{-- Shown when a weekly/monthly customer is on Immediate terms (F-38); advice only, no validation. --}}
+                        <p class="text-[12px] mt-1" style="color: var(--warn-ink);" x-show="terms === 'immediate' && ['weekly', 'monthly'].includes(mode)" x-cloak data-terms-hint>
+                            Consolidated invoices are due the day they're issued with Immediate terms — most weekly customers use Net 7 or Net 14.
+                        </p>
                         @error('payment_terms') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
@@ -100,7 +105,7 @@
                     </div>
                     <div>
                         <label for="invoicing_mode" class="mf-label">Invoicing <span style="color: var(--danger);">*</span></label>
-                        <select name="invoicing_mode" id="invoicing_mode" required class="mf-select">
+                        <select name="invoicing_mode" id="invoicing_mode" required class="mf-select" x-ref="mode" x-on:change="mode = $event.target.value">
                             @foreach (App\Enums\InvoicingMode::cases() as $case)
                                 <option value="{{ $case->value }}" {{ old('invoicing_mode', 'per_order') === $case->value ? 'selected' : '' }}>{{ $case->label() }}</option>
                             @endforeach
@@ -123,15 +128,20 @@
                     </div>
                 </div>
 
-                <h3 class="text-[14px] font-semibold mb-3">Online integration</h3>
-                <div class="mb-6">
-                    <label for="mossorders_user_id" class="mf-label">Mossorders user ID</label>
-                    <input type="number" name="mossorders_user_id" id="mossorders_user_id" value="{{ old('mossorders_user_id') }}" class="mf-input">
-                    <p class="text-[12px] mt-1" style="color: var(--muted);">
-                        Link this customer to their Mossorders online portal account. Leave blank if they don't have one.
-                    </p>
-                    @error('mossorders_user_id') <p class="mf-error">{{ $message }}</p> @enderror
-                </div>
+                {{-- Tucked away: only shops that order online need it (F-17). Open
+                     when it holds a value or was refused. --}}
+                @php $mossordersId = old('mossorders_user_id'); @endphp
+                <details class="mb-6" @if(filled($mossordersId) || $errors->has('mossorders_user_id')) open @endif>
+                    <summary class="text-[14px] font-semibold mb-3 cursor-pointer">Online integration (Mossorders link)</summary>
+                    <div>
+                        <label for="mossorders_user_id" class="mf-label">Mossorders user ID</label>
+                        <input type="number" name="mossorders_user_id" id="mossorders_user_id" value="{{ $mossordersId }}" class="mf-input">
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">
+                            The customer's user id in the Mossorders portal — found on their account there. Only needed for shops that order online.
+                        </p>
+                        @error('mossorders_user_id') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                </details>
 
                 <h3 class="text-[14px] font-semibold mb-3">Additional</h3>
                 <div class="mb-6">

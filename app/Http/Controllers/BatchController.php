@@ -20,8 +20,16 @@ class BatchController extends Controller
             'product',
             'sourceBatch.product',
             'matureBatches.product',
+            // The *_count columns also feed Batch::deletionBlocker(), so the
+            // card can hide Delete without a query per batch.
             'batchItems' => fn ($q) => $q->with('productVariant')
-                ->withCount('sourceCuttingLogs')
+                ->withCount([
+                    'sourceCuttingLogs',
+                    'orderAllocations',
+                    'targetCuttingLogs',
+                    'sourceConversionLogs',
+                    'targetConversionLogs',
+                ])
                 ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
                 ->withSum([
                     'orderAllocations as quantity_currently_allocated',
@@ -204,7 +212,7 @@ class BatchController extends Controller
     {
         $this->authorize('delete', $batch);
 
-        if ($blocker = $this->deletionBlocker($batch)) {
+        if ($blocker = $batch->deletionBlocker()) {
             return redirect()->route('batches.show', $batch)
                 ->with('error', $blocker);
         }
@@ -213,49 +221,5 @@ class BatchController extends Controller
 
         return redirect()->route('batches.index')
             ->with('success', 'Batch deleted successfully.');
-    }
-
-    /**
-     * Why this batch can't be deleted, or null when it can be. One query over
-     * its items; counts, not existence checks, so the message can say how much
-     * history is at stake.
-     */
-    private function deletionBlocker(Batch $batch): ?string
-    {
-        $items = $batch->batchItems()
-            ->withCount([
-                'orderAllocations',
-                'sourceCuttingLogs',
-                'targetCuttingLogs',
-                'sourceConversionLogs',
-                'targetConversionLogs',
-            ])
-            ->get();
-
-        $reasons = [];
-
-        if ($allocations = (int) $items->sum('order_allocations_count')) {
-            $reasons[] = $allocations.' order '.($allocations === 1 ? 'allocation' : 'allocations');
-        }
-
-        $cuts = (int) $items->sum('source_cutting_logs_count')
-            + (int) $items->sum('target_cutting_logs_count');
-        if ($cuts) {
-            $reasons[] = $cuts.' cheese-cutting '.($cuts === 1 ? 'record' : 'records');
-        }
-
-        $conversions = (int) $items->sum('source_conversion_logs_count')
-            + (int) $items->sum('target_conversion_logs_count');
-        if ($conversions) {
-            $reasons[] = $conversions.' mature-conversion '.($conversions === 1 ? 'record' : 'records');
-        }
-
-        if (! $reasons) {
-            return null;
-        }
-
-        return 'Batch '.$batch->batch_code.' can\'t be deleted — '.implode(' and ', $reasons).
-            ' depend on it, and deleting it would destroy that traceability. '.
-            'Set its status to sold out or expired instead to take it out of circulation.';
     }
 }

@@ -77,4 +77,28 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
         $response->assertRedirect('/');
     }
+
+    public function test_the_login_page_carries_the_mossfield_mark_not_the_laravel_logo(): void
+    {
+        $html = $this->get('/login')->assertOk()->getContent();
+
+        $this->assertStringContainsString('Mossfield', $html);
+        $this->assertStringNotContainsString('M305.8 81.125', $html); // the Laravel logo's path
+        $this->assertMatchesRegularExpression('/id="login"[^>]*autofocus/', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="password"[^>]*autofocus/', $html);
+    }
+
+    public function test_after_a_failed_attempt_the_password_box_takes_the_focus(): void
+    {
+        $user = User::factory()->create();
+
+        $html = $this->from('/login')->followingRedirects()->post('/login', [
+            'login' => $user->username,
+            'password' => 'wrong-password',
+        ])->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('/id="password"[^>]*autofocus/', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="login"[^>]*autofocus/', $html);
+        $this->assertStringContainsString('value="'.$user->username.'"', $html);
+    }
 }

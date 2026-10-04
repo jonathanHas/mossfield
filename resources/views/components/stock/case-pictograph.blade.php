@@ -10,6 +10,13 @@
 
 @php
     $caseSize = max(1, (int) $caseSize);
+    // The label counts FULL cases + the loose remainder ("1 cases × 16"
+    // for 12 bottles was a ceil); the drawing below still shows the part case.
+    $fullCases = intdiv((int) $total, $caseSize);
+    $looseUnits = (int) $total % $caseSize;
+    $caseLabel = $fullCases === 0
+        ? $looseUnits.' loose — less than a case of '.$caseSize
+        : $fullCases.' '.\Illuminate\Support\Str::plural('case', $fullCases).' × '.$caseSize.($looseUnits ? ' + '.$looseUnits.' loose' : '');
     $totalCases = (int) ceil($total / $caseSize);
 
     $stateOrder = ['available', 'allocated', 'reserved', 'damaged', 'sold'];
@@ -37,7 +44,7 @@
             {{ number_format($total) }} tubs
         </div>
         <div class="text-[11px] font-mono" style="color: var(--muted);">
-            {{ count($icons) }} cases × {{ $caseSize }}
+            {{ $caseLabel }}
         </div>
     </div>
 

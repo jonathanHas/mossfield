@@ -100,7 +100,7 @@
 
                         @if ($isEditing)
                             {{-- ── Edit mode: quantity inputs + history recall + add-line ── --}}
-                            <tr id="stop-{{ $customer->id }}" class="is-editing"
+                            <tr id="stop-{{ $customer->id }}" class="is-editing scroll-mt-20"
                                 x-data="stopEditor({
                                     current: {{ Js::from((object) $sheet['editQuantities']) }},
                                     history: {{ Js::from($sheet['history']) }},
@@ -191,11 +191,14 @@
                             </tr>
                         @else
                             {{-- ── Display mode ── --}}
-                            <tr id="stop-{{ $customer->id }}" class="{{ $isLoaded ? 'is-loaded' : '' }}">
+                            <tr id="stop-{{ $customer->id }}" class="scroll-mt-20 {{ $isLoaded ? 'is-loaded' : '' }}">
                                 <td class="pad">
                                     @if ($hasOrders)
                                         @can('load', $orders->first())
+                                            {{-- A stop with several orders names each tick (F-27). --}}
+                                            @php $multiOrder = $orders->count() > 1; @endphp
                                             @foreach ($orders as $order)
+                                                <div class="{{ $multiOrder ? 'flex items-center gap-1 mb-1' : '' }}">
                                                 @if ($order->isDispatchedOrLater())
                                                     {{-- Gone: the tick is history now, not a control. --}}
                                                     <span class="mf-run-check on" style="cursor: default;" title="Dispatched">
@@ -203,20 +206,26 @@
                                                             <path d="M20 6L9 17l-5-5" />
                                                         </svg>
                                                     </span>
-                                                    @continue
+                                                @else
+                                                    <form method="POST" action="{{ route('chilled-runs.toggle-loaded', $order) }}">
+                                                        @csrf
+                                                        <input type="hidden" name="run" value="{{ $activeRun->id }}">
+                                                        <input type="hidden" name="date" value="{{ request('date') }}">
+                                                        <button type="submit"
+                                                                class="mf-run-check{{ $order->loaded_at ? ' on' : '' }}"
+                                                                aria-label="{{ $multiOrder
+                                                                    ? ($order->loaded_at ? $order->order_number.' loaded — tap to unmark' : 'Mark '.$order->order_number.' loaded')
+                                                                    : ($order->loaded_at ? 'Loaded — tap to unmark' : 'Mark loaded') }}">
+                                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                                                                <path d="M20 6L9 17l-5-5" />
+                                                            </svg>
+                                                        </button>
+                                                    </form>
                                                 @endif
-                                                <form method="POST" action="{{ route('chilled-runs.toggle-loaded', $order) }}">
-                                                    @csrf
-                                                    <input type="hidden" name="run" value="{{ $activeRun->id }}">
-                                                    <input type="hidden" name="date" value="{{ request('date') }}">
-                                                    <button type="submit"
-                                                            class="mf-run-check{{ $order->loaded_at ? ' on' : '' }}"
-                                                            aria-label="{{ $order->loaded_at ? 'Loaded — tap to unmark' : 'Mark loaded' }}">
-                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
-                                                            <path d="M20 6L9 17l-5-5" />
-                                                        </svg>
-                                                    </button>
-                                                </form>
+                                                @if ($multiOrder)
+                                                    <span class="font-mono text-[10px]" style="color: var(--muted); white-space: nowrap;" data-tick-order>{{ $order->order_number }}</span>
+                                                @endif
+                                                </div>
                                             @endforeach
                                         @else
                                             <span class="mf-run-check{{ $isLoaded ? ' on' : '' }}" style="cursor: default;">
@@ -275,7 +284,7 @@
                                                     {{ $hasOrders ? 'Edit' : 'Enter order' }}
                                                 </a>
                                             @elseif ($orders->count() > 1)
-                                                <span class="text-[12px]" style="color: var(--muted);">Multiple orders &mdash; edit above</span>
+                                                <span class="text-[12px]" style="color: var(--muted);">Multiple orders &mdash; open each to edit</span>
                                             @endif
                                             @if ($row['stats']['canAllocate'])
                                                 <form method="POST" action="{{ route('chilled-runs.allocate-stop', $customer) }}" style="display: inline-block;">

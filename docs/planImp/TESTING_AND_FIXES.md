@@ -90,6 +90,85 @@ baseline.
 
 ---
 
+## 2026-10-04 — Copy and polish (Plan/Implement cycle 5)
+
+**Scope:** the S4 findings from the end-to-end run and the four follow-ons
+from cycle 4. Thirteen steps, all landed, with tests and real-input browser
+checks. Suite afterwards: **612 passed, 0 failed** (+14). One new finding
+came out of it (below).
+
+### What changed
+
+- **A redirect that lands on an element still shows its message.** The
+  feedback region (`layouts/partials/feedback.blade.php`) is sticky
+  (`.mf-feedback`, z-30 — below the drawer and the modal), each message has a
+  dismiss × and the wrapper hides when the last one goes; the element a
+  fragment landed on flashes the accent tint (`.scroll-mt-20:target`). Sheet
+  rows got `scroll-mt-20`. `LayoutFeedbackTest` still pins exactly-once.
+- **`Route::fallback(fn () => abort(404))`** is the last line of
+  `routes/web.php`, so an unmatched URL 404s inside the `web` group and the
+  error page knows who is signed in (factory → picking, others → dashboard,
+  guest → login; JSON stays JSON). `ErrorPagesTest`; the authorisation matrix
+  allowlists the fallback (it carries neither `auth` nor `guest` by design).
+- **Third allocate refusal**: "This line only needs N more — allocate at most
+  that many." `OrderAllocationConcurrencyTest`.
+- **Login** shows the Mossfield mark — `<x-brand-mark>` (new component, now
+  also used by the sidebar so the two can't drift) on the app background —
+  and focuses the **password** after a failed attempt. `AuthenticationTest`.
+- **Topbar divider** hides with the date chip below `sm`.
+- **Batch copy**: no "wheel wheel"; cases read "12 loose — less than a case
+  of 16" / "2 cases × 16 + 8 loose" (full cases, not a ceil); the ready
+  countdown says "in 60 days" inside ~3 months (`Batch::readyIn()`); a
+  converted Mature batch shows "—" for raw milk; stock reads **"7 wheels · 18
+  packs"** (`Batch::remaining_label`, variant names when two share a unit).
+  **Delete is hidden when it would be refused**: the rule moved to
+  `Batch::deletionBlocker()` (the one place), reading the five dependency
+  counts that now ride the index's eager-load — one query, pinned — and the
+  dialog names the batch. `BatchCreateTest`, `StockOverviewTest`.
+- **Mossorders id** tucked in a collapsed `<details>` (open when set or
+  refused).
+- **Dialogs**: `confirm.js` reads `data-confirm-cancel-label` (reset every
+  open); Cancel order asks "Cancel this order?" with **Keep order / Cancel
+  order**. `ConfirmDialogTest`.
+- **Multi-order stops** on the sheet show every ref ("PO-E2E-1 · PO-E2E-2"),
+  label each loaded tick with its order number, and say "open each to edit".
+  `ChilledRunTest`.
+- **Order numbers don't wrap** at phone width.
+- **PDFs weigh 36–40 KB instead of 1.4–1.8 MB**: `config/dompdf.php` published
+  with `enable_font_subsetting => true`; `pdftotext` output identical before
+  and after (€, —, · and batch codes intact). `DispatchConfirmationTest`
+  asserts < 300 KB.
+- **Finance labels**: a credit-note-only invoice reads **"Credited"** (state
+  value still `partial`); the customer form warns when a weekly/monthly
+  customer is left on Immediate terms. `PaymentStateTest`.
+- `SMALL_FIXES.md` finally ticks the `confirm()` item (done in cycle 1).
+
+### Finding — topping up a reservation from the same batch is a 500
+
+Found by the Implementer writing step 3's test: a line of 10 with 6 reserved
+from batch X, then **Allocate 4 more from batch X** on the order page →
+`UniqueConstraintViolation` on `order_allocations (order_item_id,
+batch_item_id)`. `OrderItem::allocateFromBatchItem()` always inserts;
+`pickFromBatchItem()` already solves the same case with `extendAllocation()`.
+A normal office action crashes — **cycle 6**, test-first. Also noted for
+cycle 6: `BatchItem::wheelStates()` runs per-item SUMs on `/batches` although
+the index eager-loads the figures; the run sheet's `<thead>` isn't sticky so a
+saved row lands with its headers off-screen; two more `/orders` cells wrap at
+phone width; `components/application-logo.blade.php` is unused.
+
+### Invariants worth keeping
+
+- **`Batch::deletionBlocker()` is the delete rule.** Views hide the button on
+  it, the controller refuses on it. If the index stops eager-loading the five
+  counts the card falls back to one query per batch — the test pins one.
+- **Messages dismiss, they don't disappear**: the sticky region is the only
+  flash surface on `x-app-layout` pages; don't add a second.
+- **`Route::fallback` stays last** in `web.php`.
+- **PDF fonts are subset.** A new glyph in a document is worth one
+  `pdftotext` check.
+
+---
+
 ## 2026-10-04 — Friction (Plan/Implement cycle 4)
 
 **Scope:** the S3 findings from the end-to-end run plus the cycle-3

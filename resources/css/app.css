@@ -709,3 +709,35 @@
 .mc-btn-ghost:hover { background: var(--line-2); }
 .mc-btn-mature { background: var(--mature); color: #fff; border-color: var(--mature); }
 .mc-btn-mature:hover { filter: brightness(1.06); }
+
+/* ─── Feedback region (layouts/partials/feedback) ───
+   Sticky so a redirect that lands on a fragment (#line-…, #stop-…) still
+   shows its message; below the modal (z-50) and the mobile drawer (z-40). */
+.mf-feedback {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--bg);
+}
+.mf-feedback-close {
+    flex-shrink: 0;
+    margin: -2px -4px 0 0;
+    padding: 0 4px;
+    font-size: 16px;
+    line-height: 1;
+    color: inherit;
+    opacity: .6;
+    background: none;
+    border: 0;
+    cursor: pointer;
+}
+.mf-feedback-close:hover { opacity: 1; }
+
+/* The element a fragment redirect landed on flashes the accent tint once. */
+.scroll-mt-20:target {
+    animation: mf-target 1.8s ease-out;
+}
+@keyframes mf-target {
+    from { background-color: var(--accent-soft); }
+    to { background-color: transparent; }
+}

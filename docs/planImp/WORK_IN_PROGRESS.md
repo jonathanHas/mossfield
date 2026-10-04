@@ -8,6 +8,26 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Copy & polish (2026-10-04)
+
+Plan/Implement cycle 5: the S4 findings plus cycle 4's follow-ons. The flash
+region is sticky and dismissible, and a fragment landing flashes its target;
+chilled-run rows land below the topbar; an unmatched URL 404s inside the web
+group (`Route::fallback`) so the page knows who's signed in; a third allocate
+refusal ("only needs N more"). F-03/F-04 the login page carries the Mossfield
+mark and focuses the password after a failed attempt; F-05 the topbar divider
+hides on phones; F-11/F-14 batch copy ("wheel" once, full cases + loose,
+"in N days", "—" raw milk on a converted batch, "10 wheels · 18 packs") and
+Delete hidden when `Batch::deletionBlocker()` would refuse, with a named
+dialog; F-17 the Mossorders id is tucked into a `<details>`; F-26 the
+cancel-order dialog reads Keep order / Cancel order; F-27 a multi-order stop
+shows every ref and labels each loaded tick; F-31 order numbers don't wrap;
+F-34 PDFs subset their fonts (1.37 MB → 36 KB); F-38 a credit-only invoice
+reads "Credited" and the customer form warns about Immediate terms on a
+consolidated customer.
+
+---
+
 ## Recently Completed: Friction fixes (2026-10-04)
 
 Plan/Implement cycle 4: the S3 findings from the end-to-end browser run plus

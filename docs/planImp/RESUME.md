@@ -60,12 +60,21 @@ worth returning to.
   defaults; "in credit"; error pages). Suite **598 passed, 0 failed**.
   Write-up in `TESTING_AND_FIXES.md` → 2026-10-04 Friction. Jon archives
   `plan.md` + `implemented.md` to `archive/2026-10-04-friction/`.
-- **Next, in either order:** **cycle 5 — copy & polish** (the S4 list in the
-  cycle-4 plan's Out of scope + its Review notes: flash near the fragment,
-  sheet `scroll-mt`, `Route::fallback()` in the web group, the third
-  allocate message); `OPEN_QUESTIONS.md` #1 (write-offs) and #5 (E2E
-  decisions) once Jon answers — each answer is a one-step plan;
-  `FULFILMENT_PLAN.md` Phase 4.
+- **Cycle 5 "Copy and polish" — ACCEPTED 2026-10-04:** sticky dismissible
+  flash + `:target` tint; `Route::fallback`; third allocate message; login
+  brand mark + password focus; batch copy (per-variant stock, full-case
+  label, "in N days", raw-milk dash, Delete hidden when refused via
+  `Batch::deletionBlocker()`); Keep order / Cancel order; multi-order stop
+  labels; **PDFs 1.7 MB → 40 KB** (font subsetting); "Credited" label; terms
+  hint. Suite **612 passed, 0 failed**. Write-up in `TESTING_AND_FIXES.md` →
+  2026-10-04 Copy and polish. Jon archives `plan.md` + `implemented.md` to
+  `archive/2026-10-04-copy-and-polish/`.
+- **Next:** **cycle 6 — loose ends** (short): the **allocate top-up 500**
+  (`allocateFromBatchItem()` must widen an existing row like
+  `extendAllocation()` — a real S2), the `/batches` `wheelStates()` N+1,
+  sticky run-sheet `<thead>`, two `/orders` nowrap cells, delete the unused
+  `application-logo` component. Then `OPEN_QUESTIONS.md` #1 (write-offs) and
+  #5 (E2E decisions) once Jon answers; `FULFILMENT_PLAN.md` Phase 4.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -111,8 +120,9 @@ way. Cycle 3's browser checks added orders 19–20 (cancelled) and payment 8
 (€1.00 on INV-000006, the double-click check — the one row with a
 `form_token`). Cycle 4's added orders 21–22 (cancelled) and **released one
 more G010426 wheel to Mature** (item 46 now `remaining 7 · held 1`; G010426-1
-has 2) — reversible from the Mature batch page. Counts now 21 orders, 4
-payments, 7 invoices. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+has 2) — reversible from the Mature batch page. Cycle 5 added orders 23–24
+(cancelled). Counts now 23 orders, 4 payments, 7 invoices, 13 batches, 18
+customers; no customer is linked to Mossorders. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.

@@ -680,10 +680,15 @@ class ChilledRunController extends Controller
             $extras[$row['customer']->id] = $row['orders']->pluck('notes')->filter()->implode(' · ');
         }
 
-        // Customer reference per stop (first set reference) — for display and edit prefill.
+        // Customer references per stop: every order's, in order-number order,
+        // for display (F-27 — a multi-order stop used to show only the first);
+        // the editor's prefill keeps the first, since it edits one order.
         $references = [];
+        $firstReferences = [];
         foreach ($rows as $row) {
-            $references[$row['customer']->id] = $row['orders']->pluck('customer_reference')->filter()->first();
+            $refs = $row['orders']->sortBy('order_number')->pluck('customer_reference')->filter()->values();
+            $references[$row['customer']->id] = $refs->isNotEmpty() ? $refs->implode(' · ') : null;
+            $firstReferences[$row['customer']->id] = $refs->first();
         }
 
         // Footer rows: units / full blue crates / remainder outside crates.
@@ -785,7 +790,7 @@ class ChilledRunController extends Controller
             'allocatedUnits' => $allocatedUnits,
             'editCustomerId' => $editRow ? $editCustomerId : 0,
             'editQuantities' => $editRow ? ($qtyMap[$editCustomerId] ?? []) : [],
-            'editCustomerReference' => $editRow ? ($references[$editCustomerId] ?? null) : null,
+            'editCustomerReference' => $editRow ? ($firstReferences[$editCustomerId] ?? null) : null,
             'editNotes' => $editRow ? $editRow['orders']->first()?->notes : null,
             'history' => $editRow ? $this->historyFor($editRow['customer'], $editRow['orders']->first()) : [],
             'addLineVariants' => $editRow ? $this->addLineVariants($fixedCols, $cheeseCols) : collect(),

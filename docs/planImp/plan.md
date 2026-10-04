@@ -1,6 +1,6 @@
 # Copy and polish: the S4 findings and the cycle-4 follow-ons
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
@@ -387,4 +387,65 @@ Check: `grep -n "fallback\|cancel-label\|font_subsetting\|deletionBlocker" CLAUD
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-04 against `implemented.md` (Status: DONE, 522 lines, read to
+the end) and the diff of every PHP file plus the JS, CSS, feedback partial,
+guest layout, login, brand mark and the three view families with logic.
+Planner reran: `php artisan test` → **612 passed, 0 failed** (+14);
+`pint --test app tests database routes config` → PASS 277 files; `npm run
+build` ok; `route:list | wc -l` → 158; dev DB: orders 23 (two cancelled
+cycle-5 probes), payments 4, invoices 7, batches 13, customers 18, no
+customer linked to Mossorders; a real invoice PDF rendered at **40,549 B**.
+
+### Criteria — all thirteen pass
+
+1 Sticky `.mf-feedback` (z-30, below drawer/modal), per-message × that also
+hides the wrapper when the last one goes (deviation 3 — found and fixed in
+the browser), `:target` tint, `scroll-mt-20` on both sheet rows.
+2 `Route::fallback(fn () => abort(404))` last in `web.php`; office/factory/
+guest/JSON cases tested; the boundary test's allowlist gains the fallback
+(deviation 2 — necessary and correct). 3 "This line only needs N more" sits
+between the two existing refusals. 4 `<x-brand-mark>` shared by sidebar and
+guest layout; `:autofocus` flips to the password after a failed attempt;
+title fallback "Mossfield". 5 Divider `hidden sm:block`. 6 `Batch::
+deletionBlocker()` + `dependentRecordCount()` read the five `*_count`s from
+the index's eager-load (one query) else one `withCount`; card hides Delete
+and names the batch in the dialog; `remaining_label` ("7 wheels · 18 packs",
+or variant names when units collide — deviation 6, better than the plan);
+`readyIn()`; raw-milk dash; full-case label with loose remainder. 7 Details
+collapsed unless valued or refused. 8 `data-confirm-cancel-label` reset on
+every open; Keep order / Cancel order. 9 All refs joined; per-order tick
+labels and numbers on multi-order stops. 10 Nowrap on number and status.
+11 Font subsetting: 1.37 MB → 36 KB, 1.76 MB → 40 KB, `pdftotext` output
+identical before/after, €/—/· verified; red-checked. 12 "Credited" label,
+state value unchanged; terms hint on the customer form. 13 Docs and
+`SMALL_FIXES.md` ticked.
+
+### Deviations — all accepted
+
+1 baseline; 2 boundary-test allowlist; 3 wrapper hides when empty; 4 the
+success case in step 3's test uses a second batch item because of the bug
+below; 5 the query-count assertion pins this step's queries, not the page
+total (the page already had an N+1 — below); 6 variant names when units
+collide and proper pluralisation; 7 details open on a validation error; 8
+`dependentRecordCount()`; 9 title fallback; 10 probes (recorded).
+
+### Notes for Planner — decisions
+
+- **`allocate()` 500s when topping up a reservation from the same batch**
+  (`allocateFromBatchItem()` always inserts; `order_allocations` is unique
+  per order_item + batch_item; `pickFromBatchItem()` already widens via
+  `extendAllocation()`). A real S2 found by the Implementer → **cycle 6**,
+  test-first.
+- **`/batches` N+1 in `BatchItem::wheelStates()`** (per-item SUMs although
+  the index eager-loads `quantity_currently_allocated` and `converted_wheels`)
+  → **cycle 6**.
+- **Run-sheet `<thead>` not sticky** so a saved row lands with the column
+  names off-screen → **cycle 6** (`position: sticky; top: 0` on `.mf-run thead
+  th`; the flash collapses after dismissal so `top: 0` is fine).
+- `/orders` Payment and actions cells still wrap at 500 px → **cycle 6**,
+  two `whitespace-nowrap`s.
+- `components/application-logo.blade.php` unused → **cycle 6**, delete.
+- PDF `·` glyph proven on the docket → nothing to do.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-copy-and-polish`
+and move `plan.md` + `implemented.md` there.

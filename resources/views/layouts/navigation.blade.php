@@ -113,15 +113,7 @@
 >
     <!-- Brand + mobile close -->
     <div class="flex items-center gap-2.5 px-5 pt-[18px] pb-[14px]">
-        <a href="{{ route('dashboard') }}" class="flex items-center gap-2.5">
-            <div
-                class="grid place-items-center"
-                style="width: 28px; height: 28px; border-radius: 7px; background: var(--ink); color: var(--bg); font-family: 'Fraunces', serif; font-weight: 600; font-size: 17px;"
-            >M</div>
-            <div class="text-[14px] font-semibold" style="letter-spacing: -0.1px;">
-                Mossfield<span class="font-normal" style="color: var(--muted);"> Dairy</span>
-            </div>
-        </a>
+        <x-brand-mark />
         <button
             type="button"
             class="md:hidden ml-auto p-1 rounded"

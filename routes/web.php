@@ -289,3 +289,8 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
 });
 
 require __DIR__.'/auth.php';
+
+// Last, after every other web route (including auth.php): an unmatched URL
+// 404s inside the `web` group, so the session loads and the error page knows
+// who is signed in (cycle 4 follow-on). JSON requests still get JSON.
+Route::fallback(fn () => abort(404));
