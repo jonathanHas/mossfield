@@ -1,4 +1,4 @@
-# Resume point — 2026-09-15
+# Resume point — 2026-10-04
 
 Where things stand, so a fresh session (or a fresh machine after a reboot) can
 pick up exactly here. Update or replace this file whenever you stop at a point
@@ -41,16 +41,15 @@ prefixed with the product, batch page/cards split cut/converted out of "sold",
 `/` redirects, fonts self-hosted, small-fixes batch); docs moved into
 `docs/planImp/`. Also `php artisan mossfield:reset-trading-data` exists.
 
-## The working tree is NOT committed
+## Committed locally, NOT pushed or deployed
 
-`git log` is still at `989574f last from x260`; **186 paths are modified,
-added or renamed and uncommitted** — everything above plus the invoicing work
-that preceded it. Nothing is lost on reboot (it's on disk), but nothing is in
-history either. Suggested first act after resuming, if Jon agrees:
-
-```bash
-git add -A && git commit -m "Browser-pass findings 1–11, passes 2a/2b, consolidation, docs into docs/planImp"
-```
+Everything above (plus the invoicing work that preceded it) was committed on
+2026-10-04 as **`26934f4`** on `main`, one commit ahead of `origin/main`
+(`989574f`). The production server was unreachable at the time, so it has not
+been pushed to GitHub and not deployed. When the server is back: push, then
+follow `DEPLOYMENT.md` §7 with maintenance mode on — this commit carries the
+invoicing migrations (`invoices`, `document_sequences`, …) and new
+`INVOICING_*` env vars, so don't `ship --no-maintenance` it.
 
 `public/build` and `node_modules` are gitignored; both are rebuilt by
 `npm install && npm run build`.
