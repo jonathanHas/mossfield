@@ -161,3 +161,44 @@ and it is, it would have caught the original cutting bug on its own — it is
 probably worth a scheduled check that reports drift somewhere someone looks. The
 scheduler already runs `invoicing:refresh-overdue` nightly, so there is a pattern
 to follow.
+
+---
+
+## 5. Decisions surfaced by the 2026-10-04 end-to-end run
+
+**Raised:** 2026-10-04 (findings in `archive/2026-10-04-e2e-browser-run/implemented.md`)
+· **Status:** open, needs Jon. Each is a rule the app has no opinion on; none
+is broken as such. Answer them in any order — each becomes a one-step plan.
+
+- **F-24 — one delivery charge per drop, or per order?** A flagged customer
+  with two orders for the same run day is charged the run fee twice (€12.30
+  for one van stop; a €15 top-up order carries 41 % delivery). Options: charge
+  once per (customer, run, date) with later same-day orders at €0; warn on
+  the second order; keep per order.
+- **F-25 — does the credit limit mean anything?** The customer form requires
+  it, `Customer::canPlaceOrder()` exists, nothing calls it. Enforce (block
+  confirm when outstanding + order > limit), warn, or make the field optional
+  and say it's informational.
+- **F-10 — should Mature be offered as a fresh production batch?** CLAUDE.md
+  says Mature is only reached by releasing aged Farmhouse. The batch form
+  offers it anyway. Hide it (a `reachable_by_conversion_only` flag on the
+  product), or keep it for bought-in stock.
+- **F-09 — a sanity ceiling on batch quantities?** 3 000 wheels was accepted
+  without a word. A per-type ceiling, a "that's N× the usual — sure?" confirm
+  when qty × nominal weight far exceeds raw milk ÷ typical yield, or nothing.
+- **F-06 — milk yield is hard-coded 100 %.** 500 L raw → 432 L bottled is
+  accepted and shows "Yield ~100 %". Compute it (finished ÷ raw) like cheese,
+  validate raw = bottled for milk, or leave it.
+- **F-33 — are order notes customer-visible?** The order's Notes print on the
+  dispatch confirmation (emailed) and the docket. Either split "notes for the
+  customer" from internal notes, or label the field "printed on the
+  confirmation".
+- **F-34 — must a per-order dispatch be loaded first?** The run button
+  insists on the loaded tick; the per-order **Mark dispatched** doesn't.
+  Align them, or keep the per-order route as the office override.
+- **F-38 — two finance defaults.** (a) To Invoice offers *Issue* on orders
+  that are `ready` but not dispatched — one click bills goods still in the
+  fridge; keep (the page explains it) or restrict to dispatched/delivered.
+  (b) A weekly-consolidated customer created with the default *Immediate*
+  terms gets consolidated invoices due on the issue day; default terms from
+  invoicing mode, warn, or leave.

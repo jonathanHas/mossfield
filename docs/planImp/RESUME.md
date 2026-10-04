@@ -38,10 +38,22 @@ worth returning to.
   `archive/2026-10-04-housekeeping-batch/` once Jon archives them.
   `handoff/REPORT.md` now carries the browser checklist for both October
   passes (it also says `NEXT.md` is stale).
-- **Candidates for what's next:** the first question in `OPEN_QUESTIONS.md` (no
-  way to record stock being lost) — needs Jon's decisions before a plan can be
-  READY; `FULFILMENT_PLAN.md` Phase 4 (driver route + proof of delivery); the
-  per-unit weight input UX item in `SMALL_FIXES.md`.
+- **2026-10-04, cycle 2 — ACCEPTED:** the end-to-end browser run (an Opus
+  Implementer drove Chrome with real input through batches → cut → mature →
+  customers → orders → picking → dispatch → finance → unhappy paths). No code
+  changed; **41 findings** (3 S1, 3 S2, 19 S3, 16 S4), every probe
+  reconciled. Index in `TESTING_AND_FIXES.md` → 2026-10-04 End-to-end run;
+  full report `archive/2026-10-04-e2e-browser-run/implemented.md`; decisions
+  for Jon in `OPEN_QUESTIONS.md` #5.
+- **Cycle 3 — READY in `plan.md`:** "Money and state" — the S1/S2 fixes
+  (F-39 submit-once + payment `form_token`; F-29 weight comma + 3× nominal
+  bound; F-19 order-edit status bypass; F-12/F-08 refused forms keep input;
+  F-20 order-form price preview; F-35 PO ref on invoices; F-36/F-40 payment
+  auto-apply and negative amount). Kickoff: *"Read docs/planImp/planimp.md.
+  You are the Implementer. Implement docs/planImp/plan.md."*
+- **After that:** cycle 4 (S3/S4 friction — list in the cycle-2 Review);
+  `OPEN_QUESTIONS.md` #1 (write-offs) and #5 (E2E decisions) once Jon answers;
+  `FULFILMENT_PLAN.md` Phase 4.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -76,9 +88,19 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 - `php artisan test` → **all passing, 0 failing** (the 7 Breeze failures were retired 2026-10-04). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
 
-## Dev database (`mossfield_cl`) — repaired, not reset
+## Dev database (`mossfield_cl`) — repaired, not reset; E2E data added 2026-10-04
 
-8 batches, 10 orders, 3 invoices, 16 real customers, 7 products (Mature seeded
+**After the E2E run:** 13 batches, 17 orders, 7 invoices (INV-000004 paid,
+005 void, 006 consolidated, 007 unpaid), 3 payments, 1 credit note, 1
+statement, 18 customers (27 **E2E Corner Shop**, 28 **E2E Weekly Deli** at
+run #1 positions 1–2; run #1 charge is now €6.15). Order 14 is `preparing`
+with 12 units reserved — pick it, short it or cancel it when it gets in the
+way. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+`TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
+**Mail is the `log` driver — never point dev `.env` at SMTP** while a
+confirmation addressed to a real customer sits in `document_emails`.
+
+Before the run: 8 batches, 10 orders, 3 invoices, 16 real customers, 7 products (Mature seeded
 2026-09-12). Batch **G030426** (`/batches/17`, wheel item 26): 38 produced —
 26 free · 4 cut · 4 converted · 4 sold; the browser session's 2a/2b
 verification cuts and releases are in there on purpose. Mature batch

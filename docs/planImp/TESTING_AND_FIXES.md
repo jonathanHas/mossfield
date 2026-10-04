@@ -90,6 +90,96 @@ baseline.
 
 ---
 
+## 2026-10-04 — End-to-end browser run (Plan/Implement cycle 2)
+
+**Scope:** a full working day driven through Chrome with real input by an
+Opus Implementer from a Fable plan: three batches made (milk, yoghurt, a
+backdated cheese), a cut, a maturing hold / release / undo, two new customers
+on the run, orders by desktop form and by the chilled-run sheet, Confirm all →
+Allocate all, picking on a 500 px screen as factory (fixed, per-piece wheel
+weights, bulk, undo, short), load and **Dispatch run**, per-order dispatch,
+invoice → email → partial / over-payment / credit → credit note → statement →
+void → reissue, then the unhappy paths (cancel with picked stock, back
+button, double-click, stale-page race, validation, 404/403). Every phase ended
+with a read-only database probe. **No code changed**; the output is 41
+findings and a long confirmed-correct list. Full report with evidence:
+`archive/2026-10-04-e2e-browser-run/implemented.md`.
+
+**What held** (the headline): stock and money arithmetic was right at every
+probe — batch counters, cut trim, hold/release/undo reconciliation, FIFO,
+special-price snapshot, weight-aware estimates, the exact 23 % VAT back-out,
+picked quantities leaving `quantity_remaining`, short lines at €0, invoice
+snapshots, consolidated preview burning no number, payment states, credit
+notes, statement ledgers, void/reissue numbering, cancel returning picked
+stock, no over-reservation on a stale page, no € on any factory screen,
+every console clean. The bugs are in the **forms and the surfaces**, not the
+model.
+
+### Findings (41) — severity index
+
+| # | S | Where | One line |
+| --- | --- | --- | --- |
+| F-39 | **S1** | Record payment | Double-click records two payments; no form has a submit-once guard |
+| F-29 | **S1** | Picking / desktop weights | "5,210" becomes 5210 kg, shows green OK, no upper bound → would bill €83 360 |
+| F-19 | **S1** | Order edit form | Status dropdown sets `dispatched`/`ready`/`pending` directly, bypassing DispatchService, picking and invoicing |
+| F-12 | S2 | Cut form | A refused submission resets the weighed pack total to nominal |
+| F-20 | S2 | Order create | Preview uses standard prices and omits delivery: €322.40 shown, €298.55 saved |
+| F-35 | S2 | Per-order invoice | Prints neither order number nor customer PO ref |
+| F-01 | S3 | Dashboard | "ready now" counts expired and empty batches |
+| F-02 | S3 | /stock, dashboard | Expired stock vanishes ("No active milk batches" with 4 437 units active-but-expired); nothing surfaces it |
+| F-06 | S3 | Batch page | Milk yield hard-coded 100 % (500 L raw → 432 L bottled accepted silently) |
+| F-07 | S3 | Batch create | Yoghurt/cheese get no expiry and nothing says so; never-expiring stock stays "available" |
+| F-08 | S3 | Batch create | Refusal blanks the quantities and overwrites the bad expiry with the auto-fill |
+| F-09 | S3 | Batch create | 3 000 wheels accepted without a question |
+| F-10 | S3 | Batch create | Mature offered as a fresh production batch |
+| F-13 | S3 | Mature conversion | Can only release the whole saved hold; header button disagrees with the zone |
+| F-15 | S3 | Delivery runs | Reorder is ↑/↓ one step per full reload (30 reloads for two stops) |
+| F-21 | S3 | Order allocation panel | Two unlabelled number boxes per line; Enter in the wrong one records a pick |
+| F-22 | S3 | Add item | Pre-filled 1 + caret → 16 instead of 6 |
+| F-23 | S3 | Order create | Same variant twice → two lines (Add item merges) |
+| F-24 | S3 | Delivery charge | Second same-day order charges a second €6.15 |
+| F-25 | S3 | Credit limit | Required field, never enforced (`canPlaceOrder()` unused) |
+| F-30 | S3 | /picking | "Today" leads with July's stale ready orders; progress 149/230 before any pick |
+| F-32 | S3 | Dispatch run flash | Counts orders as "stops", names the same shop as dispatched and skipped, omits order numbers |
+| F-33 | S3 | Dispatch confirmation / docket | Internal order notes printed to the customer |
+| F-36 | S3 | Record payment | Apply boxes blank by default → money lands as credit, invoice stays unpaid |
+| F-40 | S3 | Record payment | "-5" silently becomes 5 |
+| F-03/04/05 | S4 | Login, topbar | Laravel logo; focus after failure; stray divider at 500 px |
+| F-11 | S4 | Batches | "wheel wheel", "1 cases × 16", "1 month" for 60 days, "0.0L", generic delete dialog |
+| F-14 | S4 | Batch page | "29 units" adds wheels and packs |
+| F-16 | S4 | Office forms | Save lands on the list / top of page (customers, special prices, runs, search dropped) |
+| F-17/18 | S4 | Customer form, run charges | Bare Mossorders id input; % customer shows "charge: off" |
+| F-26 | S4 | Orders | Age "13h" on a new order; variant missing from summaries; Cancel/Cancel order; "updated" on confirm; tab order; no run-day default; scroll to top |
+| F-27/28 | S4 | Run sheet | Second ref hidden; unlabelled per-order loaded ticks; no notes in the row editor |
+| F-31 | S4 | Picking | Skip loops back; + not disabled at cap; short button under the footer; /orders cramped |
+| F-34 | S4 | Dispatch | Edit offered on invoiced order; 1.76 MB PDF; loaded flash unnamed; per-order dispatch needs no loaded tick |
+| F-37/38 | S4 | Finance | Void silently absent; last-month defaults; "€-10.00"; credit-only = "Partial"; weekly + Immediate terms due on issue; Issue offered on undispatched |
+| F-41 | S4 | Errors | Generic stale-allocation message; bare 404/403 pages |
+
+**Triage:** cycle 3 (`plan.md`, 2026-10-04) takes the S1/S2 set plus F-08 and
+F-36/F-40; cycle 4 the S3/S4 friction; the design decisions (F-06, F-09,
+F-10, F-24, F-25, F-33, F-34, F-38) are `OPEN_QUESTIONS.md` #5.
+
+### Dev-database state after the run
+
+Kept on purpose. Customers 27 **E2E Corner Shop** and 28 **E2E Weekly Deli**
+on run #1 at positions 1–2 (the other 15 shifted to 3–17; run #1
+`delivery_charge` is now **€6.15**, reaching only Corner Shop). Batches 24
+M041026, 25 Y041026, 26 G010426 (backdated to 2026-04-01; 8 wheels left,
+1 maturing, 1 cut → 18 packs, 1 converted), 27 M041026-1, 29 G010426-1.
+Orders 12–18 (`ORD-20261004-001…007`; 14 is still `preparing` with 12 units
+reserved and will sit on `/picking` until picked or cancelled). Invoices
+INV-000004 (paid, emailed), 005 (void), 006 (consolidated weekly, credited
+€5, paid €10), 007 (unpaid). CN-000001. One statement. Three existing
+customers carry E2E-tagged orders (Organic Store 13 cancelled, An Tairseach
+16 → INV-000007, Avoa 17 cancelled). The listener also drained two queued
+dispatch confirmations left from 2026-09-12. **All mail went to the log** —
+including one to a real-looking customer address — so never point dev `.env`
+at SMTP with this data in place. `mossfield:reset-trading-data --confirm` is
+the way back to a clean slate (it also wipes G030426's lineage).
+
+---
+
 ## 2026-10-04 — Housekeeping batch (first Plan/Implement cycle)
 
 **Scope:** four long-deferred items cleared in one pass, run under the new
