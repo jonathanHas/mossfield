@@ -91,6 +91,115 @@ the working tree, so it isn't a useful baseline on its own — the failure list 
 
 ---
 
+## 2026-10-04 — Authorisation boundary pass
+
+**Scope:** the gap every earlier pass named and none covered — "every
+authorisation boundary; this ran entirely as an admin". Logged-out access,
+each of the four roles against every route, the factory write carve-outs,
+deactivation and role change mid-session, and the belongs-to guards on nested
+resources (`/orders/{a}/items/{b}`, `/customers/{a}/special-prices/{b}`).
+Done test-first from the router rather than through the browser: the new
+`tests/Feature/AuthorizationBoundaryTest.php` **walks `Route::getRoutes()`** so
+a route added later is covered automatically — it must be behind `auth` (or be
+a guest page), it must carry a `role:` group unless it is an account page, and
+each role gets exactly what the group says. Parameters are filled from real
+rows because `role` runs *after* route-model binding, so a made-up id would 404
+before the role check and prove nothing; a parameter with no fixture fails the
+suite. 21 cases, 1,376 assertions. Suite 529 + the 7 known.
+
+**What held.** Every route is behind `auth` or `guest`; every authenticated
+route outside the account pages has a role group; guests are bounced to login
+from all 150-odd of them; driver is 403 on every role-gated route and sees a
+€-free dashboard; factory is 403 on every office/admin route and on every write
+in the shared group except the two carve-outs; office is 403 on `/users` and
+`/backup`; the belongs-to guards hold; the API returns 401 without a bearer.
+The group structure described in `CLAUDE.md` is what the router actually does.
+
+### Finding 1 — deactivating a user did not log them out if they had ticked "Remember me"
+
+`User::logOutEverywhere()` deleted the user's rows from the `sessions` table,
+which is what the docs promised. But a "Remember me" login also sets a
+recaller cookie, and on the next request `SessionGuard` rebuilt a session from
+`users.remember_token` — which nothing had changed — and signed the user
+straight back in. Neither `EnsureUserHasRole` nor the `auth`-only routes looked
+at `is_active`; only the policies did. So a deactivated factory user with the
+cookie kept `/dashboard`, `/stock`, `/cheese-cutting`, `/cheese-conversion`
+and their own `/profile` (including the password form), and a deactivated
+office user kept everything those pages' controllers didn't `authorize()`.
+
+Two fixes, each sufficient on its own:
+
+- **`logOutEverywhere()` now cycles `remember_token`** (`Str::random(60)`,
+  `saveQuietly()`) before deleting the sessions, so the cookie is dead.
+- **`App\Http\Middleware\EnsureUserIsActive`**, appended to the `web` group
+  in `bootstrap/app.php`: any request from an inactive account is logged out,
+  the session invalidated, and redirected to login with "This account has been
+  deactivated." This also covers a user deactivated by a direct database edit,
+  which `logOutEverywhere()` never sees.
+
+Pinned by `test_deactivating_a_user_invalidates_their_remember_me_cookie`
+(which first proves the cookie *does* sign in on a cold browser, so the
+assertion can't pass vacuously), `test_deactivation_and_role_change_cycle_the_remember_token`,
+`test_a_deactivated_user_is_logged_out_on_their_next_request` and
+`test_a_deactivated_user_cannot_use_the_account_pages_either`.
+
+### Finding 2 — `DELETE /orders/{order}` was a 500 for everyone
+
+`Route::resource('orders', …)` registered `orders.destroy`, but
+`OrderController` has no `destroy()` — orders are cancelled, never deleted.
+Any role hitting it got "Call to undefined method", after passing the role
+check. No view linked to it. The resource is now `->except(['destroy'])`.
+Caught by `test_factory_cannot_write_in_the_shared_group_except_through_the_carve_outs`
+asserting 403 and getting 500.
+
+### Finding 3 — a factory user posting an incomplete product form got a validation redirect, not a 403
+
+`ProductRequest` (a `FormRequest`) runs before the controller body, so its
+validation fired before `ProductController::store()`'s `authorize('create')`.
+With a valid payload factory still got the 403, so nothing was writable — but
+the refusal depended on the order of two checks in different files.
+`ProductRequest::authorize()` now mirrors the policy (`create` for store,
+`update` for the bound product), and `CheeseCutRequest::authorize()` (which
+returned `true`) checks `create` on `CheeseCuttingLog`. **Rule:** a
+`FormRequest` on a route whose group admits a role the action denies must
+carry the policy check in `authorize()`, not only in the controller.
+
+### Finding 4 — four read actions had no `authorize()` at all
+
+`StockController::index`, `CheeseCuttingController::index/create/store` and
+`CheeseConversionController::index` relied on the route group alone. Harmless
+while the group holds, but they were exactly the pages finding 1's deactivated
+user could still open, because the policies' `is_active` check never ran. All
+five now call `authorize()` like every other action.
+
+### Also fixed
+
+`InvoicingTestCase::batchItemFor()` had never been used by a passing test and
+didn't set `raw_milk_litres`, which MySQL strict mode refuses. Fixed in place.
+
+### Invariants worth keeping
+
+- **A new route is covered by the matrix the moment it is registered.** If it
+  binds a model the fixture map doesn't know, the suite says so; add the row
+  to `buildFixtures()`. If factory may write through it, add its name to
+  `FACTORY_WRITE_CARVE_OUTS` — deliberately, with the policy to match.
+- **`is_active` is enforced in three places**: login (credentials array),
+  `EnsureUserIsActive` (every web request), and the policies. Keep all three;
+  the middleware is what makes the other two sufficient.
+- **Deactivation = `logOutEverywhere()`**, which now means sessions *and*
+  remember token. Any new path that disables or demotes a user must call it.
+
+### Not covered by this pass
+
+Still untested: double-submit and back-button resubmit, two-tab concurrent
+edits, CSRF (Laravel's, assumed), the password-reset flow for an inactive
+user (they can reset but still can't log in — by inspection), the mossorders
+export's IP allowlist beyond the existing `Api` tests, and the browser-level
+version of all of this (the matrix is HTTP-level; nav visibility per role is
+still only inspected by eye).
+
+---
+
 ## 2026-09-12 — Browser-level pass over production, cutting and conversion
 
 **Scope:** the same spine as the audit below, but driven through the rendered UI

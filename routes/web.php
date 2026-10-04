@@ -99,7 +99,8 @@ Route::middleware('auth')->group(function () {
 Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::resource('products', ProductController::class);
     Route::resource('batches', BatchController::class);
-    Route::resource('orders', \App\Http\Controllers\OrderController::class);
+    // Orders are cancelled (status), never deleted — there is no destroy().
+    Route::resource('orders', \App\Http\Controllers\OrderController::class)->except(['destroy']);
     Route::get('/orders/{order}/docket', [\App\Http\Controllers\OrderController::class, 'docket'])->name('orders.docket');
     Route::post('/orders/{order}/items', [\App\Http\Controllers\OrderController::class, 'storeItem'])->name('orders.items.store');
     Route::patch('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'updateItem'])->name('orders.items.update');

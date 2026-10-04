@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Models\BatchItem;
+use App\Models\CheeseCuttingLog;
 use App\Models\ProductVariant;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -21,7 +22,7 @@ class CheeseCutRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return $this->user()->can('create', CheeseCuttingLog::class);
     }
 
     public function rules(): array

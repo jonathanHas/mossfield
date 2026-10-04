@@ -21,11 +21,19 @@ worth returning to.
   a new one yet. If it still reads "move the planning and testing docs…" when you
   resume, there is nothing to do until a new brief arrives; say so rather than
   inventing work.
-- **Expected next:** authorisation-boundary findings (the browser session was
-  testing `/users`, `/backup`, logged-out access and IDOR on `/orders/{id}` etc.
-  as non-admin users — everything before ran as admin), and possibly the first
-  question in `OPEN_QUESTIONS.md` (no way to record stock being lost) if Jon
-  decides it.
+- **2026-10-04, outside the loop (Jon said "you choose"):** the authorisation
+  boundary pass was done test-first from the router instead of waiting for the
+  browser session's brief — `tests/Feature/AuthorizationBoundaryTest.php` plus
+  four findings fixed (remember-me cookie survived deactivation; dangling
+  `orders.destroy` 500; `ProductRequest` validated before the policy; four
+  read actions with no `authorize()`). Recorded in `TESTING_AND_FIXES.md` →
+  2026-10-04. If the browser session's next brief is authorisation findings,
+  check them against that section first — most should already be closed.
+- **Candidates for what's next:** the first question in `OPEN_QUESTIONS.md` (no
+  way to record stock being lost) if Jon decides it; the housekeeping batch
+  (expiry `>` vs `>=` divergence between `StockOverviewService` and
+  `BatchItem::allocatable()`, delete/rewrite the 7 Breeze tests, replace the
+  41 native `confirm()`s with a modal, refresh the stale `WORK_IN_PROGRESS.md`).
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -56,7 +64,7 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **508 passing, 7 failing** — the 7 are the documented
+- `php artisan test` → **529 passing, 7 failing** — the 7 are the documented
   Breeze baseline (`TESTING_AND_FIXES.md` → *Known-failing baseline*). An 8th
   failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.

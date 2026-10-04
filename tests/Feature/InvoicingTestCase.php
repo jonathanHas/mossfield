@@ -96,6 +96,7 @@ abstract class InvoicingTestCase extends TestCase
             'product_id' => $variant->product_id,
             'batch_code' => 'B'.now()->format('dmy').'-'.$variant->id,
             'production_date' => today()->subDays(2),
+            'raw_milk_litres' => 100,
             'status' => 'active',
         ]);
 

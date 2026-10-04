@@ -2,11 +2,27 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Product;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class ProductRequest extends FormRequest
 {
+    /**
+     * Mirror the controller's policy check here so a factory user posting an
+     * incomplete form gets the 403 rather than a validation redirect — form
+     * requests run before the action body, so the controller's authorize()
+     * alone can't make that ordering hold.
+     */
+    public function authorize(): bool
+    {
+        $product = $this->route('product');
+
+        return $product
+            ? $this->user()->can('update', $product)
+            : $this->user()->can('create', Product::class);
+    }
+
     public function rules(): array
     {
         $productId = $this->route('product')?->id;

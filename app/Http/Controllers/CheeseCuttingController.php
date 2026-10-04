@@ -16,6 +16,8 @@ class CheeseCuttingController extends Controller
 {
     public function index(): View
     {
+        $this->authorize('viewAny', CheeseCuttingLog::class);
+
         // Get all cheese batches that are ready to cut with FREE whole wheels.
         // The reservation is the units still owed (quantity_allocated −
         // quantity_fulfilled) over ALL allocations — never gated on
@@ -74,6 +76,8 @@ class CheeseCuttingController extends Controller
 
     public function create(BatchItem $batchItem): View
     {
+        $this->authorize('create', CheeseCuttingLog::class);
+
         // Ensure this is a wheel from a cheese batch
         if ($batchItem->batch->product->type !== 'cheese' ||
             ! str_contains(strtolower($batchItem->productVariant->name), 'wheel')) {
@@ -92,7 +96,9 @@ class CheeseCuttingController extends Controller
     public function store(CheeseCutRequest $request, BatchItem $batchItem): RedirectResponse
     {
         // Rules (wheel weighed before cutting; packs ≤ wheel; packs × nominal
-        // ≤ wheel; cut_date within [production, today]) live in CheeseCutRequest.
+        // ≤ wheel; cut_date within [production, today]) live in CheeseCutRequest,
+        // as does the policy check (its authorize() runs before this body).
+        $this->authorize('create', CheeseCuttingLog::class);
         $validated = $request->validated();
 
         // Ensure we have enough free wheels to cut — wheels reserved by an order

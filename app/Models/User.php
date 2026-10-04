@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
@@ -89,12 +90,21 @@ class User extends Authenticatable
     }
 
     /**
-     * Invalidate every database session for this user. Called after role
-     * demotions and deactivations so elevated session tokens can't outlive
-     * the change. Relies on SESSION_DRIVER=database (set in .env.example).
+     * Invalidate every database session for this user AND their "Remember me"
+     * cookies. Called after role demotions and deactivations so elevated
+     * session tokens can't outlive the change. Relies on SESSION_DRIVER=database
+     * (set in .env.example).
+     *
+     * Cycling remember_token matters as much as deleting the sessions: a
+     * recaller cookie re-creates a session from the stored token on the next
+     * request, so deleting sessions alone signed the user straight back in.
+     * EnsureUserIsActive is the backstop for anything this misses.
      */
     public function logOutEverywhere(): int
     {
+        $this->setRememberToken(Str::random(60));
+        $this->saveQuietly();
+
         return DB::table('sessions')->where('user_id', $this->id)->delete();
     }
 }

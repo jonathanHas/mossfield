@@ -22,6 +22,8 @@ class CheeseConversionController extends Controller
 
     public function index(): View
     {
+        $this->authorize('viewAny', CheeseConversionLog::class);
+
         $months = (int) config('mossfield.mature_conversion_months', 5);
         $matureProductId = $this->matureProduct()?->id;
 

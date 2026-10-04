@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ApiTokenAuth;
 use App\Http\Middleware\EnsureUserHasRole;
+use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\SecurityHeaders;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
@@ -19,6 +20,10 @@ return Application::configure(basePath: dirname(__DIR__))
             'api.token' => ApiTokenAuth::class,
             'role' => EnsureUserHasRole::class,
         ]);
+
+        // A deactivated account is signed out on its next web request, however
+        // the session came to exist (database row or "Remember me" cookie).
+        $middleware->web(append: EnsureUserIsActive::class);
 
         // Apply security headers to every response.
         $middleware->append(SecurityHeaders::class);
