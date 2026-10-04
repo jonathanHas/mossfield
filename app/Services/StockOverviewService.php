@@ -18,9 +18,12 @@ class StockOverviewService
 
         $items = BatchItem::query()
             ->with(['batch.product', 'productVariant'])
-            ->withCount(['sourceCuttingLogs', 'sourceConversionLogs'])
+            ->withCount('sourceCuttingLogs')
+            // Wheels converted out, not conversion LOGS — one release can move
+            // several wheels under a single log row.
+            ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
             ->withSum([
-                'orderAllocations as quantity_currently_allocated' => fn ($q) => $q->whereNull('fulfilled_at'),
+                'orderAllocations as quantity_currently_allocated',
             ], DB::raw('quantity_allocated - quantity_fulfilled'))
             ->whereHas('batch', function ($q) use ($today) {
                 $q->where('status', 'active')
@@ -155,7 +158,7 @@ class StockOverviewService
 
             if ($isWheel($variant->name)) {
                 $cut = (int) $group->sum(fn ($i) => (int) ($i->source_cutting_logs_count ?? 0));
-                $converted = (int) $group->sum(fn ($i) => (int) ($i->source_conversion_logs_count ?? 0));
+                $converted = (int) $group->sum(fn ($i) => (int) ($i->converted_wheels ?? 0));
                 $maturing = (int) $group->sum(fn ($i) => (int) $i->quantity_maturing);
                 $sold = max(0, $produced - $remaining - $cut - $converted);
                 $remainingClamped = max(0, $produced - $cut - $converted - $sold);

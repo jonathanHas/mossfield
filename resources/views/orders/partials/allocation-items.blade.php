@@ -265,10 +265,16 @@
                                 <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                                 <path d="M12 9v4" /><path d="M12 17h.01" />
                             </svg>
+                            @php $outstanding = $orderItem->quantity_ordered - $orderItem->quantity_allocated; @endphp
                             <div>
-                                <strong>No available stock.</strong>
-                                No ready-to-sell stock available for this product variant. Check production status or create new batches —
-                                or close this line short so the rest of the order can ship.
+                                @if($orderItem->quantity_allocated > 0)
+                                    <strong>{{ $outstanding }} of {{ $orderItem->quantity_ordered }} still unallocated — no stock left for the rest.</strong>
+                                    {{ $orderItem->quantity_allocated }} {{ Str::plural('unit', $orderItem->quantity_allocated) }} are allocated above; there is no ready-to-sell stock for the remaining {{ $outstanding }}.
+                                @else
+                                    <strong>No available stock.</strong>
+                                    No ready-to-sell stock available for this product variant.
+                                @endif
+                                Check production status or create new batches — or close this line short so the rest of the order can ship.
                             </div>
                         </div>
                     @endif

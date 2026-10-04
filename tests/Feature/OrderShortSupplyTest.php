@@ -150,6 +150,7 @@ class OrderShortSupplyTest extends TestCase
         $variant = $this->variant();
         [$order, $item] = $this->orderWithItem($variant, 4);
 
+        \Illuminate\Support\Facades\Mail::fake();
         $office = $this->office();
         $this->actingAs($office)->post(route('orders.items.short', [$order, $item]));
         $this->actingAs($office)->post(route('orders.dispatch', $order))->assertRedirect();
@@ -236,7 +237,7 @@ class OrderShortSupplyTest extends TestCase
         $this->assertSame(2, $item->quantity_short);
     }
 
-    public function test_the_invoice_quantity_column_shows_what_was_supplied(): void
+    public function test_the_dispatch_confirmation_quantity_column_shows_what_was_supplied(): void
     {
         $variant = $this->variant();
         $batchItem = $this->batchItem($variant, 3);
@@ -279,13 +280,13 @@ class OrderShortSupplyTest extends TestCase
             ->assertSee('Short supplied — 10 not sent');
     }
 
-    public function test_the_invoice_marks_an_unsupplied_line_as_not_charged(): void
+    public function test_the_dispatch_confirmation_marks_an_unsupplied_line_as_not_charged(): void
     {
         $variant = $this->variant();
         [$order, $item] = $this->orderWithItem($variant, 10);
         $this->actingAs($this->office())->post(route('orders.items.short', [$order, $item]));
 
-        $this->actingAs($this->office())->get(route('orders.invoice', $order))
+        $this->actingAs($this->office())->get(route('orders.dispatch-confirmation', $order))
             ->assertOk()
             ->assertSee('Not supplied — not charged.')
             ->assertSee('€0.00');

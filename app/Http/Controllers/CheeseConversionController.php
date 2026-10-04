@@ -10,6 +10,7 @@ use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\View\View;
 
 class CheeseConversionController extends Controller
@@ -73,24 +74,38 @@ class CheeseConversionController extends Controller
      * Release held wheels into the Mature product. Only once the batch is old
      * enough; consumes from the maturing hold (not from free stock).
      */
-    public function release(BatchItem $batchItem): RedirectResponse
+    public function release(Request $request, BatchItem $batchItem): RedirectResponse
     {
         $this->authorize('create', CheeseConversionLog::class);
         $this->guardSourceWheel($batchItem);
 
         abort_unless($batchItem->batch->isEligibleForMaturation(), 404, 'This batch has not reached the maturation age yet.');
 
-        // Release the full saved hold — all held wheels in a batch are the same
-        // age, so they become eligible together.
-        $wheels = (int) $batchItem->quantity_maturing;
-        if ($wheels < 1) {
-            return back()->withErrors(['error' => 'No wheels are being held to release.']);
+        // Explicit redirects, not back(): the refusal has to land on the
+        // allocator page where it is rendered, whatever the request's Referer.
+        $held = (int) $batchItem->quantity_maturing;
+        if ($held < 1) {
+            return redirect()->route('cheese-conversion.index')
+                ->withErrors(['error' => 'No wheels are being held to release.']);
         }
+
+        // Bounded exactly like hold(): the saved hold is the ceiling, so a
+        // request can never release more than is set aside, nothing, or a
+        // negative. The UI posts the whole hold; a smaller number is a
+        // legitimate partial release.
+        $validator = Validator::make($request->all(), [
+            'quantity' => "required|integer|min:1|max:{$held}",
+        ]);
+        if ($validator->fails()) {
+            return redirect()->route('cheese-conversion.index')->withErrors($validator);
+        }
+        $wheels = (int) $validator->validated()['quantity'];
 
         $matureProduct = $this->matureProduct();
         $matureWheelVariant = $matureProduct ? $this->matureWheelVariant($matureProduct) : null;
         if (! $matureWheelVariant) {
-            return back()->withErrors(['error' => 'Mature cheese product is not configured. Run the product seeder.']);
+            return redirect()->route('cheese-conversion.index')
+                ->withErrors(['error' => 'Mature cheese product is not configured. Run the product seeder.']);
         }
 
         DB::transaction(function () use ($batchItem, $wheels, $matureProduct, $matureWheelVariant) {

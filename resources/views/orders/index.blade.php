@@ -17,13 +17,6 @@
             @endcan
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error">{{ session('error') }}</div>
-        @endif
-
         <div class="mf-panel mb-4">
             <form method="GET" class="flex flex-wrap gap-3 items-end p-4">
                 <div>
@@ -77,8 +70,8 @@
                             <th class="mf-th">Order date</th>
                             <th class="mf-th">Delivery</th>
                             <th class="mf-th">Status</th>
-                            <th class="mf-th">Payment</th>
                             @can('see-financials')
+                                <th class="mf-th">Payment</th>
                                 <th class="mf-th">Total</th>
                             @endcan
                             <th class="mf-th"></th>
@@ -113,17 +106,17 @@
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->delivery_date ? $order->delivery_date->format('d/m/Y') : '—' }}</td>
                                 <td class="mf-td">
                                     <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span>
-                                    @if($order->status === 'ready')
+                                    @if($order->hasReachedReady())
                                         <a href="{{ route('orders.docket', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View dispatch docket in a new window">Docket</a>
                                     @endif
-                                    @can('see-financials')
-                                        @if($order->hasReachedReady())
-                                            <a href="{{ route('orders.invoice', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View invoice in a new window">Invoice</a>
-                                        @endif
-                                    @endcan
                                 </td>
-                                <td class="mf-td"><span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span></td>
                                 @can('see-financials')
+                                    <td class="mf-td">
+                                        <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span>
+                                        @if($order->invoice_id)
+                                            <a href="{{ route('invoicing.invoices.show', $order->invoice_id) }}" class="mf-link ml-1 text-[11.5px]" title="Open the invoice in Finance">inv</a>
+                                        @endif
+                                    </td>
                                     <td class="mf-td font-mono font-medium">€{{ number_format($order->total_amount, 2) }}</td>
                                 @endcan
                                 <td class="mf-td text-right">

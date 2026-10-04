@@ -76,6 +76,45 @@
                         @error('payment_terms') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
+                        <label for="billing_email" class="mf-label">Billing email</label>
+                        <input type="email" name="billing_email" id="billing_email"
+                               value="{{ old('billing_email') }}" maxlength="255" class="mf-input">
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">Where invoices and statements go. Leave blank to use the main email.</p>
+                        @error('billing_email') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label for="vat_number" class="mf-label">VAT number</label>
+                        <input type="text" name="vat_number" id="vat_number"
+                               value="{{ old('vat_number') }}" maxlength="64" class="mf-input">
+                        @error('vat_number') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label for="invoice_delivery" class="mf-label">Invoice delivery <span style="color: var(--danger);">*</span></label>
+                        <select name="invoice_delivery" id="invoice_delivery" required class="mf-select">
+                            @foreach (App\Enums\InvoiceDelivery::cases() as $case)
+                                <option value="{{ $case->value }}" {{ old('invoice_delivery', 'email') === $case->value ? 'selected' : '' }}>{{ $case->label() }}</option>
+                            @endforeach
+                        </select>
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">"Print" and "no invoice" keep this customer out of the not-yet-emailed queue.</p>
+                        @error('invoice_delivery') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label for="invoicing_mode" class="mf-label">Invoicing <span style="color: var(--danger);">*</span></label>
+                        <select name="invoicing_mode" id="invoicing_mode" required class="mf-select">
+                            @foreach (App\Enums\InvoicingMode::cases() as $case)
+                                <option value="{{ $case->value }}" {{ old('invoicing_mode', 'per_order') === $case->value ? 'selected' : '' }}>{{ $case->label() }}</option>
+                            @endforeach
+                        </select>
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">Weekly/monthly customers get one invoice per period instead of one per delivery.</p>
+                        @error('invoicing_mode') <p class="mf-error">{{ $message }}</p> @enderror
+                    </div>
+                    <div>
+                        <label class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" name="send_statements" value="1" class="mf-checkbox" {{ old('send_statements', true) ? 'checked' : '' }}>
+                            <span class="text-[13px]">Include in month-end statement runs</span>
+                        </label>
+                    </div>
+                    <div>
                         <label for="delivery_charge_percent" class="mf-label">Delivery charge (%)</label>
                         <input type="number" name="delivery_charge_percent" id="delivery_charge_percent"
                                value="{{ old('delivery_charge_percent') }}" step="0.01" min="0" max="100" class="mf-input">

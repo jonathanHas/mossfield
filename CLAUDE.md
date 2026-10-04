@@ -7,8 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`README.md`** — feature overview, dev setup, API reference
 - **`DEPLOYMENT.md`** — production install/upgrade runbook (env vars, MySQL bootstrap, IP allowlist, scheduler cron, smoke tests). Start here for any "how do I deploy / set up a new prod install" question.
 - **`SECURITY_NEXT_STEPS.md`** — security-review tracking doc + token-rotation runbook
-- **`WORK_IN_PROGRESS.md`** — current in-flight issues and recently completed work
+- **`docs/planImp/`** — how the app is being reviewed and improved (as distinct from how it works, here, or how it ships, `DEPLOYMENT.md`); `docs/planImp/README.md` indexes it
+- **`docs/planImp/TESTING_AND_FIXES.md`** — how to run the suites, the 7 known-failing Breeze tests (an 8th failure is real), and the audit log: what was deliberately tested, what broke, and the invariants the fixes established. Start here before touching stock/allocation arithmetic.
+- **`docs/planImp/RESUME.md`** — the last stopping point (loop position, uncommitted state, baseline, dev DB, how to bring the box up); read it first when resuming after a reboot
+- **`docs/planImp/WORK_IN_PROGRESS.md`** — current in-flight issues and recently completed work (`docs/planImp/FULFILMENT_PLAN.md` is the fulfilment-flow roadmap; `docs/planImp/OPEN_QUESTIONS.md` and `SMALL_FIXES.md` are the decisions-pending and polish lists)
 - **mossorders side:** same split exists at `/var/www/html/mossorders/{README,AGENTS,DEPLOYMENT}.md`
+
+## Handoff Convention (browser-testing ↔ Claude Code)
+
+Work arrives as a brief in **`docs/planImp/handoff/NEXT.md`** (written by the browser-testing session) and is answered by **`docs/planImp/handoff/REPORT.md`** (written by Claude Code, replacing the previous one). "Do the next handoff" means: read `docs/planImp/handoff/NEXT.md`, do it test-first, write `docs/planImp/handoff/REPORT.md`. `docs/planImp/handoff/README.md` has the protocol and the expected shape of a report (status, `git diff --stat`, what to verify in the browser, decisions, disagreements, test results, dev-DB state). Never edit `NEXT.md`; history belongs in `docs/planImp/TESTING_AND_FIXES.md`, not in either scratch file.
 
 ## Project Overview
 
@@ -18,7 +25,7 @@ Laravel 12 app for Mossfield Organic Farm — a dairy producer (bottles milk, ma
 - **Framework**: Laravel 12 with PHP 8.2+
 - **Frontend**: Blade templates with Tailwind CSS and Alpine.js
 - **Build System**: Vite for asset compilation
-- **Database**: SQLite (default) with Eloquent ORM
+- **Database**: MySQL / MariaDB with Eloquent ORM (dev, test and production — see **Database** below)
 - **Authentication**: Laravel Breeze (supports username OR email login)
 - **Testing**: PHPUnit with Feature and Unit test suites
 
@@ -29,8 +36,11 @@ Laravel 12 app for Mossfield Organic Farm — a dairy producer (bottles milk, ma
 composer install
 npm install
 cp .env.example .env          # if needed
+# .env.example still ships DB_CONNECTION=sqlite — set the MySQL block by hand:
+#   DB_CONNECTION=mysql  DB_HOST=127.0.0.1  DB_PORT=3306
+#   DB_DATABASE=mossfield_cl  DB_USERNAME=…  DB_PASSWORD=…
 php artisan key:generate
-touch database/database.sqlite && php artisan migrate
+php artisan migrate
 composer run dev              # server + queue + logs + Vite
 ```
 
@@ -55,6 +65,13 @@ php artisan test --testsuite=Feature
 php artisan test --testsuite=Unit
 php artisan test tests/Feature/ExampleTest.php
 ```
+
+### Resetting Dev Trading Data
+```bash
+php artisan mossfield:reset-trading-data --seed=1            # dry run (exit 1, nothing changed)
+php artisan mossfield:reset-trading-data --seed=1 --confirm  # wipe trading history, restart numbering, re-run BatchSeeder
+```
+Keeps users, customers (+ special prices), products, variants, delivery runs; wipes everything trading-related (see `App\Console\Commands\ResetTradingData::WIPE_ORDER`); refuses in production. `--seed=N` makes the regenerated stock reproducible. `ResetTradingDataTest` fails if a new table isn't classified as kept/wiped/infrastructure — add it to the right constant. Details in `docs/planImp/TESTING_AND_FIXES.md` → "Resetting the dev database between passes".
 
 ### Code Quality
 ```bash
@@ -84,12 +101,30 @@ php artisan view:clear
 - **Frontend**: Server-side rendered Blade + Tailwind, Vite asset pipeline with HMR
 
 ### Configuration
-- Database configured for SQLite in `.env`; asset compilation in `vite.config.js`
-- Tailwind in `tailwind.config.js` (forms plugin); PHPUnit in `phpunit.xml` (SQLite in-memory test DB)
+- Database configured for **MySQL** in `.env`; asset compilation in `vite.config.js`
+- Tailwind in `tailwind.config.js` (forms plugin); PHPUnit in `phpunit.xml` (**MySQL** `mossfield_test`, `QUEUE_CONNECTION=sync`, `MAIL_MAILER=array` — MySQL deliberately, so `lockForUpdate` and queued jobs behave as they do in prod)
 
 ## Database
 
-SQLite by default (`database/database.sqlite`).
+**MySQL / MariaDB everywhere** — dev, test and production. Nothing in this app
+runs on SQLite.
+
+- **Dev**: `mossfield_cl` on `127.0.0.1:3306` (set in `.env`).
+- **Test**: `mossfield_test`, hardcoded in `phpunit.xml` along with its
+  credentials — not inherited from `.env`, so the two databases never collide
+  and `php artisan test` can't wipe your dev data.
+- **Production**: see `DEPLOYMENT.md`.
+
+Two traps worth knowing:
+
+- **`config/database.php` still falls back to `'sqlite'`** when `DB_CONNECTION`
+  is unset (`env('DB_CONNECTION', 'sqlite')` — the stock Laravel 12 default),
+  and **`.env.example` ships `DB_CONNECTION=sqlite`**. A fresh `cp .env.example .env`
+  therefore points dev at SQLite while the test suite stays on MySQL. Set the
+  MySQL block by hand (see *Starting Development*).
+- The app user needs grants on **both** `@localhost` and `@127.0.0.1` — MariaDB
+  reverse-resolves a TCP connection from `127.0.0.1` to `localhost`, so a grant
+  on one alone fails half the time.
 
 ### Common Database Operations
 ```bash
@@ -103,6 +138,13 @@ php artisan tinker          # access database directly
 ## Frontend Development
 
 Blade templates with Tailwind CSS (forms plugin), Alpine.js for interactivity, and Vite for asset building/HMR. Reusable UI via Blade components.
+
+### Flash messages & validation errors
+`resources/views/layouts/partials/feedback.blade.php`, included once in `layouts/app.blade.php`, renders `session('success'|'error'|'warning')` and the default `$errors` bag on **every** `x-app-layout` page. Controllers just `redirect()->…->with('success', …)` / `->withErrors([...])`; **do not** add `@if (session('success'))` / `$errors->any()` blocks to individual pages — they'd render twice (`LayoutFeedbackTest` pins exactly-once). Per-field `<x-input-error>` is separate and fine. Prefer an explicit `redirect()->route(...)` over `back()` on refusal paths so a Referer-less request can't land the message on a page outside the layout. (`layouts/picking.blade.php` has its own equivalent region.)
+
+### Fonts & the root URL
+- Fonts (Inter, JetBrains Mono, Fraunces, Figtree) are **self-hosted**: imported from `@fontsource/*` at the top of `resources/css/app.css` and bundled by Vite. No layout links to fonts.bunny.net — the app runs on a LAN. Add weights by importing another `@fontsource/<family>/<weight>.css`.
+- `/` redirects to `dashboard` (signed in) or `login`; there is no welcome page.
 
 ### Asset Files
 - `resources/css/app.css` - Main CSS
@@ -138,7 +180,9 @@ Seeder refuses to run in production. All auth routes are in `routes/auth.php` (c
 ## Database Connections
 
 ### Primary Database
-SQLite by default (`database/database.sqlite`); config in `config/database.php`.
+MySQL / MariaDB (`mossfield_cl` in dev); config in `config/database.php`. See
+**Database** above for the per-environment breakdown and the two
+SQLite-fallback traps.
 
 ### POS Database (Placeholder)
 A commented-out read-only `pos` connection in `config/database.php` for future uniCenta integration — uncomment and set env vars when ready. Usage: `DB::connection('pos')->table('products')->get()`.
@@ -236,7 +280,7 @@ Mossfield Organic Farm produces three product types:
 - **Batch Traceability**: tracking with automated batch code generation
 - **Product Management**: products with full CRUD
 - **Product Variant Management**: full CRUD for variants (sizes, packaging) — weight, price, active status per variant; nested routes `/products/{product}/variants/*`
-- **Cheese Cutting System**: convert wheels to vacuum packs with full traceability
+- **Cheese Cutting System**: convert wheels to vacuum packs with full traceability. The wheel is **weighed before cutting** (`cheese_cutting_logs.wheel_weight_kg`, required on new cuts, nullable for pre-2026-09-13 rows — never backfilled with nominal); `total_weight_kg` is the packs; `CheeseCuttingLog::waste_kg` is the trim and `Batch::trim_loss_kg` (+ `measured_cuts_count`/`unmeasured_cuts_count`) sums it. All cut rules live in `App\Http\Requests\CheeseCutRequest`: packs ≤ wheel, packs × nominal pack weight ≤ wheel, `cut_date` within [production date, today]. `Batch::cuttingLogs()` is `hasManyThrough` batch_items.
 - **Mature Conversion** (`/cheese-conversion`): set Farmhouse wheels aside to age (reversible maturing hold, excluded from orders), then release aged wheels into the separate Mature product — see "Mature Conversion" below
 - **Stock Overview**: real-time stock levels and valuations
 - **Grouped Batch Browser** (`/batches`): three-level collapsible hierarchy (type → cheese variety → batch) via native `<details>`/`<summary>`. Each batch card header shows an at-a-glance status strip: one circle per wheel produced (**yellow**=free, **amber**=allocated, **deep-amber**=maturing hold, **grey**=cut, **black**=sold whole) plus a 128px stacked mini-bar for vacuum packs (yellow=remaining, black=sold). Cheese cards also show a compact **lineage line** — "Matured from …" on a Mature batch and "Matured into …" on a farmhouse batch that has fed one (via `source_batch_id`). Same layout on `/cheese-cutting`, with the "Cut Wheel" action inside each expanded body.
@@ -256,16 +300,24 @@ Mossfield Organic Farm produces three product types:
 - **Variable Weight Fulfillment** (cheese): per-unit weight entry with running total, weight-based pricing (€/kg), fulfilled totals from actual vs estimated weight. Pre-fulfillment `line_total` is weight-aware (`qty × weight_kg × unit_price` for weight-priced items, set in `OrderItem::boot()`); `fulfilled_total` overrides once actual weights are known.
 - **Undo Fulfillment**: reverse fulfillments and restore stock
 - **Online Orders UI** (`/online-orders`): preview and import orders from the Mossorders portal
-- **Email Documents** (`POST /orders/{order}/email/{document}`, `orders.email`): one-click **Email invoice** / **Email docket** buttons on `orders/show` send the document to `customer.email` as a PDF attachment over SMTP. Office/admin only (factory can view/print the docket but not email it); invoice adds the `see-financials` + `hasReachedReady()` guards. Reuses the same `Pdf::loadView('orders.{doc}', ['pdf' => true])` render via the `App\Mail\OrderDocumentMail` Mailable (body: `resources/views/emails/order-document.blade.php`). **Sent synchronously** (immediate success/failure flash); failures logged to the `sync` channel. Needs `MAIL_MAILER=smtp` in prod (dev defaults to `log`).
+### ✅ **Invoicing & Statements** (`/invoicing`)
+Office-only finance area — issue and email invoices (per-order or consolidated per
+week/month), record customer payments allocated across invoices, raise credit
+notes, send statements and overdue reminders, and export CSV for the accountant.
+Every send is logged in `document_emails`, so "which invoices haven't gone out?"
+is a filter, not a guess. See **Invoicing & Statements** below for the invariants.
+
+- **Dispatch Confirmation** (auto-sent at dispatch): the priced "what went on the van" document — quantities, weights, batch codes, value, flagged **INVOICE TO FOLLOW**, no invoice number. `App\Documents\DispatchConfirmation` (adapter over `resources/views/orders/dispatch-confirmation.blade.php`, the former pro forma) + `App\Mail\DispatchConfirmationMail`. Sent to `Customer::billingEmail()` by `App\Services\DispatchService` on **every** dispatch (per-order page and the run-level button), logged in `document_emails` (`kind = dispatch_confirmation`). It **replaced** the manual "Email docket" button; the price-free docket (`orders.docket`) stays printable. Office can view/print (`orders.dispatch-confirmation`, HTML or `?download=1`) and resend (`orders.dispatch-confirmation.email`) — the order page offers Resend only when the automatic send failed or there was no address.
 
 ### ✅ **Business Intelligence**
 - **Maturation Timeline**: cheese aging visualization
 - **Expiry Tracking**: alerts for items nearing expiry
 - **Stock Valuation**: real-time stock values
+- **Finished weight & yield** (`/batches/{batch}`): `Batch::finished_product_weight` is derived per wheel from measured weights where they exist — `BatchItem::weight_breakdown` puts each unit in one of four states (on hand → nominal; dispatched whole → `order_allocations.actual_weight_kg`; cut → `cheese_cutting_logs.wheel_weight_kg`, nominal when null; converted out → nominal) and asserts `on_hand + dispatched + cut + converted = produced`. **Packs that came off a cut wheel contribute nothing** (the wheel already did); milk/yoghurt stay `produced × unit weight`. `Batch::weight_coverage` (`wheels_weighed / wheels_produced`, measured/nominal kg, `reconciles`) drives the `~` prefix and "N of M wheels weighed" on the page. Both read only **loaded** relations — eager-load `batchItems.{orderAllocations,sourceCuttingLogs,sourceConversionLogs,targetCuttingLogs}` (as `BatchController::show()` does) or every row lazy-loads. `BatchItem::total_weight` is deliberately still nominal (`remaining × unit weight` — on-hand stock is unweighed by definition) and is labelled "On hand (nominal)".
 - **Production Planning**: 6-month production overview
 
 ### 🔄 **API Integration & Mossorders Sync**
-- **Product Export API** — `GET /api/products`, Bearer token (`OFFICE_API_TOKEN`). Returns flattened variants with stock availability; incremental sync via `updated_since`; prices in euros. Each payload includes `is_priced_by_weight` so mossorders can render `€/kg` labels and weight-based estimates.
+- **Product Export API** — `GET /api/products`, Bearer token (`OFFICE_API_TOKEN`). Returns flattened variants with stock availability (`stock_available` = `BatchItem::freeStockByVariant()` — free, sellable stock, identical to the `/products` figure; not raw `quantity_remaining`); incremental sync via `updated_since`; prices in euros. Each payload includes `is_priced_by_weight` so mossorders can render `€/kg` labels and weight-based estimates.
 - **Mossorders Order Import** — commands `php artisan mossfield:preview-online-orders [--since=]` (read-only) and `mossfield:import-online-orders [--since=]`. Import maps to customers via `customers.mossorders_user_id`, is idempotent, auto-generates office order numbers, and tracks source via `orders.mossorders_order_id`. Customer `notes` from the online order are preserved (falls back to `"Imported from Mossorders order …"` when absent — same fallback in `OnlineOrdersController`). Configure `MOSSORDERS_BASE_URL` and `MOSSORDERS_API_TOKEN`.
 
 ### 🔄 **Future Enhancements**
@@ -308,6 +360,9 @@ The `ProductVariant` model centralises all price formatting and estimation. Alwa
 
 **Estimate vs actual on orders** — `OrderItem.line_total` is the pre-fulfilment **estimate** (nominal weight); once a line is **fully fulfilled**, `OrderItem.fulfilled_total` holds the **actual** (recorded weight × `unit_price`). `OrderItem::invoiceable_total` returns the fulfilled total when fully fulfilled (and > 0) else the estimate, and `Order::calculateTotals()` sums `invoiceable_total` — so an order's stored `subtotal`/`total_amount` reflect actual fulfilled weight once picked. `OrderAllocationController::fulfill()`/`unfulfill()` re-run `calculateTotals()`. Order views show `invoiceable_total` with a `kg` hint for weight-priced lines. **Note:** `unit_price` is locked per line at order-creation from the **customer's rate** for the variant (see "Customer Special Prices" below — a per-customer override if set, else the then-current `base_price`); if a variant's pricing mode/rate changes later (e.g. per-unit → €/kg) or a special price is added/changed, pre-existing orders keep the old `unit_price` and need a manual reprice.
 
+### Product Pickers
+Every product/variant `<select>` (order create incl. its JS row template, order Add item, customer special prices, chilled-run Add line) groups by `<optgroup>` **and** labels each option `ProductVariant::picker_label` — `Farmhouse Cheese · Whole Wheel` (`Product::short_name` drops the shared "Mossfield " prefix). Three cheeses each have a "Whole Wheel" and a "Vacuum Pack", so the variant name alone is ambiguous once the select is closed (finding 7). Eager-load `product` on the variant list.
+
 ### Products Master-Detail View
 `/products` is the grouped-card index; `/products/{product}` (show), `…/edit`, `…/variants/create`, and `…/variants/{variant}/edit` are all master-detail — sibling products in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected content on the right.
 
@@ -321,12 +376,12 @@ The `ProductVariant` model centralises all price formatting and estimation. Alwa
 - **ProductController** — CRUD; `index()`/`show()` eager-load variants with `withSum('batchItems as total_stock', ...)` to avoid N+1 on stock display.
 - **ProductVariantController** — CRUD for variants (nested under products). Routes `products.variants.{create,store,edit,update,destroy}`; views `resources/views/products/variants/{create,edit}.blade.php`. `create()` accepts `?from={variantId}` to prefill from an existing variant (exposed as `$source`).
 - **BatchController** — Batch CRUD + grouped browser at `/batches`. `index()` eager-loads `batchItems` with `withCount('sourceCuttingLogs')` so the "cut" count is one query, not N+1. View composes three nested `<details>` levels, deferring each card to `resources/views/batches/partials/batch-card.blade.php`.
-- **CheeseCuttingController** — same eager-load pattern on `index()`; view at `resources/views/cheese-cutting/index.blade.php` uses `partials/batch-card.blade.php` with per-wheel **Cut Wheel** buttons in the expanded body.
+- **CheeseCuttingController** — same eager-load pattern on `index()` (its `withSum` is **not** gated on `fulfilled_at`); after loading it stamps `free_quantity` (= `remaining − owed − maturing`, from the loaded sums — no SUM per row) on each batch item and drops batches with no free wheel, so a fully held/reserved batch isn't "Ready to cut". View at `resources/views/cheese-cutting/index.blade.php` uses `partials/batch-card.blade.php`, whose "Wheels left", "N wheels available" and per-wheel **Cut Wheel** buttons all read `free_quantity`.
 
 ### Wheel & Vac-Pack Visualization (shared logic)
 Cheese batches render an at-a-glance status strip in the card header:
 - **Wheels**: one circle per unit of `quantity_produced`. `cut = source_cutting_logs_count` (requires the `withCount` above), `sold = produced − remaining − cut`, `remaining = produced − cut − sold`, `allocated = min(remaining, unfulfilled allocations)`, `free = remaining − allocated`. Always clamped to `max(0, …)` to survive counter drift.
-  - **Maturing hold**: `maturing = min(free, quantity_maturing)` is then carved *out of* `free` (held wheels live inside `quantity_remaining`/`free` — see "Mature Conversion") and rendered as a distinct deep-amber circle using the shared `var(--state-maturing)` token (defined in `resources/css/stock.css`, imported by `app.css`, so it matches the `/stock` maturing segment). The numeric summary is `free · allocated · maturing · cut · sold / produced` (maturing shown only when > 0). The batches-index card's per-item detail table also has a **Maturing** column. This formula is duplicated across `resources/views/batches/{index.blade.php,partials/batch-card.blade.php}` and `resources/views/cheese-cutting/{index.blade.php,partials/batch-card.blade.php}` — keep the four in sync.
+  - **Maturing hold**: `maturing = min(free, quantity_maturing)` is then carved *out of* `free` (held wheels live inside `quantity_remaining`/`free` — see "Mature Conversion") and rendered as a distinct deep-amber circle using the shared `var(--state-maturing)` token (defined in `resources/css/stock.css`, imported by `app.css`, so it matches the `/stock` maturing segment). **Converted** wheels (Σ `wheels_converted` from `sourceConversionLogs`, loaded as `converted_wheels` by the index queries) are their own purple state, not "sold". The numeric summary labels every figure and drops zero states (`29 free · 2 maturing · 3 cut · 1 converted · 4 sold / 38`). **The formula lives once, in `BatchItem::wheelStates()`**, rendered by `resources/views/batches/partials/_wheel-strip.blade.php` (per item) and `_wheel-legend.blade.php` (variety-header totals); both `/batches` and `/cheese-cutting` include those partials — don't re-inline it.
 - **Vac packs**: a 128px stacked bar (`w-32 h-2`) with yellow=remaining / black=sold proportional to `quantity_produced`. One row per non-wheel cheese batch item with `produced > 0` (per-pack markers impractical — counts reach hundreds). Maturing does not apply to packs (only wheels are held/released).
 - Same classification (`str_contains(strtolower($variant->name), 'wheel')`) is used in `CheeseCuttingController::store()` — keep aligned when renaming variants.
 - Each cheese sub-group header on `/batches` and `/cheese-cutting` also shows aggregate free/allocated/maturing/cut/sold totals so the summary stays visible when batches are collapsed.
@@ -391,7 +446,7 @@ A **VAT-inclusive (gross)** € delivery charge defined **per DeliveryRun** (`de
 - **VAT math** lives in `Order::calculateTotals()` — the stored `delivery_charge` is gross, so `net = round(gross / (1 + Order::DELIVERY_CHARGE_VAT_RATE), 2)` (0.23), `tax_amount = round(gross − net, 2)`, `total = subtotal + gross`. VAT is derived by **subtraction** (not `gross × rate`) so `net + tax == gross` exactly — the total matches the entered figure with no penny drift. `Order::delivery_charge_net` accessor exposes the net for display. All 9 `calculateTotals()` call sites (pick/edit/undo/cancel) preserve it automatically.
 - **Editable per order** (office/admin): a "Delivery charge (incl VAT)" input on `orders/edit.blade.php`; `OrderController::update()` validates `nullable|numeric|min:0`, coerces blank→0 (column is NOT NULL), then re-runs `calculateTotals()`. **`delivery_charge` is in `$statusFields`** (`orders/show.blade.php`) — the replayed Confirm/Cancel PATCH forms would zero it via that coercion otherwise (same trap as `customer_reference`).
 - **Toggle UI**: on the **delivery-runs index**, per-stop, hidden by default behind an Alpine `showCharges` reveal ("Show charge settings" button — off on every fresh load; the toggle route redirects with `?charges=1` to keep it open for consecutive flags). `POST /delivery-runs/stops/{customer}/charge` → `DeliveryRunController::toggleCharge()` (office/admin group; mirrors `unassign()` — resolves the run, `authorize('update', $run)`). The run's charge amount also shows as a tag in the panel header when the reveal is open.
-- **Display**: a "Delivery charge" row (the **net** `delivery_charge_net`) + "VAT (23%)" line on `orders/show` (inside `@can('see-financials')`) and `orders/invoice`, rendered only when > 0 — so Subtotal + net + VAT = Total reconciles. **Never** on the docket, picking screens, or the chilled-run sheet (all €-free — the sheet's no-€ test still passes).
+- **Display**: a "Delivery charge" row (the **net** `delivery_charge_net`) + "VAT (23%)" line on `orders/show` (inside `@can('see-financials')`) and `orders/dispatch-confirmation`, rendered only when > 0 — so Subtotal + net + VAT = Total reconciles. **Never** on the docket, picking screens, or the chilled-run sheet (all €-free — the sheet's no-€ test still passes).
 - **Percentage variant** (per customer, overrides the fixed run charge): `customers.delivery_charge_percent` (nullable decimal, migration `2026_07_23_130000`) holds a negotiated **% of order value**, snapshotted per order into `orders.delivery_charge_percent` (migration `2026_07_23_130100`). Also VAT-inclusive, but **recomputes live**: when `orders.delivery_charge_percent` is set, `Order::calculateTotals()` recomputes `delivery_charge = round(subtotal × pct / 100, 2)` on **every** recalc (so it tracks line edits/picks), then the same gross→net→VAT back-out runs — all display/`$statusFields`/`delivery_charge_net` code is unchanged because `orders.delivery_charge` stays the single gross € source of truth. **Precedence**: `Customer::currentDeliveryCharge()` returns 0 when `Customer::deliveryChargePercent()` (the rate, or null) is non-null, so a % customer ignores the run's fixed charge; both are snapshotted at the four creation sites (`'delivery_charge' => currentDeliveryCharge()`, `'delivery_charge_percent' => deliveryChargePercent()`). Configured on the **customer create/edit form** ("Delivery charge (%)" in Business terms; `CustomerController` validates `nullable|numeric|min:0|max:100`, blank→null via `normalizeChargePercent()`), shown as an `mf-tag` badge + a Business-terms row on `customers/show`. Per-order editable via a "Delivery charge (%)" input on `orders/edit.blade.php` (a set % overrides the € amount; blank reverts to fixed); **`delivery_charge_percent` is also in `$statusFields`** — same replay trap: dropping it on a status PATCH would null the rate and freeze the order at the last computed €. Order show/invoice label the line "Delivery charge (10%)" when a rate is set (amount still the net).
 - Tests: `tests/Feature/DeliveryChargeTest.php` (run-form persist/reject, toggle both-ways + factory-403 + unassigned-error + reveal render, snapshot via store/saveStop/import with exact VAT split + no-drift total, recalc survival, edit/zero + status-replay, show/invoice net render + factory redaction; **plus the percentage cases** — customer-form persist/range-reject, rate snapshot + gross compute, precedence over fixed, live recompute on line change, edit-recompute + blank-reverts, status-replay survival, show/invoice/customer-page display).
 
@@ -476,7 +531,7 @@ For cheese wheels and other variable-weight products:
 - Variable weight items show a "Variable Weight" badge.
 - **Per-unit** (`!is_bulk_weighed`, e.g. wheels): one weight input per unit (#1, #2, #3…) with a running total summed client-side into the hidden `actual_weight_kg` (JS `updateWeightInputs`/`updateTotal`).
 - **Bulk** (`is_bulk_weighed`, e.g. vacuum packs): a single "Total weight (kg)" input posted directly as `actual_weight_kg` — no per-unit rows, no JS. `OrderItem::isBulkWeighed()` selects the branch in `orders/partials/allocation-items.blade.php`.
-- `OrderAllocationController::fulfill()` is unchanged — it validates `actual_weight_kg` (required for any `is_variable_weight` item) for both styles.
+- **Server-side weights** (`App\Http\Controllers\Concerns\ValidatesFulfilmentWeights`, shared by `OrderAllocationController::fulfill()` and `PickingController::pick()`): per-unit lines must post `weights[]` with exactly `quantity` entries (each > 0) — `actual_weight_kg` is **recomputed as their sum and the posted total ignored**; bulk lines post one `actual_weight_kg`. The list is stored on `order_allocations.unit_weights_kg` (JSON, `App\Casts\KilogramList` ⇒ `list<float>`), appended across partial picks; `unfulfillAllocation()` pops the last N and subtracts exactly their kg. Don't add a weight path that trusts a client total.
 - Price shown as €X.XX/kg with estimated vs fulfilled totals (only when `is_priced_by_weight`).
 
 **Controller**: `OrderAllocationController`
@@ -536,7 +591,7 @@ Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design
 - **`orders.loaded_at`** (nullable timestamp) — the per-stop "loaded onto van" tick.
 
 ### Key mechanics
-- **Routes**: `GET /chilled-runs` + `POST /chilled-runs/orders/{order}/loaded` in the `role:admin,office,factory` group; order entry (`save-stop`), `confirm-all`, the two allocate POSTs (see "Allocation from the sheet" below) and run management (`Route::resource('delivery-runs', …)` + assign/reorder/unassign POSTs) are office/admin only.
+- **Routes**: `GET /chilled-runs` + `POST /chilled-runs/orders/{order}/loaded` in the `role:admin,office,factory` group; order entry (`save-stop`), `confirm-all`, the two allocate POSTs (see "Allocation from the sheet" below), `dispatch-all` (see "Dispatch from the sheet") and run management (`Route::resource('delivery-runs', …)` + assign/reorder/unassign POSTs) are office/admin only.
 - **`OrderPolicy::load`** is the second factory carve-out (sibling of `fulfill`): factory can tick loaded but still cannot edit orders. `DeliveryRunPolicy` is a bare `BasePolicy` (office CRUD, factory view-only).
 - **Columns**: `ChilledRunController::buildSheet()` — milk/yoghurt columns are **all active variants** (stable entry targets, render even when unordered; sorted by size — lexical; revisit if a "10L" churn variant lands); **cheese columns are dynamic** (variants actually present on the run's orders, between the yoghurt group and the last column); the last column is order **Notes** only. Cancelled orders excluded; multiple same-day orders per customer sum per cell; customers with no order that day still render with a "No order this week" tag.
 - **Crate math**: footer rows Total units / Blue crates / Extra units outside crate use `ProductVariant::effective_case_size` (`intdiv` / remainder) for milk/yoghurt; cheese columns get units only (`crates`/`extra` null → "—"). The summary strip shows per-type unit+crate totals (+ cheese units when present), an **allocated** progress bar and a loaded progress bar (both count only stops that have orders).
@@ -551,14 +606,15 @@ Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design
 - **`POST /chilled-runs/confirm-all`** (`chilled-runs.confirm-all`, office/admin group): flips every `pending` order on the selected run/date to `confirmed` — the "send the day's orders to the picking floor" action (`/picking` only lists confirmed/preparing/ready). The page-head button shows the pending count and only renders when there's something to confirm; pending orders carry a warn tag on their row.
 
 ### Allocation from the sheet
-`POST /chilled-runs/allocate-all` (`chilled-runs.allocate-all`) and `POST /chilled-runs/stops/{customer}/allocate` (`chilled-runs.allocate-stop`), both **office/admin** — factory 403s at middleware (its carve-outs are only `OrderPolicy::fulfill` and `::load`, neither of which covers reserving stock). Together with Confirm all these make the sheet the day's control surface: **enter → Confirm all → Allocate all → floor picks**.
+`POST /chilled-runs/allocate-all` (`chilled-runs.allocate-all`) and `POST /chilled-runs/stops/{customer}/allocate` (`chilled-runs.allocate-stop`), both **office/admin** — factory 403s at middleware (its carve-outs are only `OrderPolicy::fulfill` and `::load`, neither of which covers reserving stock). Together with Confirm all and Dispatch run these make the sheet the day's control surface: **enter → Confirm all → Allocate all → floor picks → loaded tick → Dispatch run**.
 
 - **The shared loop** is `App\Http\Controllers\Concerns\AllocatesOrderStock::autoAllocateOrder(Order): array` — FIFO by `batch.production_date`, reservation only (stock moves on pick, not here), one `DB::transaction` **per order** (never per run: `allocateFromBatchItem()` holds `lockForUpdate()` on `batch_items`). It `authorize('update', $order)`s and returns `['units','lines_considered','lines_filled','lines_short','short_labels']`; callers own the redirect/flash. `OrderAllocationController::autoAllocate()` is a thin caller over the same trait — **keep both surfaces on it**.
 - **`ALLOCATABLE_STATUSES = ['confirmed','preparing']`** — `pending` is deliberately excluded and reported in the flash ("Confirm them first."). `markPickingStarted()` only promotes from `confirmed`, so allocating a pending order would strand reservations on an order `/picking` can't see.
 - **Don't call `reconcilePickingStatus()`** after allocating: allocation moves `quantity_allocated`, never `quantity_fulfilled`, so the `ready ⇄ preparing` boundary can't legitimately move — calling it would demote a `ready` order as a side effect.
 - **`Order::isFullyAllocated()` is `true` for a zero-line order** (no `isNotEmpty()` guard, unlike `isFullyFulfilled()`) — guard with `orderItems->isNotEmpty()` at every call site.
 - **`BatchItem::allocatable()`** is the shared candidate scope (stock left, active non-expired batch; expiry strict `>`, matching `Batch::isExpired()`). Used by this trait, `BuildsAllocationData` and `PickingController::batchOptionsFor()` — add new callers to it rather than re-inlining the query. Each caller keeps its own PHP predicate (`isAvailableForAllocation()` etc).
-- **Row state**: `buildSheet()` adds a `stats` key per row (`ordered`, `allocated`, `picked`, `allocState`, `pickState`, `canAllocate`) plus run-level `allocatableCount`/`allocatedStops`/`allocStopsTotal`/`allocatedPct`/`orderedUnits`/`allocatedUnits`. All in-memory over the already-loaded orders — no extra queries.
+- **Row state**: `buildSheet()` adds a `stats` key per row (`ordered`, `allocated`, `picked`, `allocState`, `pickState`, `canAllocate`, `showCellAlloc`) plus run-level `allocatableCount`/`allocatedStops`/`allocStopsTotal`/`allocatedPct`/`orderedUnits`/`allocatedUnits`. All in-memory over the already-loaded orders — no extra queries.
+- **Per-cell allocation sub-line**: `allocMap[customer_id][variant_id] => ['allocated','picked','short']` is built in the same pass as `qtyMap`. Each non-zero display cell gets an `alloc-{full|partial|none|short}` class on the `<td>` and a `.alloc` sub-line (`✓` / `4/10` / `0/10` / `4/10` in danger tone with a "N short" title). Denominator is the **raw cell qty** (so it matches the number above it — unlike the row tag, which nets short out). Rendered only when `stats.showCellAlloc` (stop has a confirmed/preparing/ready order and isn't dispatched) — pending stops stay clean. Text-colour only, so the `.col-*` tints and `is-loaded` grey survive.
 - **Unsaved-changes guard** covers form buttons as well as links: `data-confirm-unsaved` on a `<button>` submits its closest form after the discard modal.
 - **`App\Http\Controllers\Concerns\MutatesOrderLines`** trait holds the shared line-mutation invariants (`setLineQuantity` / `applyLineQuantity` / `removeLine` / `cancelOrderKeepingLines`) — extracted from and now also used by `OrderController::storeItem/updateItem/destroyItem`. Any new code that changes `quantity_ordered` or removes lines should go through it (it owns the releaseUnits-on-decrease and cancel-keeps-history rules).
 - **Row form**: a `<form>` can't wrap a `<tr>`, so the editing row's inputs associate with a hidden `<form id="stop-form-{id}">` rendered after the table via the HTML5 `form=` attribute.
@@ -566,17 +622,25 @@ Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design
 - **Customer reference**: the editor also posts an optional `customer_reference` behind a small "+ Ref" toggle (auto-open for `requires_reference` customers), saved/cleared in `saveStop()`; the saved value renders under the order number in display mode. See "Customer Reference" under Order Structure for the full cross-surface notes.
 - **Unsaved-changes guard**: because each row's typed quantities live only in Alpine/DOM until **Save**, leaving the row otherwise discards them silently. `stopEditor` tracks a dirty flag (`init()` snapshots a `baseline`, then `$watch`es `qty`/`addedLines`/`reference` and `serialize()`-compares — a true value diff, so reverting clears it) on the global `window.__stopDirty` (+ `window.__stopCustomer`). **Two coordinated guards:** (1) a delegated capture-phase click handler intercepts run-sheet nav links marked **`data-confirm-unsaved`** (other rows' Edit/"Enter order" + "Multiple orders" link in `_run-table`, the day tabs in `_day-tabs`, the week prev/next in `index`) and opens a labelled `<x-modal name="discard-stop">` ("Keep editing" / "Discard changes") instead of a native `confirm()` — *Discard* clears the flag and navigates to the stashed href; (2) a `beforeunload` net for the back button / refresh / tab close / sidebar nav (browser-controlled generic dialog — can't be relabelled). **Save** and **Cancel** both clear the flag (Save via a submit listener on `stop-form-{id}`; Cancel via `@click`), so neither double-prompts. The attribute is inert when not editing (the guard only arms inside the `@if ($editId)` script block).
 
+### Dispatch from the sheet
+`POST /chilled-runs/dispatch-all` (`chilled-runs.dispatch-all`, **office/admin**) — the last step on the sheet and the point at which Finance is told what went out. `ChilledRunController::dispatchAll()` selects the run/date's open orders, keeps the ones that are `ready` **and** have `loaded_at`, and runs each through **`App\Services\DispatchService::dispatch()`** with one `Str::uuid()` batch id. Everything else is skipped and **named** in the flash ("skipped: Shop B (not loaded); Shop D (not ready)") — the office needs to know who to chase, not a count.
+
+- **`DispatchService` is the one place an order goes out**, used by both this button and `OrderController::markDispatched()`. Three steps, each insulated from the next: (1) status flip to `dispatched` in its own short transaction under `lockForUpdate` (the run button and a per-order click can't both do it — the loser gets a `DispatchException`); (2) `InvoiceService::issueForOrder()` for **per-order customers only** — consolidated customers are skipped and wait for the manual period run; a failure (`InvoicingException` or anything else, `report()`ed) is recorded on the `DispatchResult`, **never thrown**, so the order still ships and sits in Finance → Awaiting invoice; (3) the Dispatch Confirmation — `queue()`d on the run path (N PDF renders + SMTP don't belong in one request), `sendNow()` for a single order. **The invoice is deliberately not emailed here** — office sends it from Finance's not-yet-emailed list.
+- **Consolidated guard is server-side**: `issueForOrder()` throws for a weekly/monthly customer unless `$allowConsolidated` (nobody passes it yet), so no route can per-order-bill them by accident.
+- **`buildSheet()`**: `pickState` uses `hasReachedReady()` (a dispatched stop must not regress to "5/5 picked"); per-row `stats['dispatchState']` (`dispatched|partial|none`); run-level `dispatchableCount` (ready + loaded **orders** — the button's number), `dispatchedCount`/`dispatchedPct` (**stops**, same denominator as the loaded bar). `_run-table` shows a "Dispatched" tag instead of Ready and renders the loaded tick as a static span; `toggleLoaded()` refuses on a dispatched order (the tick is history, not a control).
+- Tests: `tests/Feature/DispatchRunTest.php` (loaded+ready only, named skips, per-order vs consolidated, batch id, invoice not emailed, issue failure doesn't block, no-email flagged, idempotent, run/week isolation, factory 403, button count, sheet state + tick lock, still €-free) and `tests/Feature/DispatchConfirmationTest.php` (document, PDF, gating, per-order Mark dispatched side effects, billing email preference, resend, job resolver, order-page billing line, factory redaction).
+
 ## Mature Conversion (`/cheese-conversion`)
 
 Turns Farmhouse cheese into the separate premium **Mossfield Mature Cheese** product, in two phases. Built from the `Mature Conversion.html` Claude Design handoff — a desktop **wheel allocator** (Farmhouse / Maturing zones; drag wheels or select + Mature→/←Return/quick-allocate stepper). One card per non-mature cheese **wheel batch_item**, at any age.
 
 ### Two-phase model
 1. **Maturing hold** — a *reversible* set-aside stored in **`batch_items.quantity_maturing`** (migration `2026_06_20_130000_add_quantity_maturing_to_batch_items_table`). Allowed at **any age**. Held wheels stay physical farmhouse stock (`quantity_remaining` unchanged) but are **excluded from order allocation/picking/cutting**. Lowering the hold returns wheels to available — the "Save maturing" button persists the Maturing-zone count (fixes the original "wheels vanish on confirm" bug).
-2. **Release** — once the batch passes `Batch::isEligibleForMaturation()` (~5 months), "Release N to mature" consumes the saved hold into the Mature product: get-or-creates **one Mature batch per source** (`batches.source_batch_id`, `production_date` carried forward ⇒ immediately sellable), mints mature wheels, writes a `CheeseConversionLog`, decrements **both** `quantity_remaining` and `quantity_maturing`.
+2. **Release** — once the batch passes `Batch::isEligibleForMaturation()` (~5 months), "Release N to mature" consumes the saved hold into the Mature product. `release()` validates `quantity` as `required|integer|min:1|max:{quantity_maturing}` (same bound/messages as `hold()`; failures redirect to the allocator) and releases exactly that many — a partial release is fine. The button submits a dedicated sibling `release-form-{id}` (HTML `form=` attribute) carrying the **saved** hold, not the hold form's live Alpine count. Release then get-or-creates **one Mature batch per source** (`batches.source_batch_id`, `production_date` carried forward ⇒ immediately sellable), mints mature wheels, writes a `CheeseConversionLog`, decrements **both** `quantity_remaining` and `quantity_maturing`.
 3. **Undo release** — reversible until the mature wheels are cut/sold: returns N wheels to the source batch's `quantity_remaining` + `quantity_maturing`, drops the mature item, deletes the log. Surfaced on the **mature batch's `batches/show`** ("Return to farmhouse hold", gated on `targetBatchItem->available_quantity >= wheels_converted`).
 
 ### Key mechanics
-- **The single leverage point**: `BatchItem::getAvailableQuantityAttribute()` = `max(0, quantity_remaining − unfulfilledAllocations − quantity_maturing)`. Subtracting the hold here propagates "won't auto-assign" to auto-allocate, manual allocate, picking, `BuildsAllocationData`, and `StockOverviewService::totalValue` automatically. `getHoldableQuantityAttribute()` = `remaining − unfulfilledAllocations` caps the hold and drives the allocator's wheel total.
+- **The single leverage point**: `BatchItem::getAvailableQuantityAttribute()` = `max(0, quantity_remaining − outstandingReservations − quantity_maturing)`. Subtracting the hold here propagates "won't auto-assign" to auto-allocate, manual allocate, picking, `BuildsAllocationData`, and `StockOverviewService::totalValue` automatically. `getHoldableQuantityAttribute()` = `remaining − outstandingReservations` caps the hold and drives the allocator's wheel total. **`outstandingReservations` is `SUM(quantity_allocated − quantity_fulfilled)` across ALL allocations — units still owed, not whole allocation rows, and never filtered on `fulfilled_at`.** A picked unit has already left `quantity_remaining`; counting the whole allocation subtracted it twice and hid real stock (permanently, on a short-closed line — see `docs/planImp/TESTING_AND_FIXES.md`, 2026-09-12). The same expression must appear in all eight free-stock sites: here, `ChilledRunController::stockByVariant()`, `StockOverviewService`, `BatchController::index()`, `CheeseCuttingController::index()`, `CheeseConversionController::index()`, and `BatchItem::freeStockByVariant()` — the one-query bulk form serving both `ProductVariant::total_stock` (the "Stock" figure on `/products`, `/products/{product}` and the sibling list; loaders call `ProductVariant::attachFreeStock()` rather than a raw `withSum` of `quantity_remaining`) and `Api\ProductExportController` (`stock_available` — the figure the mossorders portal shows customers, so it must never exceed what the allocator would hand out). The batch page's "Cut … (N left)" buttons and the cut form's "Wheels available" read the per-item `available_quantity` for the same reason.
 - **Routes**: `GET /cheese-conversion` (`cheese-conversion.index`, shared admin/office/factory read) + office/admin writes `POST .../hold/{batchItem}`, `POST .../release/{batchItem}`, `POST .../logs/{log}/undo`. Controller `CheeseConversionController` (`index`/`hold`/`release`/`undoRelease`); `guardSourceWheel()` enforces non-mature cheese wheel (no age gate — `release` adds its own eligibility check).
 - **Authorization**: hold/release gate on `authorize('create', CheeseConversionLog::class)`; undo on `authorize('delete', $log)` (instance — `delete` is a model-level ability). `CheeseConversionLogPolicy` is a bare `BasePolicy` (office write, factory read, driver deny); factory is denied writes at the route group anyway.
 - **Stock**: cheese wheel rows show a distinct **`maturing`** segment (`--state-maturing`, deep amber) removed from `available` — `StockOverviewService::buildCheeseCard()` sums `quantity_maturing`; `resources/views/components/stock/cheese-row.blade.php` renders it. Cutting now guards on `available_quantity` (`CheeseCuttingController::store`) so held/allocated wheels can't be cut. The same deep-amber maturing segment now also appears on the `/batches` and `/cheese-cutting` wheel strips (see "Wheel & Vac-Pack Visualization").
@@ -584,6 +648,142 @@ Turns Farmhouse cheese into the separate premium **Mossfield Mature Cheese** pro
 - **Mature is a normal cheese product** (seeded by `ProductSeeder`: `Mossfield Mature Cheese`, `maturation_days` 150, Whole Wheel + Vacuum Pack variants) ⇒ released wheels flow through stock/allocation and stay cuttable via the existing cheese-cutting flow with no extra work.
 - **Views/CSS**: `resources/views/cheese-conversion/index.blade.php` (Alpine `matureCard(total, held)` seeds the saved hold into the Maturing zone; `x-mature.meta` component); `.mc-*` classes + the `.mc-scope` farm/mature color tokens at the bottom of `resources/css/app.css`. Nav: "Mature Conversion" (clock icon, admin/office/factory) in the Production group. No € on the screen — quantities only.
 - Tests: `tests/Feature/CheeseConversionTest.php` (hold set-aside/reverse/cap, exclusion from auto-allocate, young-batch holds, release eligibility + product conversion + production carry-forward, undo-to-hold + blocked-once-cut, stock `maturing` segment, held-can't-be-cut, role gating).
+
+## Invoicing & Statements (`/invoicing`)
+
+Office-only finance area: issue invoices, email them, record payments, raise
+credit notes, produce statements, and see what has and hasn't been sent. Routes
+live in the `role:admin,office` group under the `invoicing.` name prefix;
+controllers in `app/Http/Controllers/Invoicing/`, services in `app/Services/`.
+
+### The one invariant: an invoice is a SNAPSHOT
+Order lines keep moving after a bill goes out (a later pick, a weight
+correction, an edit re-running `calculateTotals()`). So `InvoiceService::issueForOrder()`
+**copies** every figure and every line into `invoices` + `invoice_lines` at issue
+time, and `invoicing/invoices/pdf.blade.php` renders **only** from that snapshot.
+Never reach through `$invoice->orders` for money. (This replaced the old
+render-on-demand `orders/invoice.blade.php`, which invented an `INV-` number and
+a `now()` date on every view — two prints of one order disagreed.)
+
+- `orders.invoice_id` = the order's **live** invoice. Voiding nulls it, returning
+  the order to the uninvoiced queue; `invoice_lines.order_id` keeps the history.
+- **Issued automatically at dispatch** by `App\Services\DispatchService` (see
+  "Dispatch from the sheet") for per-order customers. There are **no invoice
+  buttons on the order screens** any more: `orders/show` carries one `@can('see-financials')`
+  billing line — "Invoice INV-… · Unpaid" linking to Finance, or "Billed on the
+  weekly/monthly invoice", or "Awaiting invoice" — plus a Confirmation line.
+  The old pro forma (`orders/invoice.blade.php`) became the Dispatch
+  Confirmation; `orders.invoice`/`orders.email` are gone.
+- **Mutation guard**: `OrderController::blockedByInvoice()` refuses line
+  add/edit/remove/short and `update()` (charge edits, cancellation) on an
+  invoiced order, pointing at Void. `markDispatched`/`markDelivered` are separate
+  routes (office/admin group) and still work.
+
+### Numbering
+`document_sequences` (`key`, `next_value`), claimed via `DocumentSequence::next()`
+with `lockForUpdate()` **inside the issuing transaction** — so a refused issue
+rolls the counter back rather than burning a number. `INV-000123`, `CN-000045`;
+unique index on `number` is the backstop.
+
+### Money model
+- **Payments belong to the customer**, not an invoice (shops pay lump sums).
+  `payments` + `payment_allocations` (unique per payment+invoice). Anything
+  unallocated is **credit on account**, spendable later via
+  `PaymentService::allocateCredit()` (oldest due first).
+- **Credit notes reduce the invoice directly** (`invoices.amount_credited`), not
+  via allocation. If crediting leaves an invoice over-paid,
+  `PaymentService::releaseOverAllocation()` trims the newest allocations so the
+  surplus returns to the customer as credit rather than vanishing.
+- **`Invoice::refreshBalances()` is the only writer** of `amount_paid` /
+  `amount_credited` / `balance` (cached so lists can filter and sum in SQL).
+- **`payment_state` is derived, never stored** (`void|paid|overdue|partial|unpaid`)
+  from balance + `due_date`, so it can't go stale.
+- **`orders.payment_status` is now a MIRROR** written by
+  `Invoice::syncOrderPaymentStatus()`. It was removed from `OrderController::update()`
+  validation, from the order edit form, and from `$statusFields` on `orders/show`.
+  Existing badges and index filters read it unchanged. `invoicing:refresh-overdue`
+  (daily) flips it when a due date quietly passes at midnight.
+- **`Customer::outstanding_balance` was rewritten**: open invoice balances minus
+  unallocated credit. It used to sum every order whose `payment_status` wasn't
+  paid — counting cancelled and un-delivered orders, and billing a part-paid
+  order at full value.
+
+### VAT
+Unchanged: products are 0%, only the delivery charge carries 23%. `buildLines()`
+emits one `line_type = 'delivery'` row per order carrying `delivery_charge_net`
+and the whole `tax_amount`, so `net + VAT` still equals the gross figure the
+operator typed.
+
+### Consolidated invoicing
+Per-customer `customers.invoicing_mode` (`per_order|weekly|monthly`). A
+consolidated run sweeps **dispatched/delivered, uninvoiced** orders whose date
+falls in the period, matched on
+`COALESCE(delivery_date, DATE(delivered_at), order_date)` — Mossorders imports
+arrive with a null `delivery_date` and would otherwise never fall in any period.
+`previewConsolidated()` returns an **unsaved** invoice so previewing consumes no
+number.
+
+### Email + the log
+**`DocumentMailer` is the single door** every outbound customer document goes
+through, and it writes a `document_emails` row **before** attempting anything.
+`sendNow()` sends inline (button press → immediate flash); `queue()` writes the
+row then dispatches `App\Jobs\SendDocumentEmail` (batch runs). Two rules worth
+keeping:
+- `deliver()` stamps `emailed_at` **only when `row->kind === document->documentKind()`**
+  — a *reminder* attaches the invoice but is not the invoice being sent, and
+  stamping it would drop the invoice off the not-emailed queue uninvoiced.
+- `SendDocumentEmail::failed()` **preserves** the error `deliver()` already
+  recorded (the real "SMTP refused") instead of overwriting it with its own
+  wrapper message.
+
+The **Awaiting invoice** queue (`UninvoicedOrderController`, dashboard tile) is
+the exceptions list now that dispatch issues invoices itself: auto-issue
+failures, consolidated customers waiting for their period run, and orders picked
+but not yet dispatched.
+
+`Invoice::notEmailed()` (the queue the office asked for) excludes customers whose
+`invoice_delivery` isn't `email` — a paper customer was never going to be
+emailed, so counting them would leave the queue permanently non-empty. The
+dispatch docket rides the same log via the `App\Documents\OrderDocket` adapter.
+
+### Statements
+`StatementService::ledger()` builds opening balance → chronological
+invoice/credit/payment lines with a running balance → closing balance, plus aged
+buckets (not-yet-due / 1–30 / 31–60 / 61–90 / 90+, credit shown separately).
+`generate()` persists the ledger as **JSON** — payments can later be corrected or
+deleted, so re-deriving wouldn't reproduce what was emailed; the PDF regenerates
+from the snapshot.
+
+### Authorization
+`app/Policies/FinancialPolicy.php` extends `BasePolicy` but makes `canRead()` =
+`canWrite()`, so **factory loses even view access** (its carve-outs `OrderPolicy::fulfill`
+and `::load` don't reach money). `InvoicePolicy` adds `void` (refused once
+payments/credit notes exist), `email`, `remind`. `DocumentEmailPolicy` is
+read-only. PDF/export routes also `abort_unless(can('see-financials'))`.
+
+### Config & schedule
+`config/invoicing.php` (+ `INVOICING_*` env, see `.env.example` and DEPLOYMENT.md
+§6.1–6.2) holds seller identity, bank details, the payment-terms→days map (moved
+out of the blade), reminder threshold, and the statement/queue toggles.
+`routes/console.php` adds `invoicing:refresh-overdue` (daily),
+`invoicing:send-statements` (monthly, gated on `INVOICING_AUTO_STATEMENTS`), and
+**`queue:work --stop-when-empty --max-time=50` every minute** — production has
+cron but no worker, so the scheduler drains the queue itself.
+
+### Views
+`resources/views/invoicing/**` (index/show/queues/forms), PDFs at
+`invoicing/{invoices,credit-notes,statements}/pdf.blade.php` over the shared
+`resources/views/documents/_pdf-{styles,header}` + `_seller-footer` partials
+(extracted from the old order invoice). Nav: **Finance** group (Invoices, To
+Invoice, Payments, Statements, Overdue), office/admin only. Customer show gains
+an Account panel (open/credit/aged + Record payment, Statement, Apply credit),
+Recent invoices, and Documents sent.
+
+- Tests: `InvoiceIssueTest`, `InvoiceNumberingTest`, `InvoiceVoidTest`,
+  `ConsolidatedInvoiceTest`, `PaymentAllocationTest`, `PaymentStateTest`,
+  `CreditNoteTest`, `StatementTest`, `StatementBatchTest`,
+  `DocumentEmailLogTest`, `OverdueReminderTest`, `InvoicingExportTest`,
+  `InvoicingAccessTest` — all extending `tests/Feature/InvoicingTestCase.php`.
 
 ## Online Orders Integration
 

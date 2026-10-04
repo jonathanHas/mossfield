@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Controllers\Concerns\AllocatesOrderStock;
 use App\Http\Controllers\Concerns\BuildsAllocationData;
+use App\Http\Controllers\Concerns\ValidatesFulfilmentWeights;
 use App\Models\BatchItem;
 use App\Models\Order;
 use App\Models\OrderAllocation;
@@ -14,7 +15,7 @@ use Illuminate\View\View;
 
 class OrderAllocationController extends Controller
 {
-    use AllocatesOrderStock;
+    use AllocatesOrderStock, ValidatesFulfilmentWeights;
     use BuildsAllocationData;
 
     public function index(Request $request): View
@@ -110,26 +111,19 @@ class OrderAllocationController extends Controller
     public function fulfill(Request $request, OrderAllocation $allocation): RedirectResponse
     {
         $orderItem = $allocation->orderItem;
-        $isVariableWeight = $orderItem->isVariableWeight();
 
-        // Build validation rules dynamically
-        $rules = [
+        $validated = $request->validate(array_merge([
             'quantity' => 'required|integer|min:1|max:'.$allocation->quantity_remaining,
-        ];
+        ], $this->fulfilmentWeightRules($orderItem)), $this->fulfilmentWeightMessages());
 
-        if ($isVariableWeight) {
-            $rules['actual_weight_kg'] = 'required|numeric|min:0.001';
-        }
-
-        $validated = $request->validate($rules);
-
-        $actualWeight = $validated['actual_weight_kg'] ?? null;
+        [$actualWeight, $unitWeights] = $this->resolveFulfilmentWeight($validated, $orderItem);
         $order = $orderItem->order;
 
         $success = $orderItem->fulfillAllocation(
             $allocation,
             $validated['quantity'],
-            $actualWeight
+            $actualWeight,
+            $unitWeights
         );
 
         if (! $success) {

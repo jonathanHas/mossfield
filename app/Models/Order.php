@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Enums\DocumentEmailKind;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class Order extends Model
 {
@@ -27,6 +29,7 @@ class Order extends Model
         'notes',
         'customer_reference',
         'mossorders_order_id',
+        'invoice_id',
     ];
 
     protected $casts = [
@@ -65,6 +68,64 @@ class Order extends Model
     public function orderItems(): HasMany
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * The order's LIVE invoice, or null when it hasn't been billed yet.
+     * Voiding an invoice nulls this so the order returns to the uninvoiced
+     * queue; the voided document keeps its own copy of the lines.
+     */
+    public function invoice(): BelongsTo
+    {
+        return $this->belongsTo(Invoice::class);
+    }
+
+    public function isInvoiced(): bool
+    {
+        return $this->invoice_id !== null;
+    }
+
+    /** Every document emailed about this order (docket, dispatch confirmation). */
+    public function emails(): MorphMany
+    {
+        return $this->morphMany(DocumentEmail::class, 'documentable')->latest('id');
+    }
+
+    /** The most recent dispatch-confirmation send, for the order page's status line. */
+    public function latestDispatchConfirmation(): ?DocumentEmail
+    {
+        return $this->emails()
+            ->where('kind', DocumentEmailKind::DispatchConfirmation->value)
+            ->first();
+    }
+
+    public function isDispatchedOrLater(): bool
+    {
+        return in_array($this->status, ['dispatched', 'delivered'], true);
+    }
+
+    /**
+     * Ready to be billed on its own invoice: picked (or short-closed) to at
+     * least "ready" and not already on one. Consolidated customers are excluded
+     * at the queue level, not here — their orders are still invoiceable, just
+     * as part of a period run.
+     */
+    public function isInvoiceable(): bool
+    {
+        return $this->hasReachedReady() && ! $this->isInvoiced();
+    }
+
+    /**
+     * The date a consolidated run should file this order under. Mossorders
+     * imports arrive with a null delivery_date, so fall back to when it was
+     * actually delivered and finally to the order date.
+     */
+    public function getBillingDateAttribute(): \Illuminate\Support\Carbon
+    {
+        return $this->delivery_date
+            ?? ($this->delivered_at?->copy()->startOfDay())
+            ?? $this->order_date
+            ?? $this->created_at;
     }
 
     public function generateOrderNumber(): string

@@ -12,6 +12,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class OrderTransitionsTest extends TestCase
@@ -23,6 +24,9 @@ class OrderTransitionsTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Dispatch now issues an invoice and emails a dispatch confirmation.
+        Mail::fake();
 
         $this->customer = Customer::create([
             'name' => 'Dublin Farmers Market',

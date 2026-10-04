@@ -2,23 +2,16 @@
     @php
         $subGroups = $readyBatches->groupBy(fn ($b) => $b->product->name)->sortKeys();
 
+        // Per-variety totals of the wheel strip (BatchItem::wheelStates()).
         $wheelStatsFor = function ($batch) {
-            $stats = ['produced' => 0, 'remaining' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
+            $stats = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold'], 0);
             foreach ($batch->batchItems as $item) {
-                if (! str_contains(strtolower($item->productVariant->name), 'wheel')) {
+                if (! $item->productVariant->isWheel()) {
                     continue;
                 }
-                $produced = (int) $item->quantity_produced;
-                $cut = (int) ($item->source_cutting_logs_count ?? 0);
-                $sold = max(0, $produced - (int) $item->quantity_remaining - $cut);
-                $remaining = max(0, $produced - $cut - $sold);
-                $maturing = min($remaining, (int) $item->quantity_maturing);
-                $remaining = max(0, $remaining - $maturing);
-                $stats['produced'] += $produced;
-                $stats['remaining'] += $remaining;
-                $stats['maturing'] += $maturing;
-                $stats['cut'] += $cut;
-                $stats['sold'] += $sold;
+                foreach ($item->wheelStates() as $k => $v) {
+                    $stats[$k] += $v;
+                }
             }
             return $stats;
         };
@@ -34,10 +27,6 @@
             </div>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-
         <div class="flex items-center gap-3 mb-4 pb-2" style="border-bottom: 1px solid var(--line);">
             <h2 class="text-[16px] font-display font-medium">Ready to cut</h2>
             <span class="mf-tag mf-tag-warn">{{ $readyBatches->count() }} {{ Str::plural('batch', $readyBatches->count()) }}</span>
@@ -46,7 +35,7 @@
         @forelse ($subGroups as $subLabel => $subBatches)
             @php
                 $subBatchCount = $subBatches->count();
-                $subWheelTotals = ['produced' => 0, 'remaining' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
+                $subWheelTotals = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold'], 0);
                 foreach ($subBatches as $b) {
                     $s = $wheelStatsFor($b);
                     foreach ($subWheelTotals as $k => $v) {
@@ -63,29 +52,7 @@
                         </svg>
                         <h3 class="text-[14px] font-semibold">{{ $subLabel }}</h3>
                         <span class="mf-tag mf-tag-warn">{{ $subBatchCount }} {{ Str::plural('batch', $subBatchCount) }}</span>
-                        @if ($subWheelTotals['produced'] > 0)
-                            <span class="inline-flex items-center gap-2 text-[12px] ml-2" style="color: var(--muted);">
-                                <span class="inline-flex items-center gap-1">
-                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600"></span>
-                                    {{ $subWheelTotals['remaining'] }}
-                                </span>
-                                @if ($subWheelTotals['maturing'] > 0)
-                                    <span class="inline-flex items-center gap-1" title="Set aside to mature">
-                                        <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-maturing); border-color: oklch(0.42 0.11 56);"></span>
-                                        {{ $subWheelTotals['maturing'] }}
-                                    </span>
-                                @endif
-                                <span class="inline-flex items-center gap-1">
-                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-600"></span>
-                                    {{ $subWheelTotals['cut'] }}
-                                </span>
-                                <span class="inline-flex items-center gap-1">
-                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-900 border border-black"></span>
-                                    {{ $subWheelTotals['sold'] }}
-                                </span>
-                                <span style="color: var(--faint);">/ {{ $subWheelTotals['produced'] }} wheels</span>
-                            </span>
-                        @endif
+                        @include('batches.partials._wheel-legend', ['totals' => $subWheelTotals])
                     </div>
                 </summary>
                 <div class="space-y-3">
@@ -96,13 +63,25 @@
             </details>
         @empty
             <div class="mf-panel p-10 text-center">
-                <h3 class="text-[14px] font-semibold">No cheese ready to cut</h3>
-                <p class="mt-1 text-[13px]" style="color: var(--muted);">
-                    Cheese batches need to mature before they can be cut. Check back when batches reach their ready date.
-                </p>
-                <div class="mt-4">
-                    <a href="{{ route('batches.index', ['type' => 'cheese']) }}" class="mf-btn-secondary">View all cheese batches</a>
-                </div>
+                @if($spokenFor ?? false)
+                    <h3 class="text-[14px] font-semibold">Every ready wheel is spoken for</h3>
+                    <p class="mt-1 text-[13px]" style="color: var(--muted);">
+                        There are matured batches, but all of their remaining wheels are allocated to orders or set aside for maturing.
+                        Release a hold or wait for new stock.
+                    </p>
+                    <div class="mt-4 flex justify-center gap-2">
+                        <a href="{{ route('cheese-conversion.index') }}" class="mf-btn-secondary">Mature Conversion</a>
+                        <a href="{{ route('batches.index', ['type' => 'cheese']) }}" class="mf-btn-secondary">View all cheese batches</a>
+                    </div>
+                @else
+                    <h3 class="text-[14px] font-semibold">No cheese ready to cut</h3>
+                    <p class="mt-1 text-[13px]" style="color: var(--muted);">
+                        Cheese batches need to mature before they can be cut. Check back when batches reach their ready date.
+                    </p>
+                    <div class="mt-4">
+                        <a href="{{ route('batches.index', ['type' => 'cheese']) }}" class="mf-btn-secondary">View all cheese batches</a>
+                    </div>
+                @endif
             </div>
         @endforelse
     </div>

@@ -305,7 +305,7 @@
                         <div class="mob-weight" :class="parseFloat(weights[i-1]) > 0 ? 'is-done' : ''">
                             <div>
                                 <div style="font-size: 11px; color: var(--muted);">{{ ucfirst($variant->unit ?: 'piece') }} <span x-text="'#' + i"></span></div>
-                                <input type="number" step="0.001" min="0.001" inputmode="decimal" placeholder="0.000"
+                                <input type="number" name="weights[]" step="0.001" min="0.001" inputmode="decimal" placeholder="0.000"
                                        x-model="weights[i-1]" style="margin-top: 2px;">
                                 <div class="est">expected ~ {{ number_format($expWeight, 2) }} kg</div>
                             </div>

@@ -27,9 +27,12 @@
                 : 'All orders allocated';
         }
         if ($showSyncAlert) {
-            $summaryBits[] = 'online sync is behind';
+            $summaryBits[] = 'Online sync is behind';
         }
-        $summary = $summaryBits ? implode(', and ', $summaryBits).'.' : 'Everything is on track.';
+        // Two separate states, two separate sentences — not "…, and online sync is behind".
+        $summary = $summaryBits
+            ? implode(' ', array_map(fn ($bit) => ucfirst($bit).'.', $summaryBits))
+            : 'Everything is on track.';
     @endphp
 
     {{-- Driver gets a placeholder only. --}}
@@ -98,6 +101,29 @@
                         @endif
                     </div>
                     <a href="{{ route('online-orders.index') }}" class="text-[12px] font-medium" style="color: var(--warn-ink);">View log →</a>
+                </div>
+            @endif
+
+            {{-- Finance queues. Office/admin only, and only when something needs
+                 doing — an empty row of zeroes is just noise on the dashboard. --}}
+            @if ($user->hasRole('admin', 'office') && isset($invoicing)
+                && ($invoicing['uninvoiced'] || $invoicing['not_emailed'] || $invoicing['overdue_count']))
+                <div class="grid gap-3 mb-4 grid-cols-1 sm:grid-cols-3">
+                    <a href="{{ route('invoicing.uninvoiced.index') }}">
+                        <x-dash-kpi label="Awaiting invoice" :value="$invoicing['uninvoiced']"
+                            :sub="$invoicing['uninvoiced'] ? 'to bill' : 'clear'"
+                            :tone="$invoicing['uninvoiced'] ? 'warn' : null" />
+                    </a>
+                    <a href="{{ route('invoicing.invoices.index', ['emailed' => 0]) }}">
+                        <x-dash-kpi label="Invoices not emailed" :value="$invoicing['not_emailed']"
+                            :sub="$invoicing['not_emailed'] ? 'to send' : 'clear'"
+                            :tone="$invoicing['not_emailed'] ? 'warn' : null" />
+                    </a>
+                    <a href="{{ route('invoicing.overdue.index') }}">
+                        <x-dash-kpi label="Overdue" :value="'€'.number_format($invoicing['overdue_total'], 2)"
+                            :sub="$invoicing['overdue_count'] ? $invoicing['overdue_count'].' invoices' : 'none'"
+                            :tone="$invoicing['overdue_count'] ? 'danger' : null" />
+                    </a>
                 </div>
             @endif
 

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 
 class ProductVariant extends Model
 {
@@ -56,18 +57,64 @@ class ProductVariant extends Model
         return $this->hasMany(BatchItem::class);
     }
 
+    /**
+     * The app's wheel classification (same test the cutting/conversion
+     * controllers and the batch cards apply to the variant name).
+     */
+    public function isWheel(): bool
+    {
+        return str_contains(strtolower((string) $this->name), 'wheel');
+    }
+
+    /**
+     * Option text for product pickers: "Farmhouse Cheese · Whole Wheel". Three
+     * cheeses each have a "Whole Wheel" and a "Vacuum Pack", so the variant
+     * name alone is ambiguous once the select is closed (finding 7) — the
+     * <optgroup> only helps while the list is open.
+     */
+    public function getPickerLabelAttribute(): string
+    {
+        return $this->product->short_name.' · '.$this->name;
+    }
+
     public function getFullNameAttribute(): string
     {
         return $this->product->name.' - '.$this->name;
     }
 
+    /**
+     * Free (sellable) stock for this variant — the "Stock" figure on /products.
+     *
+     * Not a raw SUM(quantity_remaining): expired/closed/unready batches, units
+     * still owed to orders and the maturing hold are all excluded, so it agrees
+     * with /stock, the allocator and the other free-stock surfaces (see
+     * BatchItem::freeStockByVariant()). List surfaces should pre-populate it
+     * with attachFreeStock() rather than trigger a query per variant.
+     */
     public function getTotalStockAttribute(): int
     {
         if (array_key_exists('total_stock', $this->attributes)) {
             return (int) $this->attributes['total_stock'];
         }
 
-        return (int) $this->batchItems()->sum('quantity_remaining');
+        return BatchItem::freeStockByVariant([$this->id])[$this->id] ?? 0;
+    }
+
+    /**
+     * Populate total_stock on a set of loaded variants from one query.
+     *
+     * @param  Collection<int, ProductVariant>  $variants
+     */
+    public static function attachFreeStock(Collection $variants): void
+    {
+        $free = BatchItem::freeStockByVariant($variants->pluck('id'));
+
+        foreach ($variants as $variant) {
+            // Synced as original so the computed column never reads as dirty
+            // (same shape a withSum() alias would have arrived in).
+            $variant->setAttribute('total_stock', $free[$variant->id] ?? 0)
+                ->syncOriginalAttribute('total_stock');
+        }
     }
 
     /**

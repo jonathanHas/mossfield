@@ -173,7 +173,7 @@
                                             @foreach ($sheet['addLineVariants'] as $productName => $variants)
                                                 <optgroup label="{{ $productName }}">
                                                     @foreach ($variants as $variant)
-                                                        <option value="{{ $variant->id }}">{{ $variant->name }}</option>
+                                                        <option value="{{ $variant->id }}">{{ $variant->picker_label }}</option>
                                                     @endforeach
                                                 </optgroup>
                                             @endforeach
@@ -191,6 +191,15 @@
                                     @if ($hasOrders)
                                         @can('load', $orders->first())
                                             @foreach ($orders as $order)
+                                                @if ($order->isDispatchedOrLater())
+                                                    {{-- Gone: the tick is history now, not a control. --}}
+                                                    <span class="mf-run-check on" style="cursor: default;" title="Dispatched">
+                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M20 6L9 17l-5-5" />
+                                                        </svg>
+                                                    </span>
+                                                    @continue
+                                                @endif
                                                 <form method="POST" action="{{ route('chilled-runs.toggle-loaded', $order) }}">
                                                     @csrf
                                                     <input type="hidden" name="run" value="{{ $activeRun->id }}">
@@ -241,7 +250,9 @@
                                             @elseif ($st['allocState'] === 'allocated' && $st['pickState'] === 'todo')
                                                 <span class="mf-tag mf-tag-info">Allocated</span>
                                             @endif
-                                            @if ($st['pickState'] === 'ready')
+                                            @if ($st['dispatchState'] === 'dispatched')
+                                                <span class="mf-tag mf-tag-accent">Dispatched</span>
+                                            @elseif ($st['pickState'] === 'ready')
                                                 <span class="mf-tag mf-tag-accent">Ready</span>
                                             @elseif ($st['pickState'] === 'picking')
                                                 <span class="mf-tag mf-tag-info">{{ $st['picked'] }}/{{ $st['ordered'] }} picked</span>
@@ -278,8 +289,27 @@
                                     @php
                                         $tint = $variant->product->type === 'milk' ? 'col-milk' : ($variant->product->type === 'yoghurt' ? 'col-yog' : 'col-cheese');
                                         $qty = $sheet['qtyMap'][$customer->id][$variant->id] ?? 0;
+                                        // Per-cell allocation state: which products at this stop
+                                        // are covered. Denominator is the raw cell qty so the
+                                        // fraction always matches the number above it.
+                                        $allocState = null;
+                                        if ($qty > 0 && $hasOrders && $row['stats']['showCellAlloc']) {
+                                            $a = $sheet['allocMap'][$customer->id][$variant->id] ?? ['allocated' => 0, 'picked' => 0, 'short' => 0];
+                                            $allocState = $a['allocated'] >= $qty ? 'full'
+                                                : ($a['short'] > 0 && $a['allocated'] + $a['short'] >= $qty ? 'short'
+                                                : ($a['allocated'] > 0 ? 'partial' : 'none'));
+                                        }
                                     @endphp
-                                    <td class="qty {{ $qty === 0 ? 'zero' : '' }} {{ $tint }}">{{ $qty === 0 ? '·' : $qty }}</td>
+                                    <td class="qty {{ $qty === 0 ? 'zero' : '' }} {{ $tint }} {{ $allocState ? 'alloc-'.$allocState : '' }}">
+                                        {{ $qty === 0 ? '·' : $qty }}
+                                        @if ($allocState === 'full')
+                                            <div class="alloc" title="All {{ $qty }} allocated">&check;</div>
+                                        @elseif ($allocState === 'short')
+                                            <div class="alloc" title="{{ $a['short'] }} short &mdash; no stock">{{ $a['allocated'] }}/{{ $qty }}</div>
+                                        @elseif ($allocState)
+                                            <div class="alloc" title="{{ $a['allocated'] }} of {{ $qty }} allocated">{{ $a['allocated'] }}/{{ $qty }}</div>
+                                        @endif
+                                    </td>
                                 @endforeach
                                 <td class="extras">
                                     @if ($sheet['extras'][$customer->id] !== '')

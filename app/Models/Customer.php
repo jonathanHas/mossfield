@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use App\Casts\EncryptedNullable;
+use App\Enums\InvoiceDelivery;
+use App\Enums\InvoicingMode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,6 +14,11 @@ class Customer extends Model
     protected $fillable = [
         'name',
         'email',
+        'billing_email',
+        'vat_number',
+        'invoice_delivery',
+        'invoicing_mode',
+        'send_statements',
         'phone',
         'address',
         'city',
@@ -32,6 +39,9 @@ class Customer extends Model
     protected $casts = [
         'credit_limit' => 'decimal:2',
         'is_active' => 'boolean',
+        'send_statements' => 'boolean',
+        'invoice_delivery' => InvoiceDelivery::class,
+        'invoicing_mode' => InvoicingMode::class,
         'requires_reference' => 'boolean',
         'mossorders_user_id' => 'integer',
         'run_position' => 'integer',
@@ -115,11 +125,77 @@ class Customer extends Model
         return "{$this->address}, {$this->city}, {$this->postal_code}, {$this->country}";
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(CreditNote::class);
+    }
+
+    public function statements(): HasMany
+    {
+        return $this->hasMany(Statement::class);
+    }
+
+    /**
+     * Where invoices, credit notes, statements and reminders are sent: the
+     * dedicated billing address if the customer has one, else their main email.
+     */
+    public function billingEmail(): ?string
+    {
+        $email = trim((string) ($this->billing_email ?: $this->email));
+
+        return $email !== '' ? $email : null;
+    }
+
+    public function isConsolidatedBilling(): bool
+    {
+        return ($this->invoicing_mode ?? InvoicingMode::PerOrder)->isConsolidated();
+    }
+
+    public function wantsEmailedInvoices(): bool
+    {
+        return ($this->invoice_delivery ?? InvoiceDelivery::Email) === InvoiceDelivery::Email;
+    }
+
+    /** Money received but not yet applied to any invoice — credit on account. */
+    public function unallocatedCredit(): float
+    {
+        $paid = (float) $this->payments()->sum('amount');
+        $allocated = (float) PaymentAllocation::whereIn(
+            'payment_id', $this->payments()->select('id')
+        )->sum('amount');
+
+        return round(max(0, $paid - $allocated), 2);
+    }
+
+    /**
+     * What the customer actually owes: the balance of every open (issued,
+     * unsettled) invoice, less any credit sitting on account.
+     *
+     * Superseded the old "sum every order whose payment_status isn't paid",
+     * which counted cancelled and un-delivered orders and billed a part-paid
+     * order at its full value.
+     */
     public function getOutstandingBalanceAttribute(): float
     {
-        return $this->orders()
-            ->whereIn('payment_status', ['pending', 'partial', 'overdue'])
-            ->sum('total_amount');
+        $open = (float) $this->invoices()->open()->sum('balance');
+
+        return round($open - $this->unallocatedCredit(), 2);
+    }
+
+    /** Open invoice balances bucketed by how far past due they are. */
+    public function agedBalances(): array
+    {
+        return app(\App\Services\StatementService::class)->agedBalances($this);
     }
 
     public function canPlaceOrder(float $orderAmount): bool

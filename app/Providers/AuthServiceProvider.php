@@ -6,25 +6,35 @@ use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseConversionLog;
 use App\Models\CheeseCuttingLog;
+use App\Models\CreditNote;
 use App\Models\Customer;
 use App\Models\DeliveryRun;
+use App\Models\DocumentEmail;
+use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderAllocation;
 use App\Models\OrderItem;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Statement;
 use App\Models\User;
 use App\Policies\BatchItemPolicy;
 use App\Policies\BatchPolicy;
 use App\Policies\CheeseConversionLogPolicy;
 use App\Policies\CheeseCuttingLogPolicy;
+use App\Policies\CreditNotePolicy;
 use App\Policies\CustomerPolicy;
 use App\Policies\DeliveryRunPolicy;
+use App\Policies\DocumentEmailPolicy;
+use App\Policies\InvoicePolicy;
 use App\Policies\OrderAllocationPolicy;
 use App\Policies\OrderItemPolicy;
 use App\Policies\OrderPolicy;
+use App\Policies\PaymentPolicy;
 use App\Policies\ProductPolicy;
 use App\Policies\ProductVariantPolicy;
+use App\Policies\StatementPolicy;
 use App\Policies\UserPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
@@ -49,6 +59,12 @@ class AuthServiceProvider extends ServiceProvider
         Order::class => OrderPolicy::class,
         OrderItem::class => OrderItemPolicy::class,
         OrderAllocation::class => OrderAllocationPolicy::class,
+        // Finance — FinancialPolicy narrows BasePolicy so factory can't view.
+        Invoice::class => InvoicePolicy::class,
+        Payment::class => PaymentPolicy::class,
+        CreditNote::class => CreditNotePolicy::class,
+        Statement::class => StatementPolicy::class,
+        DocumentEmail::class => DocumentEmailPolicy::class,
     ];
 
     public function boot(): void

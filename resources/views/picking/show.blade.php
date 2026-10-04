@@ -94,8 +94,10 @@
                                 <span class="mf-tag mf-tag-accent">Ready</span>
                             @endif
                         </div>
-                        <div style="color: var(--muted);">Payment</div>
-                        <div class="text-right"><span class="mf-tag mf-tag-{{ $order->payment_status === 'paid' ? 'accent' : 'warn' }}">{{ ucfirst($order->payment_status) }}</span></div>
+                        @can('see-financials')
+                            <div style="color: var(--muted);">Payment</div>
+                            <div class="text-right"><span class="mf-tag mf-tag-{{ $order->payment_status === 'paid' ? 'accent' : 'warn' }}">{{ ucfirst($order->payment_status) }}</span></div>
+                        @endcan
                     </div>
                 </div>
 

@@ -22,8 +22,9 @@ class BatchController extends Controller
             'matureBatches.product',
             'batchItems' => fn ($q) => $q->with('productVariant')
                 ->withCount('sourceCuttingLogs')
+                ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
                 ->withSum([
-                    'orderAllocations as quantity_currently_allocated' => fn ($qa) => $qa->whereNull('fulfilled_at'),
+                    'orderAllocations as quantity_currently_allocated',
                 ], DB::raw('quantity_allocated - quantity_fulfilled')),
         ]);
 
@@ -144,8 +145,10 @@ class BatchController extends Controller
     {
         $this->authorize('view', $batch);
         $batch->load([
-            'product', 'batchItems.productVariant', 'cuttingLogs', 'sourceBatch.product', 'matureBatches.product',
+            'product', 'batchItems.productVariant', 'cuttingLogs.sourceBatchItem.productVariant', 'sourceBatch.product', 'matureBatches.product',
             'batchItems.targetConversionLogs.sourceBatchItem.batch.product',
+            // Everything BatchItem::weight_breakdown reads, loaded once.
+            'batchItems.orderAllocations', 'batchItems.sourceCuttingLogs', 'batchItems.sourceConversionLogs', 'batchItems.targetCuttingLogs',
         ]);
 
         return view('batches.show', compact('batch'));
@@ -175,12 +178,74 @@ class BatchController extends Controller
             ->with('success', 'Batch updated successfully.');
     }
 
+    /**
+     * Delete a batch — only while nothing depends on it.
+     *
+     * `batch_items.batch_id` cascades, and so does every child of a batch item
+     * (`order_allocations`, `cheese_cutting_logs`, `cheese_conversion_logs`, on
+     * both their source and target sides). Without this guard, deleting a batch
+     * an order had been picked from silently removed the allocations underneath
+     * it: `order_items.quantity_fulfilled` survived, but the record of where
+     * those units came from did not — so a delivered, invoiced order lost its
+     * batch traceability. Closing a batch (status `sold_out` / `expired`) is
+     * the way to take it out of circulation; deletion is for mistakes only.
+     */
     public function destroy(Batch $batch): RedirectResponse
     {
         $this->authorize('delete', $batch);
+
+        if ($blocker = $this->deletionBlocker($batch)) {
+            return redirect()->route('batches.show', $batch)
+                ->with('error', $blocker);
+        }
+
         $batch->delete();
 
         return redirect()->route('batches.index')
             ->with('success', 'Batch deleted successfully.');
+    }
+
+    /**
+     * Why this batch can't be deleted, or null when it can be. One query over
+     * its items; counts, not existence checks, so the message can say how much
+     * history is at stake.
+     */
+    private function deletionBlocker(Batch $batch): ?string
+    {
+        $items = $batch->batchItems()
+            ->withCount([
+                'orderAllocations',
+                'sourceCuttingLogs',
+                'targetCuttingLogs',
+                'sourceConversionLogs',
+                'targetConversionLogs',
+            ])
+            ->get();
+
+        $reasons = [];
+
+        if ($allocations = (int) $items->sum('order_allocations_count')) {
+            $reasons[] = $allocations.' order '.($allocations === 1 ? 'allocation' : 'allocations');
+        }
+
+        $cuts = (int) $items->sum('source_cutting_logs_count')
+            + (int) $items->sum('target_cutting_logs_count');
+        if ($cuts) {
+            $reasons[] = $cuts.' cheese-cutting '.($cuts === 1 ? 'record' : 'records');
+        }
+
+        $conversions = (int) $items->sum('source_conversion_logs_count')
+            + (int) $items->sum('target_conversion_logs_count');
+        if ($conversions) {
+            $reasons[] = $conversions.' mature-conversion '.($conversions === 1 ? 'record' : 'records');
+        }
+
+        if (! $reasons) {
+            return null;
+        }
+
+        return 'Batch '.$batch->batch_code.' can\'t be deleted — '.implode(' and ', $reasons).
+            ' depend on it, and deleting it would destroy that traceability. '.
+            'Set its status to sold out or expired instead to take it out of circulation.';
     }
 }

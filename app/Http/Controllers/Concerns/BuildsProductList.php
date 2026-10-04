@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Concerns;
 
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 
 trait BuildsProductList
@@ -15,9 +16,7 @@ trait BuildsProductList
         $listLimit = 50;
         $typeOrder = ['milk', 'yoghurt', 'cheese'];
 
-        $query = Product::with(['variants' => function ($q) {
-            $q->withSum('batchItems as total_stock', 'quantity_remaining');
-        }])->orderBy('name');
+        $query = Product::with('variants')->orderBy('name');
 
         $listTotal = (clone $query)->count();
 
@@ -26,6 +25,9 @@ trait BuildsProductList
         if (! $list->contains('id', $selected->id)) {
             $list->prepend($selected);
         }
+
+        // Free stock per variant in one query (see ProductVariant::total_stock).
+        ProductVariant::attachFreeStock($list->flatMap->variants);
 
         $list = $list->sortBy([
             fn ($a, $b) => array_search($a->type, $typeOrder) <=> array_search($b->type, $typeOrder),

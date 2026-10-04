@@ -72,7 +72,7 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
 
 ### 🔧 **Technical Features**
 - **Authentication**: Username or email login with Laravel Breeze
-- **Database**: SQLite primary database with eloquent relationships
+- **Database**: MySQL / MariaDB with eloquent relationships (dev, test and production alike)
 - **Frontend**: Tailwind CSS with Alpine.js for interactive components
 - **Testing**: PHPUnit with comprehensive test suite
 - **Development**: Hot reloading with Vite and Laravel Pint formatting
@@ -88,10 +88,18 @@ npm install
 cp .env.example .env
 php artisan key:generate
 
-# Setup database
-touch database/database.sqlite
+# Setup database — MySQL/MariaDB, NOT SQLite.
+# .env.example still ships DB_CONNECTION=sqlite; replace that block with:
+#   DB_CONNECTION=mysql  DB_HOST=127.0.0.1  DB_PORT=3306
+#   DB_DATABASE=mossfield_cl  DB_USERNAME=…  DB_PASSWORD=…
+# Grant the user on BOTH @localhost and @127.0.0.1 (MariaDB reverse-resolves
+# TCP from 127.0.0.1 to localhost, so one grant alone fails intermittently).
+mysql -u root -p -e "CREATE DATABASE mossfield_cl CHARACTER SET utf8mb4"
 php artisan migrate
 php artisan db:seed --class=AdminUserSeeder
+
+# The test suite uses its own MySQL database, hardcoded in phpunit.xml:
+mysql -u root -p -e "CREATE DATABASE mossfield_test CHARACTER SET utf8mb4"
 
 # Start development
 composer run dev

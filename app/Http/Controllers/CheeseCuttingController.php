@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CheeseCutRequest;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseCuttingLog;
@@ -15,14 +16,19 @@ class CheeseCuttingController extends Controller
 {
     public function index(): View
     {
-        // Get all cheese batches that are ready to cut with available whole wheels
+        // Get all cheese batches that are ready to cut with FREE whole wheels.
+        // The reservation is the units still owed (quantity_allocated −
+        // quantity_fulfilled) over ALL allocations — never gated on
+        // fulfilled_at (see BatchItem::getHoldableQuantityAttribute).
         $readyBatches = Batch::with([
             'product',
             'batchItems' => fn ($q) => $q->with('productVariant')
                 ->withCount('sourceCuttingLogs')
-                ->withSum([
-                    'orderAllocations as quantity_currently_allocated' => fn ($qa) => $qa->whereNull('fulfilled_at'),
-                ], DB::raw('quantity_allocated - quantity_fulfilled')),
+                ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
+                ->withSum(
+                    'orderAllocations as quantity_currently_allocated',
+                    DB::raw('quantity_allocated - quantity_fulfilled')
+                ),
         ])
             ->whereHas('product', function ($q) {
                 $q->where('type', 'cheese');
@@ -41,7 +47,29 @@ class CheeseCuttingController extends Controller
             ->orderBy('production_date', 'asc')
             ->get();
 
-        return view('cheese-cutting.index', compact('readyBatches'));
+        // Free wheels per item from the sums already loaded — the same
+        // expression as available_quantity, without a SUM per row. A batch
+        // whose wheels are all held or reserved is not "ready to cut", however
+        // many physically remain, so it drops off the list here.
+        $readyWithWheels = $readyBatches->count();
+
+        $readyBatches = $readyBatches->filter(function (Batch $batch) {
+            foreach ($batch->batchItems as $item) {
+                $item->setAttribute('free_quantity', max(0, (int) $item->quantity_remaining
+                    - (int) ($item->quantity_currently_allocated ?? 0)
+                    - (int) $item->quantity_maturing))
+                    ->syncOriginalAttribute('free_quantity');
+            }
+
+            return $batch->batchItems->contains(fn (BatchItem $item) => $item->free_quantity > 0
+                && str_contains(strtolower($item->productVariant->name), 'wheel'));
+        })->values();
+
+        // For the empty state: ready batches existed but every wheel was
+        // reserved or held — a different message from "nothing has matured".
+        $spokenFor = $readyBatches->isEmpty() && $readyWithWheels > 0;
+
+        return view('cheese-cutting.index', compact('readyBatches', 'spokenFor'));
     }
 
     public function create(BatchItem $batchItem): View
@@ -61,20 +89,19 @@ class CheeseCuttingController extends Controller
         return view('cheese-cutting.create', compact('batchItem', 'vacuumPackVariants'));
     }
 
-    public function store(Request $request, BatchItem $batchItem): RedirectResponse
+    public function store(CheeseCutRequest $request, BatchItem $batchItem): RedirectResponse
     {
-        $validated = $request->validate([
-            'cut_date' => 'required|date|before_or_equal:today',
-            'vacuum_pack_variant_id' => 'required|exists:product_variants,id',
-            'vacuum_packs_created' => 'required|integer|min:1',
-            'total_weight_kg' => 'required|numeric|min:0.001',
-            'notes' => 'nullable|string|max:1000',
-        ]);
+        // Rules (wheel weighed before cutting; packs ≤ wheel; packs × nominal
+        // ≤ wheel; cut_date within [production, today]) live in CheeseCutRequest.
+        $validated = $request->validated();
 
         // Ensure we have enough free wheels to cut — wheels reserved by an order
-        // or set aside for maturing aren't cuttable.
+        // or set aside for maturing aren't cuttable. Redirect to the form
+        // explicitly rather than back(): a refusal must land where the operator
+        // can read it, whatever page the request came from.
         if ($batchItem->available_quantity < 1) {
-            return back()->withErrors(['error' => 'No free wheels remaining to cut (remaining wheels are allocated or set aside for maturing).']);
+            return redirect()->route('cheese-cutting.create', $batchItem)
+                ->withErrors(['error' => 'No free wheels remaining to cut (remaining wheels are allocated or set aside for maturing).']);
         }
 
         DB::transaction(function () use ($validated, $batchItem) {
@@ -104,8 +131,9 @@ class CheeseCuttingController extends Controller
                 'target_batch_item_id' => $vacuumPackBatchItem->id,
                 'cut_date' => $validated['cut_date'],
                 'vacuum_packs_created' => $validated['vacuum_packs_created'],
+                'wheel_weight_kg' => $validated['wheel_weight_kg'],
                 'total_weight_kg' => $validated['total_weight_kg'],
-                'notes' => $validated['notes'],
+                'notes' => $validated['notes'] ?? null,
             ]);
         });
 

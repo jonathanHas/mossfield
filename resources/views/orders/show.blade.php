@@ -2,12 +2,6 @@
     <x-slot name="header">Order {{ $order->order_number }}</x-slot>
 
     @php
-        $payTone = match($order->payment_status) {
-            'paid' => 'accent',
-            'partial' => 'info',
-            'overdue' => 'danger',
-            default => 'warn',
-        };
         $listFilters = $listFilters ?? [];
         $orderList = $orderList ?? collect();
         $listTotal = $listTotal ?? $orderList->count();
@@ -20,8 +14,9 @@
         // Items can be added/edited while the order is still open (pending → ready).
         $canAddItems = ! in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true);
         // Status transition hidden fields shared by the PATCH forms below.
+        // NB payment_status is deliberately absent: it mirrors the invoice
+        // ledger now, and OrderController::update() no longer accepts it.
         $statusFields = [
-            'payment_status' => $order->payment_status,
             'delivery_date' => $order->delivery_date?->format('Y-m-d'),
             'delivery_charge' => number_format((float) $order->delivery_charge, 2, '.', ''),
             'delivery_charge_percent' => $order->delivery_charge_percent,
@@ -99,12 +94,6 @@
 
         <main class="px-6 py-8">
             <div class="mx-auto max-w-[920px]">
-                @if (session('success'))
-                    <div class="mf-flash mf-flash-success mb-4">{{ session('success') }}</div>
-                @endif
-                @if (session('error'))
-                    <div class="mf-flash mf-flash-error mb-4">{{ session('error') }}</div>
-                @endif
 
                 {{-- Breadcrumb --}}
                 <div class="text-[12px] mb-3.5 flex items-center gap-1.5" style="color: var(--muted);">
@@ -130,35 +119,14 @@
                     </div>
                     <div class="flex items-center gap-2 flex-shrink-0">
                         <a href="{{ route('orders.index', $listFilters) }}" class="mf-btn-ghost lg:hidden">← All</a>
-                        @can('see-financials')
-                            @if($order->hasReachedReady())
-                                <a href="{{ route('orders.invoice', $order) }}" class="mf-btn-secondary" target="_blank" rel="noopener">
-                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h8M8 9h2" /></svg>
-                                    Invoice
-                                </a>
-                                @if($order->customer->email)
-                                    <form method="POST" action="{{ route('orders.email', [$order, 'invoice']) }}" class="inline">
-                                        @csrf
-                                        <button type="submit" class="mf-btn-secondary"
-                                            onclick="return confirm('Email the invoice to {{ $order->customer->email }}?')">
-                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="m22 6-10 7L2 6" /></svg>
-                                            Email invoice
-                                        </button>
-                                    </form>
-                                @endif
-                            @endif
-                        @endcan
+                        @if($order->hasReachedReady())
+                            {{-- The price-free packing slip for the van. Priced paperwork lives in Finance. --}}
+                            <a href="{{ route('orders.docket', $order) }}" class="mf-btn-secondary" target="_blank" rel="noopener">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" /><path d="M14 2v6h6" /><path d="M8 13h8M8 17h8M8 9h2" /></svg>
+                                Docket
+                            </a>
+                        @endif
                         @can('update', $order)
-                            @if($order->customer->email)
-                                <form method="POST" action="{{ route('orders.email', [$order, 'docket']) }}" class="inline">
-                                    @csrf
-                                    <button type="submit" class="mf-btn-secondary"
-                                        onclick="return confirm('Email the dispatch docket to {{ $order->customer->email }}?')">
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z" /><path d="m22 6-10 7L2 6" /></svg>
-                                        Email docket
-                                    </button>
-                                </form>
-                            @endif
                             <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
                             @if($order->status === 'pending')
                                 <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
@@ -177,7 +145,7 @@
                                 <form method="POST" action="{{ route('orders.dispatch', $order) }}" class="inline">
                                     @csrf
                                     <button type="submit" class="mf-btn-primary"
-                                        onclick="return confirm('Mark order {{ $order->order_number }} as dispatched?')">
+                                        onclick="return confirm('Dispatch order {{ $order->order_number }}? {{ $order->customer->isConsolidatedBilling() ? 'It will be billed on the next '.strtolower($order->customer->invoicing_mode->label()).' invoice' : 'The figures are frozen and an invoice is issued' }}, and a dispatch confirmation is emailed to {{ $order->customer->billingEmail() ?? 'no address on file' }}.')">
                                         Mark dispatched
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7" /><path d="M5.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM18.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" /></svg>
                                     </button>
@@ -218,13 +186,55 @@
                             @endif
                             <dt style="color: var(--muted);">Delivery</dt>
                             <dd class="font-mono">{{ $order->delivery_date ? $order->delivery_date->format('d / m / Y') : '—' }}</dd>
-                            <dt style="color: var(--muted);">Payment</dt>
-                            <dd>
-                                <span class="mf-tag mf-tag-{{ $payTone }}">
-                                    <span class="inline-block rounded-full" style="width: 6px; height: 6px; background: currentColor;"></span>
-                                    {{ ucfirst($order->payment_status) }}
-                                </span>
-                            </dd>
+                            @can('see-financials')
+                                {{-- The ONE billing line on the order page. Money actions
+                                     (email, payments, void) live under /invoicing. --}}
+                                @if($order->isInvoiced())
+                                    <dt style="color: var(--muted);">Invoice</dt>
+                                    <dd>
+                                        <a href="{{ route('invoicing.invoices.show', $order->invoice) }}" class="mf-link font-mono">{{ $order->invoice->number }}</a>
+                                        <span class="mf-tag mf-tag-{{ $order->invoice->payment_state_tone }} ml-1">{{ $order->invoice->payment_state_label }}</span>
+                                        @unless($order->invoice->hasBeenEmailed())
+                                            <span class="text-[11.5px] ml-1" style="color: var(--muted);">not yet sent</span>
+                                        @endunless
+                                    </dd>
+                                @elseif($order->customer->isConsolidatedBilling())
+                                    <dt style="color: var(--muted);">Invoice</dt>
+                                    <dd style="color: var(--muted);">Billed on the {{ strtolower($order->customer->invoicing_mode->label()) }} invoice</dd>
+                                @elseif($order->hasReachedReady())
+                                    <dt style="color: var(--muted);">Invoice</dt>
+                                    <dd>
+                                        <span style="color: var(--muted);">Awaiting invoice</span>
+                                        · <a href="{{ route('invoicing.uninvoiced.index') }}" class="mf-link">Finance</a>
+                                    </dd>
+                                @endif
+                                @if($order->dispatched_at)
+                                    <dt style="color: var(--muted);">Confirmation</dt>
+                                    <dd>
+                                        @php $dc = $dispatchConfirmation ?? null; @endphp
+                                        @if($dc && $dc->status->value === 'sent')
+                                            <span style="color: var(--muted);">Sent {{ $dc->sent_at?->format('j M') }} to {{ $dc->recipient }}</span>
+                                        @elseif($dc && $dc->status->value === 'queued')
+                                            <span style="color: var(--muted);">Queued to {{ $dc->recipient }}</span>
+                                        @elseif($dc)
+                                            <span class="mf-tag mf-tag-danger">Failed</span>
+                                        @elseif(! $order->customer->billingEmail())
+                                            <span style="color: var(--muted);">Not sent — no email address</span>
+                                        @else
+                                            <span style="color: var(--muted);">Not sent</span>
+                                        @endif
+                                        <a href="{{ route('orders.dispatch-confirmation', $order) }}" class="mf-link ml-1" target="_blank" rel="noopener">view</a>
+                                        @can('update', $order)
+                                            @if($order->customer->billingEmail() && (! $dc || $dc->status->value === 'failed'))
+                                                <form method="POST" action="{{ route('orders.dispatch-confirmation.email', $order) }}" class="inline ml-1">
+                                                    @csrf
+                                                    <button type="submit" class="mf-link">{{ $dc ? 'Resend' : 'Send' }}</button>
+                                                </form>
+                                            @endif
+                                        @endcan
+                                    </dd>
+                                @endif
+                            @endcan
                             @if($order->dispatched_at)
                                 <dt style="color: var(--muted);">Dispatched</dt>
                                 <dd class="font-mono">{{ $order->dispatched_at->format('d/m/Y H:i') }}</dd>
@@ -402,7 +412,7 @@
                                                     <optgroup label="{{ $productName }}">
                                                         @foreach($variants as $variant)
                                                             <option value="{{ $variant->id }}" {{ old('product_variant_id') == $variant->id ? 'selected' : '' }}>
-                                                                {{ $variant->name }} ({{ $variant->price_label }})
+                                                                {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                             </option>
                                                         @endforeach
                                                     </optgroup>

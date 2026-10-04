@@ -256,7 +256,7 @@ class PickingTest extends TestCase
         $this->actingAs($factory)->post(route('picking.pick', [$order, $item]), [
             'batch_item_id' => $batchItem->id,
             'quantity' => 2,
-        ])->assertSessionHasErrors('actual_weight_kg');
+        ])->assertSessionHasErrors('weights');
 
         $this->assertSame(0, $item->fresh()->quantity_fulfilled);
     }
@@ -274,7 +274,7 @@ class PickingTest extends TestCase
         $this->actingAs($factory)->post(route('picking.pick', [$order, $item]), [
             'batch_item_id' => $batchItem->id,
             'quantity' => 2,
-            'actual_weight_kg' => 5.200,
+            'weights' => [2.500, 2.700],
         ])->assertRedirect(route('picking.show', $order));
 
         $item->refresh();
@@ -301,7 +301,7 @@ class PickingTest extends TestCase
         $this->actingAs($factory)->post(route('picking.pick', [$order, $item]), [
             'batch_item_id' => $batchItem->id,
             'quantity' => 3,
-            'actual_weight_kg' => 3.300,
+            'weights' => [1.100, 1.100, 1.100],
         ])->assertRedirect(route('picking.show', $order));
 
         $item->refresh();

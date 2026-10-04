@@ -1075,6 +1075,82 @@ class ChilledRunTest extends TestCase
         $this->actingAs($office)->get(route('chilled-runs.index'))->assertSee('4/10 picked');
     }
 
+    public function test_cells_show_per_product_allocation_state(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $twoL = $this->variant($this->milk, '2L Bottle', '2L', 8);
+        $oneLStock = $this->stock($oneL, 20);
+        $twoLStock = $this->stock($twoL, 20);
+
+        $shop = $this->customerOnRun($run, 'Cell Shop');
+        $order = $this->orderFor($shop, [[$oneL, 10], [$twoL, 5]], 'confirmed');
+        $office = User::factory()->create();
+
+        // Nothing reserved yet: every ordered cell reads 0/n.
+        $this->actingAs($office)->get(route('chilled-runs.index'))
+            ->assertSee('alloc-none', false)
+            ->assertSee('>0/10<', false)
+            ->assertSee('>0/5<', false)
+            ->assertDontSee('alloc-partial', false)
+            ->assertDontSee('alloc-full', false);
+
+        // Partially cover the 1L line only.
+        $oneLItem = $order->orderItems()->where('product_variant_id', $oneL->id)->sole();
+        $oneLItem->allocateFromBatchItem($oneLStock, 4);
+        $this->actingAs($office)->get(route('chilled-runs.index'))
+            ->assertSee('alloc-partial', false)
+            ->assertSee('>4/10<', false)
+            ->assertSee('alloc-none', false)
+            ->assertSee('>0/5<', false);
+
+        // Cover everything (allocations are unique per item+batch, so the
+        // top-up comes from a second batch): ticks, no fractions.
+        $oneLItem->allocateFromBatchItem($this->stock($oneL, 20), 6);
+        $order->orderItems()->where('product_variant_id', $twoL->id)->sole()->allocateFromBatchItem($twoLStock, 5);
+        $this->actingAs($office)->get(route('chilled-runs.index'))
+            ->assertSee('alloc-full', false)
+            ->assertSee('&check;', false)
+            ->assertDontSee('alloc-partial', false)
+            ->assertDontSee('alloc-none', false);
+    }
+
+    public function test_cells_flag_a_short_closed_line(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $batchItem = $this->stock($oneL, 20);
+
+        $shop = $this->customerOnRun($run, 'Short Shop');
+        $order = $this->orderFor($shop, [[$oneL, 10]], 'confirmed');
+        $item = $order->orderItems()->sole();
+        $allocation = $item->allocateFromBatchItem($batchItem, 4);
+        $item->fulfillAllocation($allocation, 4);
+        $item->closeShort('No stock');
+
+        $this->actingAs(User::factory()->create())->get(route('chilled-runs.index'))
+            ->assertSee('alloc-short', false)
+            ->assertSee('>4/10<', false)
+            ->assertSee('6 short');
+    }
+
+    public function test_cells_hide_allocation_state_on_pending_and_dispatched_stops(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->stock($oneL, 20);
+
+        $this->orderFor($this->customerOnRun($run, 'Pending Shop', 1), [[$oneL, 10]], 'pending');
+        $this->orderFor($this->customerOnRun($run, 'Gone Shop', 2), [[$oneL, 5]], 'dispatched');
+
+        $this->actingAs(User::factory()->create())->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee('Pending Shop')
+            ->assertSee('Gone Shop')
+            ->assertDontSee('class="alloc"', false)
+            ->assertDontSee('alloc-none', false);
+    }
+
     public function test_summary_strip_shows_allocated_progress(): void
     {
         $run = $this->makeRun();

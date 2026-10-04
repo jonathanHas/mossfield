@@ -49,14 +49,21 @@
                         <x-input-error :messages="$errors->get('status')" class="mt-1" />
                     </div>
 
+                    {{-- Payment status is derived from the invoice ledger, not typed:
+                         it mirrors what has actually been paid or credited. Record a
+                         payment from the invoice to change it. --}}
                     <div>
-                        <x-input-label for="payment_status" :value="__('Payment status')" />
-                        <select id="payment_status" name="payment_status" class="mf-select" required>
-                            @foreach (['pending','paid','partial','overdue'] as $s)
-                                <option value="{{ $s }}" {{ $order->payment_status == $s ? 'selected' : '' }}>{{ ucfirst($s) }}</option>
-                            @endforeach
-                        </select>
-                        <x-input-error :messages="$errors->get('payment_status')" class="mt-1" />
+                        <x-input-label :value="__('Payment')" />
+                        <div class="mt-1 text-[13px] flex items-center gap-2 flex-wrap">
+                            <span class="mf-tag mf-tag-{{ match($order->payment_status) {
+                                'paid' => 'accent', 'partial' => 'info', 'overdue' => 'danger', default => 'warn',
+                            } }}">{{ ucfirst($order->payment_status) }}</span>
+                            @if($order->invoice)
+                                <a href="{{ route('invoicing.invoices.show', $order->invoice) }}" class="mf-link font-mono">{{ $order->invoice->number }}</a>
+                            @else
+                                <span style="color: var(--muted);">Not yet invoiced</span>
+                            @endif
+                        </div>
                     </div>
 
                     <div>

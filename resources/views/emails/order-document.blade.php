@@ -1,5 +1,5 @@
 @php
-    $label = $document === 'invoice' ? 'invoice' : 'dispatch docket';
+    $label = 'dispatch docket';
 @endphp
 <!DOCTYPE html>
 <html lang="en">

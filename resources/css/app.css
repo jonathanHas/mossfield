@@ -1,3 +1,20 @@
+/* Self-hosted fonts (bundled by Vite from @fontsource) — the app runs on a
+   LAN and must render as designed without reaching fonts.bunny.net. Same
+   families and weights the old <link> loaded: Inter 400–700, JetBrains Mono
+   400–600, Fraunces 500–600, and Figtree 400–600 for the guest layout. */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
+@import '@fontsource/jetbrains-mono/600.css';
+@import '@fontsource/fraunces/500.css';
+@import '@fontsource/fraunces/600.css';
+@import '@fontsource/figtree/400.css';
+@import '@fontsource/figtree/500.css';
+@import '@fontsource/figtree/600.css';
+
 @import './stock.css';
 
 @tailwind base;
@@ -496,6 +513,13 @@
     font-size: 13.5px; color: var(--ink); white-space: nowrap;
 }
 .mf-run .qty.zero { color: var(--faint); }
+/* Per-cell allocation sub-line: ✓ covered / 20⁄25 partial / 0⁄25 none / short.
+   Text colour only so the .col-* tints and is-loaded grey stay readable. */
+.mf-run .qty .alloc { font-size: 10px; line-height: 1; margin-top: 3px; color: var(--faint); font-weight: 500; }
+.mf-run .qty.alloc-full .alloc { color: var(--accent-ink); }
+.mf-run .qty.alloc-partial .alloc { color: var(--warn-ink); }
+.mf-run .qty.alloc-short .alloc { color: var(--danger); }
+.mf-run tr.is-loaded .qty .alloc { color: var(--faint); }
 .mf-run .cust { padding: 11px 12px; }
 .mf-run .cust .nm { font-weight: 600; font-size: 13.5px; letter-spacing: -0.1px; }
 .mf-run .cust .ad { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.4; }

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 
 class Batch extends Model
 {
@@ -54,9 +55,34 @@ class Batch extends Model
         return $this->hasMany(BatchItem::class);
     }
 
-    public function cuttingLogs(): HasMany
+    /**
+     * Cuts made from this batch's wheels. Through batch_items — the log keys
+     * on the wheel ITEM, not the batch (the old hasMany compared batches.id
+     * with source_batch_item_id and matched a coincidental item instead).
+     */
+    public function cuttingLogs(): HasManyThrough
     {
-        return $this->hasMany(CheeseCuttingLog::class, 'source_batch_item_id');
+        return $this->hasManyThrough(CheeseCuttingLog::class, BatchItem::class, 'batch_id', 'source_batch_item_id');
+    }
+
+    /**
+     * Trim lost across every measured cut on this batch (Σ wheel − packs).
+     * Unmeasured (pre-2026-09-13) cuts contribute nothing and are counted
+     * separately so the figure is never quietly partial.
+     */
+    public function getTrimLossKgAttribute(): float
+    {
+        return round((float) $this->cuttingLogs->sum(fn (CheeseCuttingLog $log) => $log->waste_kg ?? 0), 3);
+    }
+
+    public function getMeasuredCutsCountAttribute(): int
+    {
+        return $this->cuttingLogs->filter->isMeasured()->count();
+    }
+
+    public function getUnmeasuredCutsCountAttribute(): int
+    {
+        return $this->cuttingLogs->reject->isMeasured()->count();
     }
 
     /**
@@ -126,14 +152,53 @@ class Batch extends Model
         return $this->batchItems()->sum('quantity_remaining');
     }
 
+    /**
+     * What the batch's output weighs: per item, measured where a measurement
+     * exists and nominal where it doesn't (see BatchItem::weight_breakdown).
+     * A cut wheel counts once, as the wheel — never again as its packs.
+     * weight_coverage says how much of this figure is measured.
+     */
     public function getFinishedProductWeightAttribute(): float
     {
-        $total = 0;
-        foreach ($this->batchItems as $item) {
-            $total += $item->quantity_produced * ($item->unit_weight_kg ?? 0);
-        }
+        return round((float) $this->weightBreakdowns()->sum('total_kg'), 3);
+    }
 
-        return $total;
+    /**
+     * One breakdown per item, with the parent batch handed down so the item's
+     * cheese-or-not check doesn't lazy-load batch + product per row.
+     *
+     * @return \Illuminate\Support\Collection<int, array>
+     */
+    private function weightBreakdowns(): \Illuminate\Support\Collection
+    {
+        return $this->batchItems->map(function (BatchItem $item) {
+            if (! $item->relationLoaded('batch')) {
+                $item->setRelation('batch', $this);
+            }
+
+            return $item->weight_breakdown;
+        });
+    }
+
+    /**
+     * How much of finished_product_weight is measured, so a mostly-nominal
+     * figure never reads as fact. Wheel counts cover wheel items only.
+     *
+     * @return array{has_wheels: bool, wheels_produced: int, wheels_weighed: int, measured_kg: float, nominal_kg: float, reconciles: bool}
+     */
+    public function getWeightCoverageAttribute(): array
+    {
+        $breakdowns = $this->weightBreakdowns();
+        $wheels = $breakdowns->where('kind', 'wheel');
+
+        return [
+            'has_wheels' => $wheels->isNotEmpty(),
+            'wheels_produced' => (int) $wheels->sum('produced'),
+            'wheels_weighed' => (int) $wheels->sum('weighed'),
+            'measured_kg' => round((float) $breakdowns->sum('measured_kg'), 3),
+            'nominal_kg' => round((float) $breakdowns->sum('nominal_kg'), 3),
+            'reconciles' => $breakdowns->every(fn ($b) => $b['reconciles']),
+        ];
     }
 
     public function getProductionYieldAttribute(): ?float

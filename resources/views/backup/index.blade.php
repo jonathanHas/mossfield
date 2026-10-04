@@ -28,20 +28,6 @@
             </div>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error">{{ session('error') }}</div>
-        @endif
-        @if ($errors->any())
-            <div class="mf-flash mf-flash-error">
-                @foreach ($errors->all() as $error)
-                    <div>{{ $error }}</div>
-                @endforeach
-            </div>
-        @endif
-
         {{-- Backup --}}
         <div class="mf-panel mb-5">
             <div class="p-4" style="border-bottom: 1px solid var(--line-2);">

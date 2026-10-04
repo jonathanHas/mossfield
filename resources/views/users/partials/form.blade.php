@@ -1,14 +1,3 @@
-@if ($errors->any())
-    <div class="mf-flash mf-flash-error">
-        <div>
-            <ul class="list-disc list-inside text-[12.5px]">
-                @foreach ($errors->all() as $error)
-                    <li>{{ $error }}</li>
-                @endforeach
-            </ul>
-        </div>
-    </div>
-@endif
 
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div>

@@ -9,11 +9,15 @@ use App\Models\Customer;
 use App\Models\DeliveryRun;
 use App\Models\Order;
 use App\Models\ProductVariant;
+use App\Services\DispatchException;
+use App\Services\DispatchResult;
+use App\Services\DispatchService;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -105,6 +109,15 @@ class ChilledRunController extends Controller
     {
         $this->authorize('load', $order);
 
+        // Once dispatched the tick is history, not a control: un-ticking would
+        // suggest the van hasn't left when the invoice already says it has.
+        if ($order->isDispatchedOrLater()) {
+            return redirect()->route('chilled-runs.index', array_filter([
+                'run' => $request->input('run', $order->customer?->delivery_run_id),
+                'date' => $request->input('date'),
+            ]))->with('error', "{$order->customer->name} is already dispatched — the loaded tick is locked.");
+        }
+
         $order->update(['loaded_at' => $order->loaded_at ? null : now()]);
 
         return redirect()->route('chilled-runs.index', array_filter([
@@ -149,6 +162,120 @@ class ChilledRunController extends Controller
         ]))->with('success', $pending->isEmpty()
             ? 'No pending orders to confirm on this run.'
             : $pending->count().' '.str('order')->plural($pending->count()).' confirmed — now on the picking queue.');
+    }
+
+    /**
+     * Dispatch every loaded, ready stop on the selected run/date — the last
+     * step on the sheet. Each order goes through DispatchService, which flips
+     * the status, issues the invoice for per-order customers (consolidated
+     * customers wait for their period run) and queues the dispatch
+     * confirmation email under one batch id. Stops that aren't loaded or
+     * aren't ready are skipped and named. Office/admin only.
+     */
+    public function dispatchAll(Request $request, DispatchService $dispatcher): RedirectResponse
+    {
+        $validated = $request->validate([
+            'run' => 'required|exists:delivery_runs,id',
+            'date' => 'nullable|date',
+        ]);
+
+        $run = DeliveryRun::findOrFail($validated['run']);
+        $runDate = $run->dateFor($request->filled('date')
+            ? CarbonImmutable::parse($validated['date'])
+            : CarbonImmutable::now());
+
+        $orders = Order::with('customer')
+            ->whereIn('customer_id', $run->customers()->where('is_active', true)->pluck('id'))
+            ->whereDate('delivery_date', $runDate->toDateString())
+            ->whereIn('status', self::OPEN_STATUSES)
+            ->get();
+
+        [$ready, $notReady] = $orders->partition(fn (Order $o) => $o->status === 'ready');
+        [$loaded, $unloaded] = $ready->partition(fn (Order $o) => $o->loaded_at !== null);
+
+        $batchId = (string) Str::uuid();
+        $results = [];
+
+        foreach ($loaded as $order) {
+            $this->authorize('update', $order);
+
+            try {
+                $results[] = $dispatcher->dispatch($order, $request->user(), queueEmail: true, batchId: $batchId);
+            } catch (DispatchException) {
+                // Raced by a per-order click between the query and the lock —
+                // it's dispatched either way, so just don't count it here.
+            }
+        }
+
+        [$key, $message] = $this->dispatchFlash($results, $unloaded, $notReady);
+
+        return redirect()->route('chilled-runs.index', array_filter([
+            'run' => $run->id,
+            'date' => $request->input('date'),
+        ]))->with($key, $message);
+    }
+
+    /**
+     * One line that says what the run button actually did, with every stop it
+     * left behind named — the office needs to know who to chase, not a count.
+     *
+     * @param  array<int, DispatchResult>  $results
+     * @return array{0: string, 1: string}
+     */
+    private function dispatchFlash(array $results, Collection $unloaded, Collection $notReady): array
+    {
+        $names = fn (Collection $orders) => $orders->map(fn (Order $o) => $o->customer?->name ?? $o->order_number)
+            ->unique()->implode(', ');
+
+        if (! $results) {
+            $why = [];
+            if ($unloaded->isNotEmpty()) {
+                $why[] = $names($unloaded).' not loaded';
+            }
+            if ($notReady->isNotEmpty()) {
+                $why[] = $names($notReady).' not ready';
+            }
+
+            return ['error', 'Nothing to dispatch — tick loaded on ready stops first.'
+                .($why ? ' ('.implode('; ', $why).')' : '')];
+        }
+
+        $dispatched = count($results);
+        $issued = count(array_filter($results, fn (DispatchResult $r) => $r->invoiceIssued));
+        $queued = count(array_filter($results, fn (DispatchResult $r) => $r->emailRow !== null));
+
+        $parts = [
+            $dispatched.' '.str('stop')->plural($dispatched).' dispatched',
+            $issued.' '.str('invoice')->plural($issued).' issued',
+            $queued.' '.str('confirmation')->plural($queued).' queued',
+        ];
+
+        $skipped = [];
+        if ($unloaded->isNotEmpty()) {
+            $skipped[] = $names($unloaded).' (not loaded)';
+        }
+        if ($notReady->isNotEmpty()) {
+            $skipped[] = $names($notReady).' (not ready)';
+        }
+        if ($skipped) {
+            $parts[] = 'skipped: '.implode('; ', $skipped);
+        }
+
+        $invoiceFailed = collect($results)->filter(fn (DispatchResult $r) => $r->invoiceError !== null);
+        if ($invoiceFailed->isNotEmpty()) {
+            $parts[] = 'invoice failed: '.$invoiceFailed
+                ->map(fn (DispatchResult $r) => $r->order->order_number.' ('.$r->invoiceError.')')
+                ->implode(', ').' — see Finance → Awaiting invoice';
+        }
+
+        $noEmail = collect($results)->filter(fn (DispatchResult $r) => $r->emailSkippedReason !== null);
+        if ($noEmail->isNotEmpty()) {
+            $parts[] = 'no email: '.$noEmail
+                ->map(fn (DispatchResult $r) => $r->order->customer?->name ?? $r->order->order_number)
+                ->unique()->implode(', ');
+        }
+
+        return ['success', implode(' · ', $parts).'.'];
     }
 
     /**
@@ -461,11 +588,21 @@ class ChilledRunController extends Controller
                     'short' => $short,
                     'allocState' => $items->isEmpty() ? 'none'
                         : ($allocated >= $ordered ? 'allocated' : ($allocated > 0 ? 'partial' : 'unallocated')),
-                    // Same vocabulary as the /picking queue.
-                    'pickState' => $orders->isNotEmpty() && $orders->every(fn ($o) => $o->status === 'ready')
+                    // Same vocabulary as the /picking queue. hasReachedReady(), not
+                    // === 'ready', so a dispatched stop doesn't regress to "5/5 picked".
+                    'pickState' => $orders->isNotEmpty() && $orders->every(fn ($o) => $o->hasReachedReady())
                         ? 'ready'
                         : ($picked > 0 ? 'picking' : 'todo'),
+                    'dispatchState' => $orders->isEmpty() ? 'none'
+                        : ($orders->every(fn ($o) => $o->isDispatchedOrLater()) ? 'dispatched'
+                            : ($orders->contains(fn ($o) => $o->isDispatchedOrLater()) ? 'partial' : 'none')),
                     'canAllocate' => $canAllocate,
+                    // Per-cell allocation sub-lines (see $allocMap below) only
+                    // make sense once the stop is on the picking floor's radar:
+                    // a pending stop can't be allocated yet, and a dispatched
+                    // one is history.
+                    'showCellAlloc' => $orders->contains(fn ($o) => in_array($o->status, ['confirmed', 'preparing', 'ready'], true))
+                        && ! $orders->every(fn ($o) => $o->isDispatchedOrLater()),
                 ],
             ];
         });
@@ -505,7 +642,11 @@ class ChilledRunController extends Controller
         // multiple same-day orders for the same customer).
         // $allocatedByVariant rides along in the same pass — it's what the
         // stock footer compares against free stock (see $stock below).
+        // $allocMap is the per-cell counterpart — what each stop has reserved /
+        // picked / closed short per column, so the row can show which
+        // products are covered rather than just the stop total.
         $qtyMap = [];
+        $allocMap = [];
         $allocatedByVariant = [];
         $shortByVariant = [];
         foreach ($rows as $row) {
@@ -514,6 +655,13 @@ class ChilledRunController extends Controller
                     if (isset($columnIds[$item->product_variant_id])) {
                         $qtyMap[$row['customer']->id][$item->product_variant_id] =
                             ($qtyMap[$row['customer']->id][$item->product_variant_id] ?? 0) + $item->quantity_ordered;
+                        $cell = &$allocMap[$row['customer']->id][$item->product_variant_id];
+                        $cell = [
+                            'allocated' => ($cell['allocated'] ?? 0) + $item->quantity_allocated,
+                            'picked' => ($cell['picked'] ?? 0) + $item->quantity_fulfilled,
+                            'short' => ($cell['short'] ?? 0) + $item->quantity_short,
+                        ];
+                        unset($cell);
                         $allocatedByVariant[$item->product_variant_id] =
                             ($allocatedByVariant[$item->product_variant_id] ?? 0) + $item->quantity_allocated;
                         $shortByVariant[$item->product_variant_id] =
@@ -584,6 +732,15 @@ class ChilledRunController extends Controller
             fn ($row) => $row['stats']['ordered'] > 0
                 && $row['stats']['allocated'] >= $row['stats']['ordered']
         )->count();
+        // Dispatch: the button counts ORDERS that can go (ready + loaded); the
+        // bar counts STOPS, same denominator as the loaded bar.
+        $dispatchableCount = $rows->sum(fn ($row) => $row['orders']->filter(
+            fn ($o) => $o->status === 'ready' && $o->loaded_at !== null
+        )->count());
+        $dispatchedCount = $stopsWithOrders
+            ->filter(fn ($row) => $row['stats']['dispatchState'] === 'dispatched')
+            ->count();
+
         $orderedUnits = (int) $rows->sum(fn ($row) => $row['stats']['ordered']);
         $allocatedUnits = (int) $rows->sum(fn ($row) => $row['stats']['allocated']);
 
@@ -596,6 +753,7 @@ class ChilledRunController extends Controller
             'runDate' => $runDate,
             'rows' => $rows,
             'qtyMap' => $qtyMap,
+            'allocMap' => $allocMap,
             'extras' => $extras,
             'references' => $references,
             'milkCols' => $milkCols,
@@ -613,6 +771,9 @@ class ChilledRunController extends Controller
             'loadedCount' => $loadedCount,
             'loadableCount' => $loadableCount,
             'loadedPct' => $loadableCount > 0 ? (int) round($loadedCount / $loadableCount * 100) : 0,
+            'dispatchableCount' => $dispatchableCount,
+            'dispatchedCount' => $dispatchedCount,
+            'dispatchedPct' => $loadableCount > 0 ? (int) round($dispatchedCount / $loadableCount * 100) : 0,
             'allocatableCount' => $allocatableCount,
             'allocatedStops' => $allocatedStops,
             'allocStopsTotal' => $loadableCount,
@@ -652,9 +813,13 @@ class ChilledRunController extends Controller
         $byVariant = BatchItem::allocatable()
             ->whereIn('product_variant_id', $columns->pluck('id'))
             ->with('batch.product')
-            ->withSum([
-                'orderAllocations as reserved_units' => fn ($q) => $q->whereNull('fulfilled_at'),
-            ], 'quantity_allocated')
+            // Units still OWED, not whole allocations: a picked unit has already
+            // left quantity_remaining, so summing quantity_allocated would
+            // subtract it twice (see BatchItem::getHoldableQuantityAttribute).
+            ->withSum(
+                'orderAllocations as reserved_units',
+                DB::raw('quantity_allocated - quantity_fulfilled')
+            )
             ->get()
             ->groupBy('product_variant_id');
 

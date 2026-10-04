@@ -59,5 +59,25 @@
                 @endif
             </div>
         </div>
+        <div class="mf-crate-cell" style="flex: 1.4;">
+            <div class="flex items-center justify-between gap-3">
+                <span class="mf-eyebrow">Dispatched</span>
+                <span class="font-mono text-[12px] font-medium" style="color: {{ $sheet['dispatchedPct'] === 100 && $sheet['loadableCount'] > 0 ? 'var(--accent-ink)' : 'var(--ink)' }};">
+                    {{ $sheet['dispatchedCount'] }}/{{ $sheet['loadableCount'] }}
+                </span>
+            </div>
+            <div class="mf-bar" style="margin-top: 10px;">
+                <i style="width: {{ $sheet['dispatchedPct'] }}%;"></i>
+            </div>
+            <div class="font-mono" style="font-size: 10.5px; color: var(--muted); margin-top: 6px;">
+                @if ($sheet['loadableCount'] === 0)
+                    No orders this day
+                @elseif ($sheet['dispatchedPct'] === 100)
+                    All stops dispatched
+                @else
+                    {{ $sheet['loadableCount'] - $sheet['dispatchedCount'] }} {{ Str::plural('stop', $sheet['loadableCount'] - $sheet['dispatchedCount']) }} still to dispatch
+                @endif
+            </div>
+        </div>
     </div>
 </div>

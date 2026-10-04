@@ -23,13 +23,6 @@
             @endcan
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error">{{ session('error') }}</div>
-        @endif
-
         @forelse ($products as $type => $typeProducts)
             @php
                 $meta = $typeMeta[$type] ?? ['label' => ucfirst($type), 'tone' => 'neutral'];

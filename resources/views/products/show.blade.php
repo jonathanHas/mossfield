@@ -47,10 +47,6 @@
             </div>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-
         <div class="mf-panel mb-4">
             <div class="mf-panel-header">
                 <div class="text-[13px] font-semibold">Product information</div>

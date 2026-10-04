@@ -207,7 +207,7 @@ class CheeseConversionTest extends TestCase
         $office = $this->office();
         $this->hold($office, $wheel, 3);
 
-        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel))->assertNotFound();
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3])->assertNotFound();
         $this->assertSame(0, Batch::where('product_id', $this->mature->id)->count());
     }
 
@@ -217,7 +217,7 @@ class CheeseConversionTest extends TestCase
         $office = $this->office();
         $this->hold($office, $wheel, 3);
 
-        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel))
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3])
             ->assertRedirect(route('cheese-conversion.index'));
 
         $wheel->refresh();
@@ -237,9 +237,88 @@ class CheeseConversionTest extends TestCase
     {
         $wheel = $this->farmhouseBatch(6, 5);
 
-        $this->actingAs($this->office())->post(route('cheese-conversion.release', $wheel))
-            ->assertSessionHasErrors('error');
+        $this->actingAs($this->office())->post(route('cheese-conversion.release', $wheel), ['quantity' => 1])
+            ->assertSessionHasErrors();
         $this->assertSame(0, Batch::where('product_id', $this->mature->id)->count());
+    }
+
+    /**
+     * Finding 4 (2026-09-12 browser pass): release() ignored `quantity`
+     * entirely — 2, 50 and −3 all released the whole hold. It is now bounded
+     * exactly the way hold() is: 1 ≤ quantity ≤ the saved hold.
+     */
+    public function test_release_is_bounded_by_the_saved_hold(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 2);
+
+        foreach ([50, 3, 0, -3, 'two'] as $bad) {
+            $this->actingAs($office)
+                ->post(route('cheese-conversion.release', $wheel), ['quantity' => $bad])
+                ->assertRedirect()
+                ->assertSessionHasErrors('quantity');
+        }
+
+        $this->actingAs($office)
+            ->post(route('cheese-conversion.release', $wheel), [])
+            ->assertSessionHasErrors('quantity');
+
+        $wheel->refresh();
+        $this->assertSame(2, $wheel->quantity_maturing, 'nothing was released by an out-of-range quantity');
+        $this->assertSame(5, $wheel->quantity_remaining);
+        $this->assertSame(0, CheeseConversionLog::count());
+    }
+
+    public function test_over_release_is_refused_with_the_same_message_as_over_hold(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 2);
+
+        $response = $this->actingAs($office)
+            ->post(route('cheese-conversion.release', $wheel), ['quantity' => 50]);
+
+        $response->assertRedirect(route('cheese-conversion.index'));
+        $this->followRedirects($response)
+            ->assertOk()
+            ->assertSee('must not be greater than 2');
+    }
+
+    public function test_release_can_be_partial(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 3);
+
+        $this->actingAs($office)
+            ->post(route('cheese-conversion.release', $wheel), ['quantity' => 1])
+            ->assertRedirect(route('cheese-conversion.index'))
+            ->assertSessionHasNoErrors();
+
+        $wheel->refresh();
+        $this->assertSame(4, $wheel->quantity_remaining, 'one wheel left the batch');
+        $this->assertSame(2, $wheel->quantity_maturing, 'two are still held');
+        $this->assertSame(1, (int) CheeseConversionLog::first()->wheels_converted);
+        $this->assertSame(1, (int) BatchItem::where('product_variant_id', $this->matureWheel->id)->sum('quantity_remaining'));
+    }
+
+    public function test_the_release_button_posts_exactly_the_saved_hold(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 3);
+
+        $html = $this->actingAs($office)->get(route('cheese-conversion.index'))->assertOk()->getContent();
+
+        // A dedicated release form carrying the saved hold — not the allocator's
+        // live (possibly unsaved) Maturing-zone count.
+        $releaseUrl = preg_quote(route('cheese-conversion.release', $wheel), '/');
+        $this->assertMatchesRegularExpression(
+            '/<form[^>]*action="'.$releaseUrl.'"[^>]*>(?:(?!<\/form>).)*name="quantity"[^>]*value="3"/s',
+            $html,
+        );
+        $this->assertStringContainsString('Release 3 to mature', $html);
     }
 
     public function test_undo_release_returns_wheels_to_the_hold(): void
@@ -247,7 +326,7 @@ class CheeseConversionTest extends TestCase
         $wheel = $this->farmhouseBatch(6, 5);
         $office = $this->office();
         $this->hold($office, $wheel, 3);
-        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel));
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3]);
 
         $log = CheeseConversionLog::first();
         $this->actingAs($office)->post(route('cheese-conversion.undo', $log))->assertRedirect();
@@ -266,7 +345,7 @@ class CheeseConversionTest extends TestCase
         $wheel = $this->farmhouseBatch(6, 5);
         $office = $this->office();
         $this->hold($office, $wheel, 3);
-        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel));
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3]);
 
         $matureItem = BatchItem::where('product_variant_id', $this->matureWheel->id)->first();
         // Cut all 3 mature wheels away.
@@ -281,12 +360,12 @@ class CheeseConversionTest extends TestCase
         $this->actingAs($office)->post(route('cheese-cutting.store', $matureItem->fresh()), [
             'cut_date' => now()->toDateString(),
             'vacuum_pack_variant_id' => $this->matureVacuum->id,
-            'vacuum_packs_created' => 8, 'total_weight_kg' => 2.0, 'notes' => 'cut',
+            'wheel_weight_kg' => 2.5, 'vacuum_packs_created' => 8, 'total_weight_kg' => 2.0, 'notes' => 'cut',
         ]);
         $this->actingAs($office)->post(route('cheese-cutting.store', $matureItem->fresh()), [
             'cut_date' => now()->toDateString(),
             'vacuum_pack_variant_id' => $this->matureVacuum->id,
-            'vacuum_packs_created' => 8, 'total_weight_kg' => 2.0, 'notes' => 'cut',
+            'wheel_weight_kg' => 2.5, 'vacuum_packs_created' => 8, 'total_weight_kg' => 2.0, 'notes' => 'cut',
         ]);
 
         $log = CheeseConversionLog::first();
@@ -316,7 +395,7 @@ class CheeseConversionTest extends TestCase
         $this->actingAs($office)->post(route('cheese-cutting.store', $wheel), [
             'cut_date' => now()->toDateString(),
             'vacuum_pack_variant_id' => $this->matureVacuum->id, // any vac variant
-            'vacuum_packs_created' => 8,
+            'wheel_weight_kg' => 2.5, 'vacuum_packs_created' => 8,
             'total_weight_kg' => 2.0,
             'notes' => 'should fail',
         ])->assertSessionHasErrors('error');

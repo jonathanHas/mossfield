@@ -42,10 +42,6 @@
             </div>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-
         <div class="mf-panel mb-4">
             <div class="mf-panel-header">
                 <div class="text-[13px] font-semibold">Batch information</div>
@@ -71,12 +67,28 @@
                     @endif
                 </div>
                 @if($batch->finished_product_weight > 0)
+                @php
+                    // Measured where a wheel was weighed (dispatch, cutting), nominal
+                    // elsewhere (on hand, converted, pre-2026-09-13 cuts). The tilde
+                    // means "partly estimated"; see BatchItem::weight_breakdown.
+                    $coverage = $batch->weight_coverage;
+                    $partlyNominal = $coverage['nominal_kg'] > 0;
+                    $approx = $partlyNominal ? '~' : '';
+                @endphp
                 <div>
                     <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Finished weight</dt>
-                    <dd class="mt-0.5 font-mono">{{ number_format($batch->finished_product_weight, 2) }} kg</dd>
+                    <dd class="mt-0.5 font-mono" title="{{ number_format($coverage['measured_kg'], 3) }} kg measured · {{ number_format($coverage['nominal_kg'], 3) }} kg nominal">{{ $approx }}{{ number_format($batch->finished_product_weight, 2) }} kg</dd>
+                    @if($coverage['has_wheels'])
+                        <div class="text-[11.5px] mt-0.5" style="color: var(--muted);">
+                            {{ $coverage['wheels_weighed'] }} of {{ $coverage['wheels_produced'] }} wheels weighed
+                            @unless($coverage['reconciles'])
+                                · <span style="color: var(--danger);" title="on hand + dispatched + cut + converted ≠ produced">does not reconcile</span>
+                            @endunless
+                        </div>
+                    @endif
                     @if($batch->production_yield)
                         <div class="text-[11.5px] mt-0.5" style="color: var(--muted);">
-                            Yield {{ number_format($batch->production_yield * 100, 1) }}%
+                            Yield {{ $approx }}{{ number_format($batch->production_yield * 100, 1) }}%@if(! $coverage['has_wheels'] || $coverage['measured_kg'] <= 0) (nominal)@endif
                         </div>
                     @endif
                 </div>
@@ -131,9 +143,11 @@
                                 <th class="mf-th">Size</th>
                                 <th class="mf-th">Unit weight</th>
                                 <th class="mf-th text-right">Produced</th>
+                                <th class="mf-th text-right">On hand</th>
                                 <th class="mf-th text-right">Sold</th>
-                                <th class="mf-th text-right">Remaining</th>
-                                <th class="mf-th text-right">Total weight</th>
+                                <th class="mf-th text-right" title="Wheels cut into vacuum packs">Cut</th>
+                                <th class="mf-th text-right" title="Wheels released into the Mature product">Converted</th>
+                                <th class="mf-th text-right" title="Remaining units × the variant's unit weight — nothing on the shelf has been weighed yet">On hand (nominal)</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -142,12 +156,22 @@
                                     <td class="mf-td font-medium">{{ $item->productVariant->name }}</td>
                                     <td class="mf-td" style="color: var(--muted);">{{ $item->productVariant->size }} {{ $item->productVariant->unit }}</td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $item->unit_weight_kg ? number_format($item->unit_weight_kg, 3) . ' kg' : '—' }}</td>
+                                    @php
+                                        // Every unit in exactly one state — the same breakdown the
+                                        // finished weight above is derived from, so the two agree
+                                        // (and agree with /stock). Finding 8: "Sold" used to be
+                                        // produced − remaining, which swallowed cut and converted.
+                                        $wb = $item->weight_breakdown;
+                                        $soldUnits = $wb['kind'] === 'wheel' ? $wb['dispatched'] : max(0, $wb['produced'] - $wb['on_hand']);
+                                    @endphp
                                     <td class="mf-td font-mono text-right">{{ number_format($item->quantity_produced) }}</td>
-                                    <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ number_format($item->quantity_sold) }}</td>
                                     <td class="mf-td font-mono text-right font-medium" style="color: {{ $item->quantity_remaining > 0 ? 'var(--accent-ink)' : 'var(--danger)' }};">
                                         {{ number_format($item->quantity_remaining) }}
                                     </td>
-                                    <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $item->unit_weight_kg ? number_format($item->total_weight, 2) . ' kg' : '—' }}</td>
+                                    <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ number_format($soldUnits) }}</td>
+                                    <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $wb['kind'] === 'wheel' ? number_format($wb['cut']) : '—' }}</td>
+                                    <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $wb['kind'] === 'wheel' ? number_format($wb['converted']) : '—' }}</td>
+                                    <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $item->unit_weight_kg ? '~' . number_format($item->total_weight, 2) . ' kg' : '—' }}</td>
                                 </tr>
                             @endforeach
                         </tbody>
@@ -161,7 +185,17 @@
         @if($batch->product->type === 'cheese' && $batch->cuttingLogs->count() > 0)
             <div class="mf-panel mb-4">
                 <div class="mf-panel-header">
-                    <div class="text-[13px] font-semibold">Cheese cutting history</div>
+                    <div class="flex-1"><div class="text-[13px] font-semibold">Cheese cutting history</div></div>
+                    {{-- Trim loss = Σ (wheel − packs) over the cuts whose wheel was weighed.
+                         Unweighed (pre-2026-09-13) cuts are counted, never estimated. --}}
+                    <div class="text-[12px]" style="color: var(--muted);">
+                        Trim loss
+                        <span class="font-mono font-semibold" style="color: var(--ink);">{{ number_format($batch->trim_loss_kg, 3) }} kg</span>
+                        over {{ $batch->measured_cuts_count }} weighed {{ Str::plural('cut', $batch->measured_cuts_count) }}
+                        @if($batch->unmeasured_cuts_count > 0)
+                            · {{ $batch->unmeasured_cuts_count }} not weighed
+                        @endif
+                    </div>
                 </div>
                 <div class="overflow-x-auto">
                     <table class="w-full border-collapse text-[13px]">
@@ -169,8 +203,10 @@
                             <tr>
                                 <th class="mf-th">Cut date</th>
                                 <th class="mf-th">Source wheel</th>
+                                <th class="mf-th text-right">Wheel</th>
                                 <th class="mf-th text-right">Vac packs</th>
-                                <th class="mf-th text-right">Total weight</th>
+                                <th class="mf-th text-right">Packs weight</th>
+                                <th class="mf-th text-right">Waste</th>
                                 <th class="mf-th text-right">Avg pack</th>
                                 <th class="mf-th">Notes</th>
                             </tr>
@@ -180,8 +216,22 @@
                                 <tr style="border-top: 1px solid var(--line-2);">
                                     <td class="mf-td font-mono">{{ $log->cut_date->format('d/m/Y') }}</td>
                                     <td class="mf-td">{{ $log->sourceBatchItem->productVariant->name }}</td>
+                                    <td class="mf-td font-mono text-right">
+                                        @if($log->isMeasured())
+                                            {{ number_format($log->wheel_weight_kg, 3) }} kg
+                                        @else
+                                            <span style="color: var(--faint);" title="Cut before wheel weights were recorded">not weighed</span>
+                                        @endif
+                                    </td>
                                     <td class="mf-td font-mono text-right">{{ number_format($log->vacuum_packs_created) }}</td>
-                                    <td class="mf-td font-mono text-right">{{ number_format($log->total_weight_kg, 2) }} kg</td>
+                                    <td class="mf-td font-mono text-right">{{ number_format($log->total_weight_kg, 3) }} kg</td>
+                                    <td class="mf-td font-mono text-right">
+                                        @if($log->waste_kg !== null)
+                                            {{ number_format($log->waste_kg, 3) }} kg
+                                        @else
+                                            <span style="color: var(--faint);">—</span>
+                                        @endif
+                                    </td>
                                     <td class="mf-td font-mono text-right">{{ number_format($log->average_pack_weight, 3) }} kg</td>
                                     <td class="mf-td" style="color: var(--muted);">{{ $log->notes ?? '—' }}</td>
                                 </tr>
@@ -200,8 +250,10 @@
                 <div class="flex flex-wrap gap-2">
                     @if($batch->product->type === 'cheese')
                         @php
+                            // Free wheels only (not raw quantity_remaining): a held or
+                            // reserved wheel can't be cut, so it mustn't be offered.
                             $availableWheels = $batch->batchItems->filter(function($item) {
-                                return str_contains(strtolower($item->productVariant->name), 'wheel') && $item->quantity_remaining > 0;
+                                return str_contains(strtolower($item->productVariant->name), 'wheel') && $item->available_quantity > 0;
                             });
                             $isReady = $batch->ready_date === null || $batch->ready_date <= now();
 
@@ -217,7 +269,7 @@
                                 @foreach($availableWheels as $wheelItem)
                                     <a href="{{ route('cheese-cutting.create', $wheelItem) }}" class="mf-btn-primary">
                                         Cut {{ $wheelItem->productVariant->name }}
-                                        <span class="text-[11.5px] font-mono ml-1" style="opacity: 0.8;">({{ $wheelItem->quantity_remaining }} left)</span>
+                                        <span class="text-[11.5px] font-mono ml-1" style="opacity: 0.8;">({{ $wheelItem->available_quantity }} left)</span>
                                     </a>
                                 @endforeach
                             @endcan

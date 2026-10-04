@@ -1,0 +1,19 @@
+# planImp — how the app is being reviewed and improved
+
+This folder is the project-management side of the repo: how the app is being
+reviewed and improved, as distinct from how it works (`CLAUDE.md`, at the root)
+or how it ships (`DEPLOYMENT.md`, also at the root).
+
+| File | What it is | Reach for it when |
+| --- | --- | --- |
+| **`TESTING_AND_FIXES.md`** | The permanent record. One section per audit, newest first; every finding names the test that pins it. Also how to run the suites, the known-failing baseline, and how to reset the dev database between passes. | Before touching stock, allocation or weight arithmetic; after any test pass; when a figure on screen doesn't match the database. |
+| **`OPEN_QUESTIONS.md`** | Design decisions not yet made — things the app has no opinion about, rather than things that are broken. Each written up so it can be decided later without re-deriving it. | Something needs Jon's judgement before anyone writes code. When settled, record the decision there and move the implementation into `handoff/NEXT.md`. |
+| **`SMALL_FIXES.md`** | Deferred polish — copy, display, minor UX — batched on purpose so it lands in one pass rather than three. Includes a *Judgement needed* section that is Jon's, not anyone else's. | A substantive pass is done and there is room for a polish batch. |
+| **`WORK_IN_PROGRESS.md`** | Current development state and what needs attention when resuming work; recently completed work by date. | Picking the app up after a gap. |
+| **`FULFILMENT_PLAN.md`** | The phased roadmap for the picking → dispatch → delivery flow from the Claude Design handoff, with phases ticked as they land. | Resuming fulfilment-flow work from the next unchecked phase. |
+| **`RESUME.md`** | The last stopping point: where the handoff loop is, what's uncommitted, the test baseline, the dev-DB state, how to bring the box up. | Coming back after a reboot or a gap — "Read `docs/planImp/RESUME.md`, then do the next handoff." |
+| **`handoff/`** | The working channel between the browser-testing session (writes `NEXT.md`) and Claude Code (writes `REPORT.md`). `handoff/README.md` has the protocol and the expected shape of a report. | "Do the next handoff." |
+
+`SECURITY_NEXT_STEPS.md` stays at the root on purpose: it is the token-rotation
+runbook that `DEPLOYMENT.md` and `README.md` point at, so it belongs with the
+deploy documents rather than here.

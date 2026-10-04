@@ -13,16 +13,6 @@
             </a>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error">{{ session('error') }}</div>
-        @endif
-        @if (session('warning'))
-            <div class="mf-flash mf-flash-warn">{{ session('warning') }}</div>
-        @endif
-
         <div class="mf-panel mb-4">
             <form method="GET" action="{{ route('customers.index') }}" class="flex flex-wrap gap-3 items-end p-4">
                 <div class="flex-1 min-w-[200px]">

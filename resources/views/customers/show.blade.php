@@ -29,13 +29,6 @@
             </div>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('warning'))
-            <div class="mf-flash mf-flash-warn">{{ session('warning') }}</div>
-        @endif
-
         <div class="grid gap-4 grid-cols-1 lg:grid-cols-3 mb-4">
             <div class="mf-panel">
                 <div class="mf-panel-header">
@@ -100,6 +93,19 @@
                     @endif
                     <dt style="color: var(--muted);">Outstanding</dt>
                     <dd class="font-mono">€{{ number_format($customer->outstanding_balance, 2) }}</dd>
+                    <dt style="color: var(--muted);">Invoicing</dt>
+                    <dd>{{ $customer->invoicing_mode?->label() ?? 'Per order' }}</dd>
+                    <dt style="color: var(--muted);">Invoices</dt>
+                    <dd>
+                        {{ $customer->invoice_delivery?->label() ?? 'Email' }}
+                        @if($customer->billing_email)
+                            <div class="text-[12px]" style="color: var(--muted);">{{ $customer->billing_email }}</div>
+                        @endif
+                    </dd>
+                    @if($customer->vat_number)
+                        <dt style="color: var(--muted);">VAT number</dt>
+                        <dd class="font-mono">{{ $customer->vat_number }}</dd>
+                    @endif
                     <dt style="color: var(--muted);">Online</dt>
                     <dd>
                         @if($customer->hasOnlineAccount())
@@ -119,6 +125,125 @@
                 </svg>
                 <div><b>Notes:</b> <span class="whitespace-pre-wrap">{{ $customer->notes }}</span></div>
             </div>
+        @endif
+
+        @if($finance)
+            @php $aged = $finance['aged']; @endphp
+            <div class="mf-panel mb-4">
+                <div class="mf-panel-header">
+                    <div class="flex-1"><div class="text-[13px] font-semibold">Account</div></div>
+                    <div class="flex gap-2">
+                        <a href="{{ route('invoicing.payments.create', ['customer_id' => $customer->id]) }}" class="mf-btn-secondary">Record payment</a>
+                        <a href="{{ route('invoicing.statements.preview', $customer) }}" class="mf-btn-secondary">Statement</a>
+                        @if($finance['credit'] > 0 && $finance['openTotal'] > 0)
+                            <form method="POST" action="{{ route('invoicing.payments.apply-credit', $customer) }}"
+                                  onsubmit="return confirm('Apply €{{ number_format($finance['credit'], 2) }} of credit to the oldest open invoices?')">
+                                @csrf
+                                <button type="submit" class="mf-btn-primary">Apply credit</button>
+                            </form>
+                        @endif
+                    </div>
+                </div>
+                <div class="px-4 py-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-[13px]">
+                    <div>
+                        <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Open invoices</div>
+                        <div class="font-mono text-[18px] mt-0.5">€{{ number_format($finance['openTotal'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Credit on account</div>
+                        <div class="font-mono text-[18px] mt-0.5">€{{ number_format($finance['credit'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Net owed</div>
+                        <div class="font-mono text-[18px] mt-0.5">€{{ number_format($aged['total'], 2) }}</div>
+                    </div>
+                    <div>
+                        <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Credit limit</div>
+                        <div class="font-mono text-[18px] mt-0.5">€{{ number_format($customer->credit_limit, 2) }}</div>
+                    </div>
+                </div>
+                <table class="w-full">
+                    <thead>
+                        <tr>
+                            <th class="mf-th text-right">Not yet due</th>
+                            <th class="mf-th text-right">1–30 days</th>
+                            <th class="mf-th text-right">31–60 days</th>
+                            <th class="mf-th text-right">61–90 days</th>
+                            <th class="mf-th text-right">90+ days</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="mf-td text-right font-mono">€{{ number_format($aged['current'], 2) }}</td>
+                            <td class="mf-td text-right font-mono">€{{ number_format($aged['days_1_30'], 2) }}</td>
+                            <td class="mf-td text-right font-mono">€{{ number_format($aged['days_31_60'], 2) }}</td>
+                            <td class="mf-td text-right font-mono">€{{ number_format($aged['days_61_90'], 2) }}</td>
+                            <td class="mf-td text-right font-mono">€{{ number_format($aged['days_90_plus'], 2) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            @if($finance['invoices']->isNotEmpty())
+                <div class="mf-panel mb-4">
+                    <div class="mf-panel-header"><div class="text-[13px] font-semibold">Recent invoices</div></div>
+                    <table class="w-full">
+                        <thead>
+                            <tr>
+                                <th class="mf-th">Invoice</th>
+                                <th class="mf-th">Issued</th>
+                                <th class="mf-th">Due</th>
+                                <th class="mf-th text-right">Total</th>
+                                <th class="mf-th text-right">Balance</th>
+                                <th class="mf-th">State</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($finance['invoices'] as $invoice)
+                                <tr class="mf-tr-divide">
+                                    <td class="mf-td">
+                                        <a href="{{ route('invoicing.invoices.show', $invoice) }}" class="mf-link font-mono">{{ $invoice->number }}</a>
+                                    </td>
+                                    <td class="mf-td">{{ $invoice->issued_at?->format('d/m/Y') }}</td>
+                                    <td class="mf-td">{{ $invoice->due_date?->format('d/m/Y') }}</td>
+                                    <td class="mf-td text-right font-mono">€{{ number_format((float) $invoice->total, 2) }}</td>
+                                    <td class="mf-td text-right font-mono">€{{ number_format((float) $invoice->balance, 2) }}</td>
+                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $invoice->payment_state_tone }}">{{ $invoice->payment_state_label }}</span></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
+
+            @if($finance['emails']->isNotEmpty())
+                <div class="mf-panel mb-4">
+                    <div class="mf-panel-header">
+                        <div class="flex-1"><div class="text-[13px] font-semibold">Documents sent</div></div>
+                        <a href="{{ route('invoicing.emails.index', ['customer_id' => $customer->id]) }}" class="mf-link text-[12.5px]">All →</a>
+                    </div>
+                    <table class="w-full">
+                        <thead>
+                            <tr>
+                                <th class="mf-th">When</th>
+                                <th class="mf-th">Document</th>
+                                <th class="mf-th">To</th>
+                                <th class="mf-th">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach($finance['emails'] as $email)
+                                <tr class="mf-tr-divide">
+                                    <td class="mf-td">{{ ($email->sent_at ?? $email->failed_at ?? $email->queued_at)?->format('d/m/Y H:i') }}</td>
+                                    <td class="mf-td">{{ $email->kind->label() }}</td>
+                                    <td class="mf-td text-[12.5px]">{{ $email->recipient }}</td>
+                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $email->status_tone }}">{{ $email->status->label() }}</span></td>
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            @endif
         @endif
 
         <div class="mf-panel">
@@ -141,7 +266,9 @@
                                 <th class="mf-th">Date</th>
                                 <th class="mf-th">Total</th>
                                 <th class="mf-th">Status</th>
-                                <th class="mf-th">Payment</th>
+                                @can('see-financials')
+                                    <th class="mf-th">Payment</th>
+                                @endcan
                                 <th class="mf-th">Source</th>
                                 <th class="mf-th"></th>
                             </tr>
@@ -170,7 +297,14 @@
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d M Y') }}</td>
                                     <td class="mf-td font-mono">€{{ number_format($order->total_amount, 2) }}</td>
                                     <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span></td>
-                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst(str_replace('_', ' ', $order->payment_status)) }}</span></td>
+                                    @can('see-financials')
+                                        <td class="mf-td">
+                                            <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst(str_replace('_', ' ', $order->payment_status)) }}</span>
+                                            @if($order->invoice_id)
+                                                <a href="{{ route('invoicing.invoices.show', $order->invoice_id) }}" class="mf-link ml-1 text-[11.5px]">inv</a>
+                                            @endif
+                                        </td>
+                                    @endcan
                                     <td class="mf-td">
                                         @if($order->mossorders_order_id)
                                             <span class="mf-tag mf-tag-info">Online</span>
@@ -269,7 +403,7 @@
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
                                         <option value="{{ $variant->id }}" @selected(old('product_variant_id') == $variant->id)>
-                                            {{ $variant->name }} — standard {{ $variant->price_label }}
+                                            {{ $variant->picker_label }} — standard {{ $variant->price_label }}
                                         </option>
                                     @endforeach
                                 </optgroup>

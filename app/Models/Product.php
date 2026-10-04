@@ -31,6 +31,15 @@ class Product extends Model
             : null);
     }
 
+    /**
+     * The product name without the shared "Mossfield " prefix — for option
+     * labels where every product carries it and it only adds width.
+     */
+    public function getShortNameAttribute(): string
+    {
+        return preg_replace('/^Mossfield\s+/i', '', (string) $this->name) ?: (string) $this->name;
+    }
+
     public function variants(): HasMany
     {
         return $this->hasMany(ProductVariant::class);

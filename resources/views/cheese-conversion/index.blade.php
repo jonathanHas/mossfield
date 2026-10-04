@@ -40,19 +40,6 @@
                 @endif
             </div>
 
-            @if (session('success'))
-                <div class="mf-flash mf-flash-success mt-4">{{ session('success') }}</div>
-            @endif
-            @if ($errors->any())
-                <div class="mf-flash mf-flash-error mt-4">
-                    <div>
-                        <ul class="list-disc list-inside text-[12px]">
-                            @foreach ($errors->all() as $error)<li>{{ $error }}</li>@endforeach
-                        </ul>
-                    </div>
-                </div>
-            @endif
-
             <div class="flex items-center gap-2.5" style="margin-top: 26px; margin-bottom: 12px;">
                 <span class="text-[15px] font-semibold">Ready to mature</span>
                 <span class="mc-pill-warn">{{ $batchCount }} {{ Str::plural('batch', $batchCount) }}</span>
@@ -86,7 +73,10 @@
                             <x-mature.meta label="Raw milk" :value="number_format($batch->raw_milk_litres, 1).'L'" />
                         </div>
                         @if($canConvert && $eligible && $maturing > 0)
-                            <button type="submit" formaction="{{ route('cheese-conversion.release', $item) }}" formnovalidate
+                            {{-- Submits the sibling release form (form= attribute), which
+                                 carries the SAVED hold — not this allocator's live, possibly
+                                 unsaved, Maturing-zone count. --}}
+                            <button type="submit" form="release-form-{{ $item->id }}"
                                     class="mc-btn mc-btn-mature" style="margin-left: 8px;"
                                     onclick="return confirm('Release {{ $maturing }} held wheel(s) into mature cheese?')">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg>
@@ -263,6 +253,14 @@
                         @endif
                     </div>
                 </form>
+                @if($canConvert && $eligible && $maturing > 0)
+                    {{-- Release form (sibling — a form can't nest in the hold form).
+                         Posts the saved hold; release() validates 1 ≤ quantity ≤ hold. --}}
+                    <form id="release-form-{{ $item->id }}" method="POST" action="{{ route('cheese-conversion.release', $item) }}" hidden>
+                        @csrf
+                        <input type="hidden" name="quantity" value="{{ $maturing }}">
+                    </form>
+                @endif
             @empty
                 <div class="mf-panel p-10 text-center">
                     <h3 class="text-[14px] font-semibold">No farmhouse wheels to set aside</h3>

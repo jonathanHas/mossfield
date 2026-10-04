@@ -7,6 +7,9 @@
     $canSeeAllocation = $me->hasRole('admin', 'office');
     $canSeeOnlineOrders = $me->hasRole('admin', 'office');
     $canSeeUsers = $me->hasRole('admin');
+    // Finance is office/admin only — FinancialPolicy denies factory at the model
+    // too, so the nav and the access rules agree.
+    $canSeeFinance = $me->hasRole('admin', 'office');
 
     $groups = [];
     $groups[] = ['label' => null, 'items' => [
@@ -23,6 +26,17 @@
         $salesItems[] = ['id' => 'online', 'label' => 'Online Orders', 'route' => 'online-orders.index', 'match' => 'online-orders.*', 'icon' => 'online'];
     }
     if ($salesItems) $groups[] = ['label' => 'Sales', 'items' => $salesItems];
+
+    // Finance — invoicing, money in, and what's owed
+    if ($canSeeFinance) {
+        $groups[] = ['label' => 'Finance', 'items' => [
+            ['id' => 'invoices', 'label' => 'Invoices', 'route' => 'invoicing.invoices.index', 'match' => 'invoicing.invoices.*', 'icon' => 'invoice'],
+            ['id' => 'tobill', 'label' => 'To Invoice', 'route' => 'invoicing.uninvoiced.index', 'match' => 'invoicing.uninvoiced.*', 'icon' => 'euro'],
+            ['id' => 'payments', 'label' => 'Payments', 'route' => 'invoicing.payments.index', 'match' => 'invoicing.payments.*', 'icon' => 'euro'],
+            ['id' => 'statements', 'label' => 'Statements', 'route' => 'invoicing.statements.index', 'match' => 'invoicing.statements.*', 'icon' => 'statement'],
+            ['id' => 'overdue', 'label' => 'Overdue', 'route' => 'invoicing.overdue.index', 'match' => 'invoicing.overdue.*', 'icon' => 'alert'],
+        ]];
+    }
 
     // Fulfillment — picking + allocation
     $fulfillItems = [];
@@ -78,6 +92,10 @@
         'users'     => ['M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2', 'M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z'],
         'backup'    => ['M21 5c0 1.66-4 3-9 3S3 6.66 3 5s4-3 9-3 9 1.34 9 3z', 'M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5', 'M3 12c0 1.66 4 3 9 3s9-1.34 9-3'],
         'snow'      => ['M12 2v20', 'M2 12h20', 'M5.6 5.6l12.8 12.8', 'M18.4 5.6L5.6 18.4'],
+        'invoice'   => ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M8 13h8M8 17h5'],
+        'euro'      => ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M15.5 8.5a4.5 4.5 0 0 0-6.9 5.6 4.5 4.5 0 0 0 6.9.9', 'M7 11h6M7 13.5h5'],
+        'statement' => ['M4 3h16v18l-3-2-2 2-3-2-3 2-2-2-3 2z', 'M8 8h8M8 12h8M8 16h4'],
+        'alert'     => ['M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4M12 17h.01'],
         'truck'     => ['M1 5h13v11H1z', 'M14 9h4l3 3v4h-7V9z', 'M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
         'chevron'   => ['M6 9l6 6 6-6'],
     ];

@@ -15,13 +15,6 @@
             </a>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error">{{ session('error') }}</div>
-        @endif
-
         <div class="mf-panel mb-4">
             <div class="mf-panel-header">
                 <div class="text-[13px] font-semibold">Mossorders integration</div>

@@ -70,18 +70,18 @@ class PreviewOnlineOrders extends Command
         // Display each order with JSON formatting (flexible structure)
         foreach ($orders as $index => $order) {
             $orderNumber = $index + 1;
-            $this->line("─────────────────────────────────────────────────────────");
+            $this->line('─────────────────────────────────────────────────────────');
             $this->line("Order #{$orderNumber}:");
-            $this->line("─────────────────────────────────────────────────────────");
+            $this->line('─────────────────────────────────────────────────────────');
 
             // Pretty print the order data
             $this->line(json_encode($order, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
             $this->newLine();
         }
 
-        $this->line("═════════════════════════════════════════════════════════");
+        $this->line('═════════════════════════════════════════════════════════');
         $this->info("Total orders fetched: {$orderCount}");
-        $this->line("═════════════════════════════════════════════════════════");
+        $this->line('═════════════════════════════════════════════════════════');
 
         // Log summary
         Log::info('Mossorders preview command completed successfully', [

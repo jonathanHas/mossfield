@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\ValidatesFulfilmentWeights;
 use App\Models\BatchItem;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -21,6 +22,8 @@ use Illuminate\View\View;
  */
 class PickingController extends Controller
 {
+    use ValidatesFulfilmentWeights;
+
     /** Orders that belong on the picking queue. */
     private const QUEUE_STATUSES = ['confirmed', 'preparing', 'ready'];
 
@@ -129,16 +132,10 @@ class PickingController extends Controller
             return $redirect;
         }
 
-        $rules = [
+        $validated = $request->validate(array_merge([
             'batch_item_id' => 'required|exists:batch_items,id',
             'quantity' => 'required|integer|min:1|max:'.$orderItem->quantity_remaining,
-        ];
-
-        if ($orderItem->isVariableWeight()) {
-            $rules['actual_weight_kg'] = 'required|numeric|min:0.001';
-        }
-
-        $validated = $request->validate($rules);
+        ], $this->fulfilmentWeightRules($orderItem)), $this->fulfilmentWeightMessages());
 
         $batchItem = BatchItem::with('batch')->findOrFail($validated['batch_item_id']);
 
@@ -148,9 +145,9 @@ class PickingController extends Controller
         }
 
         $quantity = (int) $validated['quantity'];
-        $weight = isset($validated['actual_weight_kg']) ? (float) $validated['actual_weight_kg'] : null;
+        [$weight, $unitWeights] = $this->resolveFulfilmentWeight($validated, $orderItem);
 
-        if (! $orderItem->pickFromBatchItem($batchItem, $quantity, $weight)) {
+        if (! $orderItem->pickFromBatchItem($batchItem, $quantity, $weight, $unitWeights)) {
             return redirect()->route('picking.item', [$order, $orderItem])
                 ->withErrors(['quantity' => 'Could not pick from this batch — stock may have changed or the line is already reserved against another batch. Check the batch list and try again.']);
         }

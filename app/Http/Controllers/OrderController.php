@@ -18,6 +18,25 @@ class OrderController extends Controller
     use BuildsAllocationData;
     use MutatesOrderLines;
 
+    /**
+     * Block a mutation that would silently disagree with an issued invoice.
+     *
+     * The invoice is a snapshot, so editing lines or charges after issue doesn't
+     * corrupt it — but it does leave the order and the customer's bill telling
+     * different stories. Void the invoice to reopen the order instead.
+     */
+    private function blockedByInvoice(Order $order, string $what): ?RedirectResponse
+    {
+        if (! $order->isInvoiced()) {
+            return null;
+        }
+
+        return redirect()->route('orders.show', $order)->with(
+            'error',
+            "This order is on invoice {$order->invoice->number}, so {$what} would no longer match the bill. Void the invoice first."
+        );
+    }
+
     public function index(Request $request): View
     {
         $this->authorize('viewAny', Order::class);
@@ -86,7 +105,9 @@ class OrderController extends Controller
             $productVariants = $this->activeVariantsGrouped();
         }
 
-        return view('orders.show', compact('order', 'orderList', 'listFilters', 'listTotal', 'listLimit', 'availableBatchItems', 'productVariants'));
+        $dispatchConfirmation = $order->dispatched_at ? $order->latestDispatchConfirmation() : null;
+
+        return view('orders.show', compact('order', 'orderList', 'listFilters', 'listTotal', 'listLimit', 'availableBatchItems', 'productVariants', 'dispatchConfirmation'));
     }
 
     /**
@@ -115,19 +136,19 @@ class OrderController extends Controller
     }
 
     /**
-     * Render the order invoice. Unlike the dispatch docket this carries prices, so it
-     * is office/admin only — the route is in the role:admin,office group and this also
-     * gates on `see-financials` for defence in depth. Opens as an HTML page by default
-     * (Print + Download buttons); `?download=1` returns the PDF as a file download.
+     * View/print the priced dispatch confirmation — what went on the van and
+     * its value. Office/admin only (carries prices). HTML by default;
+     * ?download=1 returns the PDF. Gated on hasReachedReady() rather than
+     * dispatched so it can be previewed once the order is picked.
      */
-    public function invoice(Request $request, Order $order): \Symfony\Component\HttpFoundation\Response|View
+    public function dispatchConfirmation(Request $request, Order $order): \Symfony\Component\HttpFoundation\Response|View
     {
         $this->authorize('view', $order);
         abort_unless($request->user()->can('see-financials'), 403);
 
         if (! $order->hasReachedReady()) {
             return redirect()->route('orders.show', $order)
-                ->with('error', 'An invoice is only available once the order has reached ready status.');
+                ->with('error', 'A dispatch confirmation is only available once the order has reached ready status.');
         }
 
         $order->load([
@@ -137,58 +158,40 @@ class OrderController extends Controller
         ]);
 
         if ($request->boolean('download')) {
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.invoice', ['order' => $order, 'pdf' => true]);
+            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.dispatch-confirmation', ['order' => $order, 'pdf' => true]);
 
-            return $pdf->download('invoice-'.$order->order_number.'.pdf');
+            return $pdf->download('dispatch-confirmation-'.$order->order_number.'.pdf');
         }
 
-        return view('orders.invoice', ['order' => $order, 'pdf' => false]);
+        return view('orders.dispatch-confirmation', ['order' => $order, 'pdf' => false]);
     }
 
     /**
-     * Email a per-order document (invoice or docket) to the customer as a PDF attachment.
-     * Sends synchronously so the operator gets an immediate "sent" / "failed" flash.
-     * Emailing is a customer-facing office task, so the route sits in the role:admin,office
-     * group (factory can still view/print the docket, just not email it). Invoices carry the
-     * same see-financials + hasReachedReady() guards as OrderController::invoice().
+     * Manually (re)send the dispatch confirmation — for when the automatic send
+     * at dispatch failed, or the customer had no address on file at the time.
+     * Logged like every other send, so the order page can show it went.
      */
-    public function emailDocument(Request $request, Order $order, string $document): RedirectResponse
+    public function emailDispatchConfirmation(Request $request, Order $order): RedirectResponse
     {
-        $this->authorize('view', $order);
+        $this->authorize('update', $order);
+        abort_unless($request->user()->can('see-financials'), 403);
 
-        if ($document === 'invoice') {
-            abort_unless($request->user()->can('see-financials'), 403);
-
-            if (! $order->hasReachedReady()) {
-                return back()->with('error', 'An invoice is only available once the order has reached ready status.');
-            }
-        }
-
-        $order->load([
-            'customer',
-            'orderItems.productVariant.product',
-            'orderItems.orderAllocations.batchItem.batch',
-        ]);
-
-        $email = trim((string) $order->customer->email);
-        if ($email === '') {
-            return back()->with('error', 'This customer has no email address on file.');
+        if (! $order->hasReachedReady()) {
+            return back()->with('error', 'A dispatch confirmation is only available once the order has reached ready status.');
         }
 
         try {
-            \Illuminate\Support\Facades\Mail::to($email)
-                ->send(new \App\Mail\OrderDocumentMail($order, $document));
-        } catch (\Throwable $e) {
-            \Illuminate\Support\Facades\Log::channel('sync')->error('order document email failed', [
-                'order' => $order->order_number,
-                'document' => $document,
-                'error' => $e->getMessage(),
-            ]);
-
-            return back()->with('error', 'Could not send the email. Please try again or check the mail settings.');
+            $row = app(\App\Services\DocumentMailer::class)->sendNow(
+                new \App\Documents\DispatchConfirmation($order),
+                $request->user(),
+            );
+        } catch (\App\Services\InvoicingException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', ucfirst($document).' emailed to '.$email.'.');
+        return $row->status->value === 'sent'
+            ? back()->with('success', 'Dispatch confirmation emailed to '.$row->recipient.'.')
+            : back()->with('error', 'Could not send the email. Please try again or check the mail settings.');
     }
 
     public function create(): View
@@ -239,6 +242,10 @@ class OrderController extends Controller
         ], [
             'items.required' => 'You must add at least one item to the order.',
             'items.min' => 'You must add at least one item to the order.',
+        ], [
+            // Human labels — "items.0.quantity" is not something an operator reads.
+            'items.*.product_variant_id' => 'product',
+            'items.*.quantity' => 'quantity',
         ]);
 
         $order = DB::transaction(function () use ($validated) {
@@ -250,11 +257,13 @@ class OrderController extends Controller
             $order = Order::create([
                 'customer_id' => $validated['customer_id'],
                 'order_date' => $validated['order_date'],
-                'delivery_date' => $validated['delivery_date'],
+                // Optional keys are absent (not null) when a client omits them —
+                // validate() drops what was never submitted (finding 11).
+                'delivery_date' => $validated['delivery_date'] ?? null,
                 'delivery_charge' => $customer->currentDeliveryCharge(),
                 'delivery_charge_percent' => $customer->deliveryChargePercent(),
-                'delivery_address' => $validated['delivery_address'],
-                'notes' => $validated['notes'],
+                'delivery_address' => $validated['delivery_address'] ?? null,
+                'notes' => $validated['notes'] ?? null,
                 'customer_reference' => $validated['customer_reference'] ?? null,
                 'status' => 'pending',
                 'payment_status' => 'pending',
@@ -293,10 +302,17 @@ class OrderController extends Controller
     public function update(Request $request, Order $order): RedirectResponse
     {
         $this->authorize('update', $order);
+
+        // Shipping still works: markDispatched()/markDelivered() are their own
+        // routes. What's blocked here is editing charges or cancelling an order
+        // the customer has already been billed for.
+        if ($blocked = $this->blockedByInvoice($order, 'editing or cancelling it')) {
+            return $blocked;
+        }
+
         $validated = $request->validate([
             'delivery_date' => 'nullable|date|after_or_equal:order_date',
             'status' => 'required|in:pending,confirmed,preparing,ready,dispatched,delivered,cancelled',
-            'payment_status' => 'required|in:pending,paid,partial,overdue',
             'delivery_charge' => 'nullable|numeric|min:0|max:999999.99',
             'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
             'delivery_address' => 'nullable|string',
@@ -346,21 +362,43 @@ class OrderController extends Controller
             ->with('success', $message);
     }
 
-    public function markDispatched(Order $order): RedirectResponse
+    /**
+     * Dispatch one order from its page. Goes through DispatchService so the
+     * side effects (invoice for per-order customers, dispatch confirmation
+     * email) are the same as the run-level button on the chilled-run sheet.
+     */
+    public function markDispatched(Request $request, Order $order, \App\Services\DispatchService $dispatcher): RedirectResponse
     {
         $this->authorize('update', $order);
 
-        if ($order->status !== 'ready') {
-            return back()->with('error', 'Only ready orders can be dispatched.');
+        try {
+            $result = $dispatcher->dispatch($order, $request->user());
+        } catch (\App\Services\DispatchException $e) {
+            return back()->with('error', $e->getMessage());
         }
 
-        $order->update([
-            'status' => 'dispatched',
-            'dispatched_at' => now(),
-        ]);
+        $success = 'Order '.$order->order_number.' dispatched.';
+        $problems = [];
 
-        return redirect()->route('orders.show', $order)
-            ->with('success', 'Order '.$order->order_number.' marked as dispatched.');
+        if ($result->invoiceIssued) {
+            $success .= ' Invoice '.$result->invoice->number.' issued — send it from Finance.';
+        } elseif ($result->invoice) {
+            $success .= ' Already on invoice '.$result->invoice->number.'.';
+        } elseif ($result->invoiceError) {
+            $problems[] = 'Invoice not issued: '.$result->invoiceError.' The order is in Finance → Awaiting invoice.';
+        }
+
+        if ($result->emailSent()) {
+            $success .= ' Confirmation emailed to '.$result->emailRow->recipient.'.';
+        } elseif ($result->emailSkippedReason) {
+            $problems[] = 'Confirmation not sent — '.lcfirst($result->emailSkippedReason);
+        } elseif ($result->emailFailed()) {
+            $problems[] = 'Confirmation email failed — resend from the order page.';
+        }
+
+        $redirect = redirect()->route('orders.show', $order)->with('success', $success);
+
+        return $problems ? $redirect->with('error', implode(' ', $problems)) : $redirect;
     }
 
     public function markDelivered(Order $order): RedirectResponse
@@ -395,6 +433,10 @@ class OrderController extends Controller
         if (in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true)) {
             return redirect()->route('orders.show', $order)
                 ->with('error', "Items can't be added to a {$order->status} order.");
+        }
+
+        if ($blocked = $this->blockedByInvoice($order, 'adding an item')) {
+            return $blocked;
         }
 
         $validated = $request->validate([
@@ -443,6 +485,10 @@ class OrderController extends Controller
                 ->with('error', "Items can't be changed on a {$order->status} order.");
         }
 
+        if ($blocked = $this->blockedByInvoice($order, 'changing an item')) {
+            return $blocked;
+        }
+
         $validated = $request->validate([
             'quantity' => 'required|integer|min:1',
         ]);
@@ -479,6 +525,10 @@ class OrderController extends Controller
         if (in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true)) {
             return redirect()->route('orders.show', $order)
                 ->with('error', "Items can't be removed from a {$order->status} order.");
+        }
+
+        if ($blocked = $this->blockedByInvoice($order, 'removing an item')) {
+            return $blocked;
         }
 
         // An order can't go empty: removing its only line cancels the order
@@ -521,6 +571,10 @@ class OrderController extends Controller
                 ->with('error', "Items can't be changed on a {$order->status} order.");
         }
 
+        if ($blocked = $this->blockedByInvoice($order, 'changing an item')) {
+            return $blocked;
+        }
+
         if ($orderItem->isFullyFulfilled()) {
             return redirect()->route('orders.show', $order)
                 ->with('error', 'That line is already fully fulfilled — nothing to mark short.');
@@ -552,6 +606,10 @@ class OrderController extends Controller
         if (in_array($order->status, ['dispatched', 'delivered', 'cancelled'], true)) {
             return redirect()->route('orders.show', $order)
                 ->with('error', "Items can't be changed on a {$order->status} order.");
+        }
+
+        if ($blocked = $this->blockedByInvoice($order, 'changing an item')) {
+            return $blocked;
         }
 
         DB::transaction(function () use ($order, $orderItem) {

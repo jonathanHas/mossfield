@@ -10,19 +10,6 @@
             <a href="{{ route('cheese-cutting.index') }}" class="mf-btn-ghost">← Back to cutting</a>
         </div>
 
-        @if ($errors->any())
-            <div class="mf-flash mf-flash-error">
-                <div>
-                    <strong>Please fix the following errors:</strong>
-                    <ul class="mt-1 list-disc list-inside text-[12px]">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            </div>
-        @endif
-
         <div class="mf-panel">
             <div class="mf-panel-header">
                 <div class="text-[13px] font-semibold">Wheel to cut</div>
@@ -35,11 +22,27 @@
                 </div>
                 <div class="grid grid-cols-[140px_1fr] gap-y-2">
                     <dt style="color: var(--muted);">Variant</dt><dd>{{ $batchItem->productVariant->name }}</dd>
-                    <dt style="color: var(--muted);">Wheels available</dt><dd class="font-mono font-semibold">{{ $batchItem->quantity_remaining }}</dd>
+                    <dt style="color: var(--muted);">Wheels available</dt><dd class="font-mono font-semibold">{{ $batchItem->available_quantity }}</dd>
                     <dt style="color: var(--muted);">Weight per wheel</dt><dd class="font-mono">{{ number_format($batchItem->unit_weight_kg, 2) }} kg</dd>
                 </div>
             </dl>
 
+            @if($batchItem->available_quantity < 1)
+                {{-- Nothing free to cut: show the refusal the controller would give,
+                     rather than a form that invites it. --}}
+                <div class="px-4 pb-5 pt-4" style="border-top: 1px solid var(--line-2);">
+                    <div class="mf-flash mf-flash-warn" style="margin-bottom: 0;">
+                        <div>
+                            <strong>No free wheels to cut.</strong>
+                            The remaining wheels in this batch are allocated to orders or set aside for maturing.
+                            Release a hold on the <a href="{{ route('cheese-conversion.index') }}" class="mf-link">Mature Conversion</a> page, or choose another batch.
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-end gap-2 pt-4">
+                        <a href="{{ route('cheese-cutting.index') }}" class="mf-btn-secondary">← Back to cutting</a>
+                    </div>
+                </div>
+            @else
             <form method="POST" action="{{ route('cheese-cutting.store', $batchItem) }}" class="px-4 pb-5 pt-2" style="border-top: 1px solid var(--line-2);">
                 @csrf
 
@@ -61,6 +64,21 @@
                             @endforeach
                         </select>
                         <x-input-error :messages="$errors->get('vacuum_pack_variant_id')" class="mt-1" />
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <x-input-label for="wheel_weight_kg" :value="__('Wheel weight (kg)')" />
+                        <x-text-input id="wheel_weight_kg" type="number" step="0.001" min="0.001" name="wheel_weight_kg" :value="old('wheel_weight_kg')" placeholder="{{ number_format($batchItem->unit_weight_kg, 3) }}" required />
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">Weigh the whole wheel before cutting. The packs can't weigh more than this.</p>
+                        <x-input-error :messages="$errors->get('wheel_weight_kg')" class="mt-1" />
+                    </div>
+                    <div class="flex items-end">
+                        <div class="text-[12px]" style="color: var(--muted);">
+                            Trim / waste: <span id="waste-weight" class="font-semibold font-mono">—</span> kg
+                            <span class="block text-[11.5px] mt-0.5">Wheel weight − total pack weight.</span>
+                        </div>
                     </div>
                 </div>
 
@@ -103,15 +121,32 @@
                     <x-primary-button>{{ __('Cut wheel') }}</x-primary-button>
                 </div>
             </form>
+            @endif
         </div>
     </div>
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const vacuumPackVariantSelect = document.getElementById('vacuum_pack_variant_id');
+            if (! vacuumPackVariantSelect) return; // refusal state: no form on the page
             const vacuumPacksInput = document.getElementById('vacuum_packs_created');
             const totalWeightInput = document.getElementById('total_weight_kg');
             const averageWeightSpan = document.getElementById('average-weight');
+            const wheelWeightInput = document.getElementById('wheel_weight_kg');
+            const wasteWeightSpan = document.getElementById('waste-weight');
+
+            function updateWaste() {
+                const wheel = parseFloat(wheelWeightInput.value) || 0;
+                const packs = parseFloat(totalWeightInput.value) || 0;
+                if (wheel > 0 && packs > 0) {
+                    const waste = wheel - packs;
+                    wasteWeightSpan.textContent = waste.toFixed(3);
+                    wasteWeightSpan.style.color = waste < 0 ? 'var(--danger)' : '';
+                } else {
+                    wasteWeightSpan.textContent = '—';
+                    wasteWeightSpan.style.color = '';
+                }
+            }
 
             function getSelectedVariantWeight() {
                 const selectedOption = vacuumPackVariantSelect.options[vacuumPackVariantSelect.selectedIndex];
@@ -143,7 +178,10 @@
                 } else {
                     averageWeightSpan.textContent = '—';
                 }
+                updateWaste();
             }
+
+            wheelWeightInput.addEventListener('input', updateWaste);
 
             vacuumPackVariantSelect.addEventListener('change', updateTotalWeight);
             vacuumPacksInput.addEventListener('input', updateTotalWeight);

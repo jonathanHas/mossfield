@@ -14,9 +14,9 @@ use Tests\TestCase;
 
 /**
  * Weight capture at fulfilment for variable-weight items. Two entry styles:
- *  - per-unit (cheese wheels): a weight per unit, summed into actual_weight_kg.
+ *  - per-unit (cheese wheels): a weight per unit (weights[]), summed server-side.
  *  - bulk (vacuum packs, is_bulk_weighed): one total weight for the line.
- * Both post a single actual_weight_kg; when the variant is priced by weight the
+ * Bulk posts a single actual_weight_kg; when the variant is priced by weight the
  * fulfilled total follows the recorded kg.
  */
 class OrderFulfillmentWeightTest extends TestCase
@@ -144,11 +144,11 @@ class OrderFulfillmentWeightTest extends TestCase
         ]);
         [$order, $item, $alloc] = $this->orderWithAllocatedItem($wheel, 2);
 
-        // The per-unit form sums #1+#2 into actual_weight_kg before posting.
+        // The per-unit form posts one weight per unit; the server sums them.
         $this->actingAs($office)
             ->post(route('order-allocations.fulfill', $alloc), [
                 'quantity' => 2,
-                'actual_weight_kg' => 5.200,
+                'weights' => [2.600, 2.600],
             ])->assertRedirect(route('orders.show', $order));
 
         $this->assertSame('5.200', (string) $item->fresh()->weight_fulfilled_kg);

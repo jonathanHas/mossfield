@@ -24,13 +24,6 @@
             </div>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success mb-4">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error mb-4">{{ session('error') }}</div>
-        @endif
-
         @if ($runs->isEmpty())
             <div class="mf-panel">
                 <div class="p-10 text-center">

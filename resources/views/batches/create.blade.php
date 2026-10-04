@@ -10,19 +10,6 @@
             <a href="{{ route('batches.index') }}" class="mf-btn-ghost">← All batches</a>
         </div>
 
-        @if ($errors->any())
-            <div class="mf-flash mf-flash-error">
-                <div>
-                    <strong>Please fix the following errors:</strong>
-                    <ul class="mt-1 list-disc list-inside text-[12px]">
-                        @foreach ($errors->all() as $error)
-                            <li>{{ $error }}</li>
-                        @endforeach
-                    </ul>
-                </div>
-            </div>
-        @endif
-
         <div class="mf-panel">
             <form method="POST" action="{{ route('batches.store') }}" id="batch-form" class="p-5">
                 @csrf

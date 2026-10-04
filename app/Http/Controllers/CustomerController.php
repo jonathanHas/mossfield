@@ -59,6 +59,14 @@ class CustomerController extends Controller
             'country' => 'required|string|max:255',
             'credit_limit' => 'required|numeric|min:0',
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
+            // Billing preferences — how (and whether) this customer is invoiced.
+            'billing_email' => 'nullable|email|max:255',
+            'vat_number' => 'nullable|string|max:64',
+            // Nullable, not required: these have DB defaults, and older forms
+            // (and the chilled-run quick-create path) don't post them.
+            'invoice_delivery' => 'nullable|in:email,print,none',
+            'invoicing_mode' => 'nullable|in:per_order,weekly,monthly',
+            'send_statements' => 'boolean',
             'is_active' => 'boolean',
             'requires_reference' => 'boolean',
             'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
@@ -68,6 +76,15 @@ class CustomerController extends Controller
 
         $validated['is_active'] = $request->has('is_active');
         $validated['requires_reference'] = $request->has('requires_reference');
+        $validated['send_statements'] = $request->has('send_statements');
+
+        // An absent select must leave the stored preference alone rather than
+        // writing null over it.
+        foreach (['invoice_delivery', 'invoicing_mode'] as $field) {
+            if (blank($validated[$field] ?? null)) {
+                unset($validated[$field]);
+            }
+        }
         $validated['delivery_charge_percent'] = $this->normalizeChargePercent($validated['delivery_charge_percent'] ?? null);
 
         $customer = Customer::create($validated);
@@ -95,7 +112,20 @@ class CustomerController extends Controller
             ->get()
             ->groupBy('product.name');
 
-        return view('customers.show', compact('customer', 'productVariants'));
+        // Finance panels — only for users who can see money at all.
+        $finance = null;
+        if (request()->user()?->can('see-financials')) {
+            $finance = [
+                'aged' => $customer->agedBalances(),
+                'credit' => $customer->unallocatedCredit(),
+                'openTotal' => round((float) $customer->invoices()->open()->sum('balance'), 2),
+                'invoices' => $customer->invoices()->latest('issued_at')->latest('id')->limit(10)->get(),
+                'emails' => \App\Models\DocumentEmail::where('customer_id', $customer->id)
+                    ->latest('id')->limit(10)->get(),
+            ];
+        }
+
+        return view('customers.show', compact('customer', 'productVariants', 'finance'));
     }
 
     public function edit(Customer $customer): View
@@ -115,6 +145,14 @@ class CustomerController extends Controller
             'country' => 'required|string|max:255',
             'credit_limit' => 'required|numeric|min:0',
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
+            // Billing preferences — how (and whether) this customer is invoiced.
+            'billing_email' => 'nullable|email|max:255',
+            'vat_number' => 'nullable|string|max:64',
+            // Nullable, not required: these have DB defaults, and older forms
+            // (and the chilled-run quick-create path) don't post them.
+            'invoice_delivery' => 'nullable|in:email,print,none',
+            'invoicing_mode' => 'nullable|in:per_order,weekly,monthly',
+            'send_statements' => 'boolean',
             'is_active' => 'boolean',
             'requires_reference' => 'boolean',
             'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
@@ -124,6 +162,15 @@ class CustomerController extends Controller
 
         $validated['is_active'] = $request->has('is_active');
         $validated['requires_reference'] = $request->has('requires_reference');
+        $validated['send_statements'] = $request->has('send_statements');
+
+        // An absent select must leave the stored preference alone rather than
+        // writing null over it.
+        foreach (['invoice_delivery', 'invoicing_mode'] as $field) {
+            if (blank($validated[$field] ?? null)) {
+                unset($validated[$field]);
+            }
+        }
         $validated['delivery_charge_percent'] = $this->normalizeChargePercent($validated['delivery_charge_percent'] ?? null);
 
         $customer->update($validated);

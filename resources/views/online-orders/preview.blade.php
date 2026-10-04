@@ -10,12 +10,6 @@
             <a href="{{ route('online-orders.index') }}" class="mf-btn-ghost">← Back</a>
         </div>
 
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error">{{ session('error') }}</div>
-        @endif
         @if ($error)
             <div class="mf-flash mf-flash-error">{{ $error }}</div>
         @endif

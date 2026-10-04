@@ -1,0 +1,1221 @@
+# Testing & Fixes
+
+Running log of deliberate test passes over this app and the defects they turned
+up. One section per audit, newest first. The point is that a bug found once
+stays found: every finding below names the test that pins it, so a regression
+shows up as a failure rather than as a phone call from the office.
+
+## Running the suites
+
+```bash
+php artisan test
+```
+
+Targeted runs:
+
+```bash
+php artisan test --filter=StockFlowAuditTest
+php artisan test --testsuite=Feature
+./vendor/bin/pint --test
+```
+
+Tests run on **MySQL** — `phpunit.xml` hardcodes the `mossfield_test` database,
+its user and its password on `127.0.0.1:3306`, rather than inheriting them from
+`.env`. Two consequences worth knowing: `php artisan test` can never touch your
+dev data, and the credentials there are not a free choice — the app `.env` uses
+the same user, so one credential set covers both.
+
+MySQL is deliberate, not incidental: `lockForUpdate()` and queued jobs then
+behave as they do in production, which the concurrency and allocation tests
+depend on. Nothing in this app runs on SQLite, in any environment — but
+`config/database.php` still falls back to `'sqlite'` when `DB_CONNECTION` is
+unset, and `.env.example` still ships `DB_CONNECTION=sqlite`, so a fresh
+`cp .env.example .env` silently points dev at a SQLite file while the suite
+stays on MySQL. Set the MySQL block by hand.
+
+### Resetting the dev database between passes
+
+Every browser pass leaves residue (test customers, probe orders, bogus cut
+logs). The seeders can't clear it — `db:seed` is additive (`BatchSeeder` adds
+3–5 batches per product per run, `CustomerSeeder` has no duplicate guard) and
+`migrate:fresh --seed` throws away the real customer and user rows that no
+seeder can rebuild. So a pass starts and ends with:
+
+```bash
+php artisan mossfield:reset-trading-data --seed=1            # dry run: prints the plan, changes nothing, exit 1
+php artisan mossfield:reset-trading-data --seed=1 --confirm  # executes
+```
+
+- **Keeps** users, customers (+ `customer_special_prices`), products, product
+  variants, delivery runs.
+- **Wipes**, in FK-safe order and explicitly (no cascade is relied on):
+  document_emails, statements, payment_allocations, payments,
+  credit_note_lines, credit_notes, invoice_lines, invoices, order_allocations,
+  cheese_cutting_logs, cheese_conversion_logs, order_items, orders,
+  batch_items, batches. One transaction. Then `document_sequences` restart at 1
+  (so the next invoice is `INV-000001` again) and the wiped tables'
+  `AUTO_INCREMENT` restarts (so "/batches/17" in a write-up means the same row
+  after the next reset). Queued `jobs` are left alone but counted in the plan.
+- **Regenerates** stock by running `BatchSeeder` against the surviving
+  products — except Mature, which is never made fresh.
+- **`--seed=N`** seeds the MT generator before the seeder, which draws
+  everything from `rand()`/`array_rand()`, so the same seed reproduces the same
+  batches, items and quantities. Production dates are relative to *today*, so
+  batch codes (`Mddmmyy`) drift with the calendar while counts, quantities and
+  day-offsets stay fixed: a pass is exactly reproducible on the same day, and
+  reproducible up to the date stamp on another. Use the same seed for a whole
+  pass and write it down next to the figures.
+- Refuses in production; refuses to do anything without `--confirm`.
+
+`ResetTradingDataTest` pins all of that, and also fails if a migration adds a
+table nobody has classified as kept, wiped or infrastructure — so a new trading
+table can't quietly survive resets. It should be run **before** a pass (known
+starting state) and **after** it (so the next person doesn't inherit your
+probes); the 2026-09-12 pass below was cleaned up by hand instead, which is
+what prompted the command.
+
+## Known-failing baseline
+
+**7 failures are expected and are not regressions.** They are stock Laravel
+Breeze scaffolding from the initial commit that never matched this app:
+
+| Test | Why it fails |
+| --- | --- |
+| `Auth\RegistrationTest` (2) | Self-registration is disabled; the routes don't exist |
+| `Auth\EmailVerificationTest` (3) | Email verification is disabled; `User` doesn't implement `MustVerifyEmail` |
+| `Auth\AuthenticationTest` (1) | Posts `email` to `/login`; this app's field is `login` (username **or** email) |
+| `ProfileTest` (1) | Asserts `email_verified_at` behaviour that doesn't apply |
+
+Treat an **8th** failure as real. The passing count moves with whatever is in
+the working tree, so it isn't a useful baseline on its own — the failure list is.
+
+---
+
+## 2026-09-12 — Browser-level pass over production, cutting and conversion
+
+**Scope:** the same spine as the audit below, but driven through the rendered UI
+as an operator sees it, plus forged POSTs to probe request validation
+independently of the client-side guards. Admin user on `mossfield.local`.
+
+**Why it found anything.** The audit below verified the model and controller
+seams and found them sound. This pass covers the two layers above that: what the
+**view** computes, and what the **form request** accepts. Both turn out to
+diverge from the invariants the audit established. Nothing below contradicts it —
+the model layer is right; the screens and the validators haven't caught up.
+
+No test file added yet; every finding names the test that should pin it.
+
+### Finding 1 — there is a seventh free-stock surface, and it disagrees
+
+The invariant below names six places that compute free stock and says they must
+agree. It is missing one: **the product/variant stock figure on `/products`**.
+It sums batch stock without regard to expiry or maturation.
+
+*(Correction, added on re-verification: this finding originally also attributed
+the cheese-cutting screen and the batch page's action buttons to this figure.
+They read a single item's raw `quantity_remaining` instead — same class of
+disagreement, different code path. See the separate note at the end.)*
+
+| Variant | `/products` | `/stock` available |
+| --- | --- | --- |
+| Milk 1L Bottle | 2,700 | 438 |
+| Milk 2L Bottle | 1,726 | 192 |
+| Yoghurt 250g Tub | 783 | 295 |
+| Yoghurt 500g Tub | 1,198 | 216 |
+| Farmhouse Whole Wheel | 33 | 31 |
+
+The arithmetic identifies the cause exactly. Milk: 11 + 2,700 + 1,726 = **4,437**,
+which is the sum of every milk batch including the three expired ones
+(630 + 951 + 246 + 2,610). Only M070926's 630 are live. Yoghurt: 3 + 783 + 1,198
+= **1,984** = live batch 514 + expired batch 1,470. Cheese is the mild case —
+33 counts the 2 wheels held as maturing alongside the 31 free.
+
+Allocation itself is correct: auto-allocate on a 35-wheel line took **31**, not
+33, exactly as the audit says it should. So the sellable-stock query exists and
+works; `/products` is using a different one.
+
+The sharpest expression of the disagreement is on `/batches/17`, where two
+buttons sit side by side reading **"Cut Whole Wheel (33 left)"** and
+**"Convert to Mature (31 free)"** — the cut action offering wheels the conversion
+action knows are held. That pair turns out to come from a different source than
+`/products`; see the correction above.
+
+Related: the three expired milk batches are still flagged **Active** on
+`/batches`, which is probably upstream of all of this.
+
+*Test:* one live batch of 10 and one expired batch of 100 → the variant's product
+stock figure must read 10. Assert the same for a held-maturing wheel. Then add
+the product surface to the six-way agreement invariant below.
+
+**Fixed (2026-09-12).** The figure was `ProductVariant::total_stock`, loaded as
+`withSum('batchItems as total_stock', 'quantity_remaining')` in
+`ProductController::index()`, `::show()` and `BuildsProductList`, with the
+accessor's fallback doing the same raw `SUM` — no batch status, no expiry, no
+reservations, no hold. All three loaders now call
+`ProductVariant::attachFreeStock()` (one query for the whole list) over
+**`BatchItem::freeStockByVariant()`**, which is `stockByVariant()`'s expression
+made shared: `allocatable()` candidates, `reserved_units = SUM(quantity_allocated
+− quantity_fulfilled)`, the `isReadyToSell() && ! isExpired()` predicates, then
+`max(0, remaining − reserved − maturing)` per item. The accessor's cold fallback
+goes through the same function. `tests/Feature/ProductStockFigureTest.php`
+(7 cases) pins expiry (strict — expiring today is out), non-active status,
+ready_date, the maturing hold, owed-not-whole reservations after a partial pick,
+and a direct equality with `Σ available_quantity` over allocatable items, on all
+three surfaces plus the fallback. Not touched: the batch page's
+"Cut Whole Wheel (N left)" and the cut form's "Wheels available" read a single
+item's raw `quantity_remaining`, not this figure — same disagreement, separate
+fix; and `Api\ProductExportController::calculateStockAvailable()` (the
+`stock_available` field mossorders sees) still sums `quantity_remaining` over
+ready batches without subtracting reservations or the hold.
+
+**Re-verified through the UI (2026-09-12).** `/products` and `/stock` now agree on
+every variant:
+
+| Variant | `/products` before | `/products` after | `/stock` available |
+| --- | --- | --- | --- |
+| Milk 10L Churn | 11 | **0** | — (no live churn stock) |
+| Milk 1L Bottle | 2,700 | **438** | 438 |
+| Milk 2L Bottle | 1,726 | **192** | 192 |
+| Yoghurt 16L Bucket | 3 | **3** | 3 |
+| Yoghurt 250g Tub | 783 | **295** | 295 |
+| Yoghurt 500g Tub | 1,198 | **216** | 216 |
+| Farmhouse Whole Wheel | 33 | **29** | 29 |
+| Farmhouse Vacuum Pack | 0 | **101** | 101 |
+
+The 10L Churn dropping 11 → 0 is correct and is the clearest single case: every
+churn sat in an expired batch.
+
+**Still open, as the fix note says.** `/batches/17` continues to show
+**"Cut Whole Wheel (31 left)"** beside **"Convert to Mature (29 free)"**, and
+`/cheese-cutting/cut/26` still reports **"Wheels available 31"** where `/products`
+now says 29. So the cut path still offers the 2 wheels that are held as maturing —
+the operator-visible half of this finding survives on a different code path.
+Worth carrying forward as its own finding rather than a footnote, and worth
+deciding whether the cut form should refuse a held wheel outright.
+
+**The eighth surface deserves promoting too.**
+`Api\ProductExportController::calculateStockAvailable()` is the `stock_available`
+that **mossorders shows customers ordering online**. Of all the disagreeing
+surfaces, that is the one where being wrong turns into an oversell rather than an
+internal inconsistency. Untested by this pass — the online portal was never
+opened.
+
+### Finding 2 — cheese cutting has no conservation of mass
+
+`total_weight_kg` on the cut form is unbounded above. A single 5.000 kg wheel
+accepted **100 vacuum packs totalling 25 kg**:
+
+```
+POST /cheese-cutting/cut/26
+  cut_date=2026-09-12  vacuum_pack_variant_id=6
+  vacuum_packs_created=100  total_weight_kg=25          -> 302, recorded
+```
+
+Batch G030426 after: finished weight 191.50 → **216.75 kg**, yield 4.8% →
+**5.4%**, stock remaining 38 → **132 units**, vacuum packs produced 6 → 107.
+Total stock value across the app moved €9,585 → €9,879.
+
+The weight arithmetic is the part that bites even when operators behave. Every
+cut inflates the batch and drifts the yield upward; the 25 kg cut only made it
+visible. The first probe cut, a legitimate-looking 1 pack, moved finished weight
+191.50 → 191.75.
+
+**Mechanism — read from the code on 2026-09-13, and not what this finding
+originally assumed.** There is no accumulator. `finished_weight` is derived:
+
+```php
+// Batch::getFinishedProductWeightAttribute()
+$total += $item->quantity_produced * ($item->unit_weight_kg ?? 0);
+```
+
+and `CheeseCuttingController::store()` increments the vacuum-pack item's
+`quantity_produced`, decrements the **wheel item's `quantity_remaining`**, and
+never touches the wheel item's `quantity_produced`. So a cut mints pack-produced
+without unminting wheel-produced, and the derived total counts the wheel and its
+own packs at the same time. The arithmetic matches exactly at every step:
+
+| | wheels produced × 5.000 | packs produced × 0.250 | total |
+| --- | --- | --- | --- |
+| before | 38 → 190.00 | 6 → 1.50 | **191.50** |
+| after the 1-pack cut | 38 → 190.00 | 7 → 1.75 | **191.75** |
+| after the 100-pack cut | 38 → 190.00 | 107 → 26.75 | **216.75** |
+
+Two consequences that change what a fix has to do:
+
+1. **`total_weight_kg` is recorded on the log and used nowhere** — not in stock,
+   not in the derived weight, not in pricing. Capping it, on its own, would fix
+   nothing about the mass inflation. It is worth capping so the log is truthful,
+   but it is not the bug.
+2. **The real defect is the meaning of `quantity_produced`.** The weight accessor
+   treats it as "exists now"; the cutting code treats it as "was ever made".
+   `quantity_produced` is right and must not change — it is the production-sheet
+   wheel count, written once in `BatchController::store()` from the form,
+   validated `required|integer|min:1`, never touched again anywhere in `app/`
+   (`BatchController::update()` accepts only expiry date, notes and status). The
+   weight accessor is asking the wrong column.
+
+### Decision (2026-09-13) — what the finished weight is for
+
+Settled with Jon, and it changes the scope of the fix. Two things came out of
+tracing every weight in the app.
+
+**Finished weight is a nominal figure dressed as a measurement.** A wheel's true
+weight is unknown until someone weighs it. `Batch::getFinishedProductWeightAttribute()`
+and `BatchItem::getTotalWeightAttribute()` both multiply a count by the variant's
+nominal `weight_kg` and present the result as fact. Three other nominal call sites
+are honest about it and need no change: `OrderAllocation::getExpectedWeightAttribute()`
+(named "expected", rendered with a tilde), `ProductVariant::calculatePrice()`
+(a fallback superseded by the measured weight at fulfilment), and the mossorders
+export (a spec weight).
+
+**Real weights are captured in two places and only one is used.** Fulfilment
+requires `actual_weight_kg` for weight-priced lines (`PickingController`,
+`OrderAllocationController`), sums it into `order_items.weight_fulfilled_kg`, and
+prices the line from it — that is the money, and it is correct. Cutting requires
+`cheese_cutting_logs.total_weight_kg` and **reads it nowhere**. Conversion has a
+`total_weight_kg` column that looks like a measurement but is computed as
+`unit_weight_kg × wheels` — nominal.
+
+Also: the per-wheel `weights[]` inputs on the fulfilment form are never persisted.
+They appear nowhere in `app/`; JavaScript sums them into the hidden
+`actual_weight_kg` and the individual figures are discarded. That is the same
+field finding 5 is about.
+
+**The decision: derive the weight from real measurements where they exist, fall
+back to nominal where they don't, and show how much is measured.** The yield then
+firms up over a batch's life instead of being fixed at production.
+
+Per wheel, exactly one of four states, and the counts for each are already
+derivable:
+
+| state | weight source |
+| --- | --- |
+| on hand (incl. maturing) | nominal |
+| dispatched whole | measured — `order_allocations.actual_weight_kg` |
+| cut | measured — **the wheel's weight before cutting** (new field) |
+| converted out to a mature batch | nominal — not weighed until sold from that batch |
+
+`remaining + dispatched + cut + converted = produced` is the reconciliation, and
+is worth asserting as a test.
+
+**Cutting must capture the wheel's weight, not just the packs'.** The existing
+`total_weight_kg` is the weight of the packs produced, so it excludes rind and
+trim. Counting a cut wheel at pack weight would bias yield *downward* as more
+wheels are cut — the opposite distortion, equally misleading. The operator has
+the wheel on the scale anyway, so the cut form gains a wheel-weight field.
+Recording both gives a **waste figure per cut**, which Jon wants for reconciling
+production against sales, and makes the over-yield in this finding impossible by
+construction: pack weight cannot exceed wheel weight.
+
+**And the derived pack item must stop being summed separately.** Under a per-wheel
+model a cut wheel contributes its weight once — as the wheel — never as the wheel
+plus the packs it became. That is what actually removes the double count; the
+validation cap only stops it being absurd.
+
+Separately, `vacuum_packs_created` is `required|integer|min:1` with **no upper
+bound**, which is what let 100 packs come off one wheel.
+
+*Test:* a cut yielding more than the source wheel weighs is invalid; a valid cut
+never raises the batch's finished weight; and the finished weight of a batch with
+cuts equals what its physical contents actually weigh.
+
+### Pass 2a (2026-09-13) — the measurements are captured
+
+Scope of this pass: record the weights. The derivation
+(`Batch::getFinishedProductWeightAttribute()`, `BatchItem::getTotalWeightAttribute()`)
+is untouched and still nominal — that is pass 2b, and the second and third
+*Test* lines above are still open until it lands.
+
+**Cutting weighs the wheel.** `cheese_cutting_logs.wheel_weight_kg`
+(migration `2026_09_13_120000`, `decimal(8,3)`, **nullable**) is the wheel on
+the scale before it is cut; `total_weight_kg` keeps its meaning — the sellable
+packs that came off it. `CheeseCuttingLog::waste_kg` is the difference, per cut;
+`Batch::trim_loss_kg` sums it across the batch, with
+`measured_cuts_count` / `unmeasured_cuts_count` alongside so the figure is
+never quietly partial. The cut form has the field (required, with a live
+"Trim / waste" readout); `batches/show`'s cutting history gains Wheel / Packs
+weight / Waste columns and a "Trim loss … over N weighed cuts · M not weighed"
+line in the header.
+
+*Backfill: none — nullable, constraint on new rows only.* Writing the nominal
+variant weight into the old rows would present a guess as a measurement, which
+is precisely the habit the Decision above is about; a null reads honestly as
+"not weighed", and pass 2b's derivation falls back to nominal for unmeasured
+states anyway, so nothing is lost by leaving it null. The dev DB has exactly one
+such row (log 1 on G030426, 2026-07-11, 6 packs / 1.600 kg).
+
+**The headline bug is closed by construction.** All cut rules now live in
+`App\Http\Requests\CheeseCutRequest` (was inline `validate()`):
+`total_weight_kg` is `lte:wheel_weight_kg` ("The packs cannot weigh more than
+the wheel they came from"), and an `after()` rule caps `vacuum_packs_created`
+at ⌊wheel ÷ the pack variant's nominal `weight_kg`⌋, naming the arithmetic in
+the message ("100 packs at 0.250 kg each is 25.000 kg — more than the 5.000 kg
+wheel. At most 20 packs can come off it"). The 25 kg-from-5 kg probe is refused
+on both counts. Equal is allowed (a lossless cut is odd, not impossible).
+
+**Finding 3 rode along in the same request:** `cut_date` is now
+`after_or_equal:{batch production date}` as well as `before_or_equal:today`,
+with a message that names the date.
+
+**Also fixed on the way:** `Batch::cuttingLogs()` was
+`hasMany(CheeseCuttingLog, 'source_batch_item_id')` — comparing `batches.id`
+with a *batch item* id, so a batch's "cutting history" showed whichever batch
+item happened to share its number. Now `hasManyThrough` batch_items.
+`BatchController::show()` eager-loads through it.
+
+Tests: `tests/Feature/CheeseCutWeightTest.php` (11) — required wheel weight,
+both weights + waste stored, the form field, packs ≤ wheel (25-from-5 refused,
++1 g refused, equal allowed), packs × nominal ≤ wheel (100 refused, 21 refused,
+20 allowed), the refusal message on the form, cut_date bounds (2020 / day
+before production refused; production day and today allowed; tomorrow
+refused), trim loss across two cuts, the batch-page columns and total, the
+relation fix, and a legacy unweighed row rendering as "not weighed" with a null
+(not nominal) waste.
+
+**Re-verified through the UI (2026-09-13).** Every refusal lands with its reason
+and nothing is recorded:
+
+| probe | response |
+| --- | --- |
+| wheel 5.000, packs 18, total 25.000 | *"The packs cannot weigh more than the wheel they came from."* |
+| wheel 5.000, 100 packs | *"100 packs at 0.250 kg each is 25.000 kg — more than the 5.000 kg wheel. At most 20 packs can come off it."* |
+| `cut_date` 01/01/2020 | *"The cut date cannot be before the batch was produced (2026-04-03)."* |
+| `cut_date` 02/04/2026 (day before production) | same message |
+| wheel weight omitted | *"The wheel weight field is required."* |
+
+A sane cut — wheel 5.120, 18 packs, 4.680 kg — recorded both weights and the
+batch page's cutting history now reads
+`5.120 kg / 18 / 4.680 kg / 0.440 kg waste / 0.260 kg avg`, with the legacy row
+honestly showing **"not weighed"** and a null waste, under the header
+**"Trim loss 0.440 kg over 1 weighed cut · 1 not weighed"**. The relation fix is
+visible too: the history is this batch's, not whichever item shared its id.
+
+**Finding 5 confirmed closed.** On a 3-wheel line, posting
+`weights[]=4.000, 5.000, 6.000` with `actual_weight_kg=100` stored **15.000 kg**
+and billed €240.00 (15 × €16.00) — the forged client total was ignored. Refusals
+are clear: a total with no `weights[]` → *"Weigh each unit — one weight per unit
+picked."*; three weights for a quantity of two → *"Enter exactly one weight per
+unit picked (2)."*; a zero → *"Each weight must be more than zero."* Undoing one
+unit left **9.000 kg**, so the 6.000 wheel came back rather than an average.
+
+As the report predicted, finished weight still inflates — 191.50 → 196.00 kg and
+4.8% → 4.9% after the verification cut. That is pass 2b's job, and it is the only
+part of this finding still open.
+
+Not verified: the bulk-weighed path (item 6 of the report's checklist). No bulk
+line was exercised, so nothing is claimed about it either way.
+
+### Finding 11 — a missing optional field 500s on order creation
+
+Found while setting up the finding 5 verification, and the same shape as the
+`notes` bug pass 2a fixed in the cutting controller.
+
+```
+POST /orders   (customer_id, order_date, delivery_date, items[0][...])
+  -> 500  Undefined array key "delivery_address"
+          OrderController.php:263
+```
+
+`validate()` drops keys that were never submitted, and line 263 reads the key
+unconditionally. The browser form always posts `delivery_address` (the textarea
+submits empty), so the UI never hits it — only a client that omits the optional
+field does. `?? null` closes it, the same way the cutting controller's did.
+
+Worth a sweep rather than a one-line fix: this is now the second instance of the
+pattern, so it is worth checking every controller that reads a validated array key
+that isn't `required`. The mossorders import path should be checked specifically —
+it is the one client that posts orders without a browser form behind it.
+
+*Test:* creating an order without `delivery_address` succeeds rather than 500s.
+
+**Closed (2026-09-13, pass 2b).** Sweep done across all of `app/` — every
+`$validated[...]` / `validated()` read against a non-`required` rule, plus every
+payload read in the mossorders import path (`ImportOnlineOrders`,
+`OnlineOrdersController`, `OnlineOrderImportService`), which was already fully
+guarded with `isset`/`??`. The **only** unguarded reads were the three in
+`OrderController::store()` — `delivery_date`, `delivery_address`, `notes` (all
+`nullable`) — now `?? null`, matching the `customer_reference` line beside them
+(the one field the original author knew could vanish, because its input is behind
+an Alpine toggle). Every other optional read is `??`-guarded, behind `isset`/
+`filled`, coerced via `$request->boolean()`/`has()`, or mass-assigned without
+indexing. `tests/Feature/OrderStoreOptionalFieldsTest.php` posts only
+`customer_id`, `order_date`, `items` and asserts the order lands with nulls. (The
+existing `OrderCustomerReferenceTest` posts the keys present-but-null, which
+`validated()` keeps — it never covered absence.)
+
+### Finding 3 — `cut_date` has no lower bound
+
+`before_or_equal:today` is present and works — a 2030 date is rejected with a
+clear message. `after_or_equal:` the batch production date is missing, so a cut
+dated **01/01/2020** was recorded against a batch produced 03/04/2026. The rule
+is half-written rather than absent.
+
+*Test:* `cut_date` earlier than `batch.production_date` is invalid.
+
+**Closed (2026-09-13, with finding 2 pass 2a).** `CheeseCutRequest` rules
+`cut_date` as `after_or_equal:{production_date}|before_or_equal:today`.
+Pinned by `CheeseCutWeightTest::test_cut_date_cannot_precede_the_batch_production_date`
+(2020 and the day before production refused; the production day, today
+allowed; tomorrow refused).
+
+### Finding 4 — "Release to mature" is a no-op
+
+Batch G030426, age 5 months, flagged **Ready to release**, 2 wheels held.
+
+```
+POST /cheese-conversion/release/26  quantity=2     -> 302 -> /stock, maturing still 2
+POST /cheese-conversion/release/26  quantity=50    -> 302 -> /stock, maturing still 2
+POST /cheese-conversion/release/26  quantity=-3    -> 302 -> /stock, maturing still 2
+```
+
+All three identical: redirect to `/stock`, no state change, no error, no flash.
+Indistinguishable from success. No mature batch is created and no Mature product
+exists in the catalogue — only Cumin, Farmhouse, Garlic & Basil and Mediterranean
+— so the likeliest reading is that the release has no destination and fails
+silently.
+
+Note the contrast with its sibling: `/cheese-conversion/hold/26` validates
+properly, refusing `quantity=999` with *"must not be greater than 31"* and
+`quantity=-5` with *"must be at least 0"*, both bounded to real available stock.
+**The hold endpoint is the pattern findings 2 and 5 should copy — the correct
+version already exists in this codebase.**
+
+*Test:* release moves held wheels out of the source batch; over-release is
+refused; a missing mature product produces a visible error rather than a redirect.
+
+**Closed (2026-09-12).** Two causes, both fixed.
+
+1. *No destination.* `ProductSeeder` has seeded `Mossfield Mature Cheese` (+ Whole
+   Wheel / Vacuum Pack) for a while; this database predated it. Confirmed the
+   seeder is a no-op for everything already present (every `firstOrCreate` key
+   matched the dev rows), then ran `php artisan db:seed --class=ProductSeeder`:
+   6 → 7 products, variants 15 + 16 added, nothing else touched.
+   `tests/Feature/MatureProductSeedTest.php` pins that the seeder provides
+   exactly what `release()` resolves, is idempotent, and that a release against
+   a seeded catalogue actually mints a Mature batch.
+2. *`quantity` ignored.* `release()` now validates `quantity` as
+   `required|integer|min:1|max:{saved hold}` — the same bound and the same
+   messages as `hold()` ("must not be greater than 2", "must be at least 1") —
+   and releases exactly that many, so a partial release is possible. Failures
+   redirect to the allocator explicitly (a manual `Validator`, not
+   `$request->validate()`'s `back()`), where the layout renders them. The UI
+   change that goes with it: the Release button used to submit the *hold* form,
+   whose hidden `quantity` is the allocator's live (possibly unsaved) Maturing
+   count. It now submits a dedicated sibling `release-form-{id}` (via `form=`)
+   carrying the **saved** hold — so what the button says ("Release 2 to mature")
+   is what is posted, and what is posted is what the server will accept.
+   `CheeseConversionTest` gains four cases (50 / 3 / 0 / −3 / "two" / absent all
+   refused with nothing released; over-release shows the hold() message; partial
+   release; the form posts the saved hold) and its existing release POSTs now
+   carry `quantity`.
+
+### Finding 5 — the billed weight is whatever the browser says it is
+
+The audit below confirms weight-priced lines bill recorded kg rather than the
+nominal estimate. They do — but the recorded kg arrives from the client and is
+stored without recomputation. `actual_weight_kg` is a hidden input summed in JS
+from the per-wheel `weights[]` boxes:
+
+```
+POST /order-allocations/28/fulfill
+  quantity=2  weights[]=4.800  weights[]=5.200  actual_weight_kg=100   -> accepted
+```
+
+The line then reads **"100.000 kg × €16.00"** for two wheels whose own recorded
+weights total 10 kg. It takes tampering to do deliberately, but it also means any
+JS bug in that sum mis-prices orders with nothing server-side to catch it.
+
+Recompute the total from `weights[]` server-side and ignore the submitted value,
+or reject a mismatch outside tolerance.
+
+*Test:* posting `weights[]=[4.8, 5.2]` with `actual_weight_kg=100` stores 10.0.
+
+**Closed (2026-09-13, finding 2 pass 2a).** The per-unit weights are now what
+the server validates and stores; the client total is ignored.
+
+- `order_allocations.unit_weights_kg` (migration `2026_09_13_120100`, JSON,
+  nullable; cast `App\Casts\KilogramList` so it always reads back as
+  `list<float>` at 3 dp) holds one figure per unit in pick order, appended
+  across partial picks. Null on bulk-weighed lines and on rows fulfilled before
+  the migration.
+- `App\Http\Controllers\Concerns\ValidatesFulfilmentWeights` is shared by
+  `OrderAllocationController::fulfill()` and `PickingController::pick()`: a
+  per-unit variable-weight line requires `weights[]` with **exactly `quantity`
+  entries**, each `numeric|min:0.001`; a bulk-weighed line still takes one
+  `actual_weight_kg`; a fixed line takes neither. The old shape — a per-unit
+  line posting only `actual_weight_kg` — is refused. `OrderItem::fulfillAllocation()`
+  / `pickFromBatchItem()` take the list and **recompute** `actual_weight_kg` as
+  its sum; `[4.8, 5.2]` with `actual_weight_kg=100` stores 10.000 and bills
+  10 kg × €/kg.
+- `unfulfillAllocation()` now takes back the **last N** unit weights and exactly
+  their kg (was: an average), falling back to the average only where no list
+  exists.
+- The picking form's per-piece inputs had no `name` at all (Alpine-only) — they
+  now post `weights[]`; the office form already did.
+
+Tests: `tests/Feature/FulfilmentUnitWeightsTest.php` (7) — both forms store the
+list and recompute, the validation shapes (missing / too few / too many /
+non-numeric / zero), bulk unchanged, partial picks append, undo pops the
+unit's own weight, and both forms post `weights[]` by name. `PickingTest`,
+`OrderFulfillmentWeightTest` and `StockFlowAuditTest` were updated to post
+`weights[]` for per-unit lines.
+
+### Finding 6 — `items.*` validation errors are never rendered
+
+Post an order line with `quantity=-5` past the HTML5 `min` and the request is
+correctly refused — 422, `items.0.quantity` must be at least 1. The browser lands
+back on `/orders/create` with the form repopulated and **no error anywhere on the
+page**. The validation is right; the blade view isn't rendering the bag.
+
+Two fixes: render `@error('items.*.quantity')` and siblings, and give the fields
+human labels — *"The items.0.quantity field must be at least 1"* is a raw
+attribute name. The same silent-failure shape applies to the fulfil form, the cut
+form and the release endpoint in finding 4.
+
+**Closed (2026-09-12).** Three parts, and nothing remains open:
+
+- *Never rendered* — fixed by the layout feedback region (finding 9): every
+  page renders the default bag once, so `items.*` errors surface on
+  `/orders/create` (re-verified in the browser: one message, exactly once).
+- *Raw attribute names* — fixed by the `attributes` map on
+  `OrderController::store()`: "The quantity field must be at least 1." /
+  "The selected product is invalid."
+- *Which line?* — this was the only part still open after the previous pass,
+  and the earlier note left it ambiguous. With several lines the global summary
+  names the field but not the row. `orders/create.blade.php` now also renders
+  `<x-input-error>` **inline in the offending row** (the `old('items')`
+  repopulation branch — the only one that renders after a failure), under the
+  product select and the quantity input. `LayoutFeedbackTest::test_order_line_errors_render_inline_in_the_offending_row`
+  posts three lines (valid / −5 / unknown product) and asserts each message
+  appears in its own row only, once in the summary + once inline, and no raw
+  `items.1.quantity` anywhere. (A blank product is a discarded template row by
+  design — `store()` filters those before validating — so it is not an error.)
+
+### Finding 7 — order line variants are indistinguishable
+
+The `/orders/create` product dropdown labels options with the variant name only,
+producing three identical `Whole Wheel (€16.00/kg)` entries and four identical
+`Vacuum Pack (€4.50)` entries. I picked one intending Farmhouse and the order came
+out as **Mediterranean**. On a wholesale order form that is a mis-shipment
+mechanism. Prefix the product name, or group by product with `<optgroup>`. Same
+dropdown on the order detail "Add item" form.
+
+**Closed (2026-09-13).** All four pickers (`/orders/create` incl. its JS
+add-row template, the `/orders/{order}` Add item form, the customer special-price
+form, the chilled-run "Add line…" select) already grouped by `<optgroup>` — which
+only helps while the list is open; the closed control still read
+"Whole Wheel (€16.00/kg)" with no product. Options now render
+`ProductVariant::picker_label` — `Farmhouse Cheese · Whole Wheel` — via
+`Product::short_name` (the shared "Mossfield " prefix dropped), so no two options
+read identically anywhere, list open or closed. `ConsolidationPassTest` parses
+every `<select>` on the four pages and asserts no duplicate option text, and
+checks the JS template separately.
+
+### Finding 8 — the batch page folds cut wheels into "sold"
+
+`/batches/17` reports Whole Wheel **sold 6**; `/stock` reports **4 sold, 2 cut**
+for the same batch. Same root as finding 1 — a second opinion about what the
+batch contains.
+
+**Closed (2026-09-13).** Two surfaces, one source.
+
+- **The batch page** table reads Produced · On hand · Sold · Cut · Converted from
+  `BatchItem::weight_breakdown` — the same states the finished weight above it is
+  derived from, so the page agrees with itself and with `/stock`. G030426 reads
+  38 · 31 · 4 · 2 · 1 (was "sold 7"). Packs show "—" for cut/converted.
+- **The cards** (`/batches`, `/cheese-cutting`, and both pages' variety headers)
+  used four copies of a `sold = produced − remaining − cut` formula, none of
+  which knew about converted wheels. They are replaced by one
+  `BatchItem::wheelStates()` (free / allocated / maturing / cut / **converted** /
+  sold, summing to produced; uses the index queries' loaded aggregates —
+  `source_cutting_logs_count`, the new `converted_wheels` withSum,
+  `quantity_currently_allocated` — and falls back to querying) rendered by two
+  shared partials, `batches/partials/_wheel-strip` and `_wheel-legend`. The strip
+  gained a purple converted dot; the numeric summary labels every figure and
+  drops zero states, which also closes the "unexplained fifth segment" item in
+  `SMALL_FIXES.md` (it was allocated = 0).
+- On the way: `BatchController::index()` and `StockOverviewService` dropped the
+  `whereNull('fulfilled_at')` gate on their reservation `withSum` — the last two
+  sites carrying the shape the invariant forbids.
+
+`ConsolidationPassTest` works a 10-wheel batch through pick / cut / hold+release
+and asserts the page row (10 · 6 · 2 · 1 · 1), its agreement with `/stock`'s
+segments, and that both card surfaces read "2 sold · 1 converted", not "3 sold".
+
+### Consolidation pass verified through the UI (2026-09-13)
+
+Findings 7 and 8 closed, and the small-fixes batch confirmed. Checked against the
+consolidation report's own list.
+
+**Finding 7.** Every option in the `/orders/create` variant picker now reads
+`<Product> · <Variant> (price)` — `Organic Milk · 1L Bottle (€2.50)`,
+`Cumin Cheese · Vacuum Pack (€4.50)` — and across all 17 options there are **no
+duplicates**. The collision that produced a Mediterranean order when Farmhouse was
+intended cannot recur.
+
+**Finding 8.** `/batches/17`'s stock table splits the states it used to fold:
+`Produced 38 · On hand 26 · Sold 4 · Cut 4 · Converted 4`, with `—` for cut and
+converted on the vacuum-pack row. `/stock` reads the same four numbers. The batch
+list's summary strip reads **"26 free · 4 cut · 4 converted · 4 sold / 38"**, and
+the compact dot strip above it now labels every figure — including the `0` that had
+no meaning, which turns out to be *"Allocated to orders"*. Three surfaces, one
+reconciliation.
+
+**Small fixes, 9 ticked.** Confirmed live: the dashboard greeting is two sentences
+(*"All orders allocated. Online sync is behind."*); `/` redirects to `/dashboard`
+signed in; a partially allocated line now reads *"4 of 30 still unallocated — no
+stock left for the rest"* in place of the old flat contradiction; the cut form at
+zero free renders **no form at all**, just a warning and links out; and a fully
+held batch disappears from `/cheese-cutting` entirely.
+
+**Fonts are self-hosted.** A clean page load requests nine `.woff2` files from
+`/build/assets/` and **nothing** from `fonts.bunny.net`. The internal app no longer
+needs the public internet to render as designed.
+
+Not verified live: the new *"Every ready wheel is spoken for"* empty state. With
+G030426 fully held the cutting list was not empty, because the Mature batch
+G030426-1 now offers 4 cuttable wheels — so the all-held branch could not be
+reached. Both messages are present and correctly distinguished in
+`cheese-cutting/index.blade.php`, verified by inspection rather than in the browser.
+
+Two items were deliberately left unticked and remain open: the 31-input
+variable-weight fulfilment form, and the native `confirm()` dialogs. Both are
+larger than the batch they sat in.
+
+One observation rather than a defect: the batch-list dot strip carries its labels
+in `title` attributes, so five numbers in a row are only distinguishable on hover.
+A visible legend would read better on a screen someone scans rather than explores.
+The brief asked for labels and it has them.
+
+### Finding 9 — the cut form advertises stock the cut endpoint will refuse
+
+Follow-up to finding 1, and the surviving half of it. `/cheese-cutting/cut/{id}`
+displays **"Wheels available"** from the batch item's raw `quantity_remaining`
+(`cheese-cutting/create.blade.php:38`); the batch page's **"Cut Whole Wheel
+(N left)"** button does the same (`batches/show.blade.php:220`). Neither subtracts
+the maturing hold or reservations.
+
+Proved by holding the whole batch. With all 31 remaining wheels set aside as
+maturing — `/stock` then showing **no available line at all**, just
+`MATURING 31 · CUT 3 · SOLD 4` — the cut form still read:
+
+```
+Wheels available    31
+```
+
+**The controller is right; only the screen is wrong.** Two cut attempts against
+the fully-held batch were both refused: wheels stayed at 31 maturing, cut stayed
+at 3, packs stayed at 107. (The same form with 2 held and 29 free had accepted a
+cut minutes earlier, so the guard is on free stock, not on validation.)
+
+But the refusal is invisible. Both attempts returned **302 to `/stock`** — the
+success path — with no flash, no error, nothing to distinguish a refused cut from
+a completed one. An operator reads "Wheels available 31", fills the form,
+submits, lands on the stock overview, and has no way to know nothing happened.
+This is finding 6's silent-failure shape on a third endpoint (finding 4 is the
+fourth).
+
+*Fix:* both surfaces should read free stock — `BatchItem::freeStockByVariant()`
+or `available_quantity` — so they can never offer a held wheel; and the refusal
+path needs a flash message naming the reason.
+
+*Test:* with the batch fully held, the cut form reports 0 available and a POSTed
+cut is refused **with a visible error**.
+
+**Fixed (2026-09-12).** Both surfaces now read `available_quantity`
+(`cheese-cutting/create.blade.php` "Wheels available"; `batches/show.blade.php`
+filters the Cut buttons on it and prints `(N left)` from it — a fully held batch
+shows the disabled "No wheels available" button instead of a Cut link). Per-item
+accessor reads, a handful per batch page — the same thing the neighbouring
+"Convert to Mature (N free)" already did.
+
+The invisible refusal was **not** a missing message. `CheeseCuttingController::store()`
+already returned `back()->withErrors(['error' => 'No free wheels remaining…'])`,
+and so did both refusal branches in `CheeseConversionController::release()`
+(finding 4), and `OrderController::store()`'s `items.*` rules fail correctly
+(finding 6). What all three shared was the **destination**: `x-app-layout`
+rendered neither session flashes nor the error bag — every page opted in
+individually, and the pages a refusal actually landed on hadn't. `/stock`
+(where a Referer-less POST's `back()` went) rendered nothing; `/orders/create`
+rendered `$errors->get('items')` but not the nested `items.0.quantity` keys.
+One fix covers all three: **`layouts/partials/feedback.blade.php`, included
+once in `layouts/app.blade.php`**, renders `session('success'|'error'|'warning')`
+and the default error bag on every page. The ~20 per-page copies (and
+`invoicing/partials/_flash`) were removed so nothing renders twice
+(`LayoutFeedbackTest` pins exactly-once). The two cut/release refusals also
+swapped `back()` for explicit `redirect()->route(...)` to the form / allocator
+page, so a scripted POST can't land the message on `/` (the welcome page is
+outside `x-app-layout`). `items.*` got human attribute labels ("The quantity
+field must be at least 1"). Also found by the new test: omitting the optional
+`notes` field on a cut POST threw `Undefined array key "notes"` — the textarea
+always posts, so only forged requests hit it; now `?? null`.
+
+Tests: `tests/Feature/CheeseCutFreeStockTest.php` (form reads free stock,
+batch-page button count / disappears when fully held, refusal lands on the
+form with the reason — with and without a Referer — and a permitted cut still
+confirms) and `tests/Feature/LayoutFeedbackTest.php` (flash on a never-opted-in
+page, exactly-once on a page that used to render its own, `items.*` message
+visible with a human label, release refusal visible). Findings 4 and 6 are
+**not** closed by this — release still ignores `quantity` and the Mature
+product is still unseeded on that DB; the refusals are just visible now.
+
+**Re-verified through the UI (2026-09-12), and one surface was missed.**
+Confirmed fixed: `/batches/17` now reads **"Cut Whole Wheel (29 left)"** beside
+**"Convert to Mature (29 free)"**, agreeing with `/products` and `/stock`; with
+all 31 wheels held the batch page shows **"No wheels available"** and no Cut
+link, and `/cheese-cutting/cut/26` reports **"Wheels available 0"**. A POSTed cut
+against the fully-held batch now lands back on the cut form showing **"No free
+wheels remaining to cut (remaining wheels are allocated or set aside for
+maturing)."** The release refusal now shows **"Mature cheese product is not
+configured. Run the product seeder."** on `/cheese-conversion` — which is
+finding 4's cause, stated on screen. A real browser submission of a `-5` order
+line lands back on `/orders/create` with **"The quantity field must be at least
+1."** rendered exactly once. All 20 main pages return 200 after the layout
+change.
+
+**Still reading `quantity_remaining`: the cutting index itself.**
+`/cheese-cutting` — the "Cheese Cutting" nav destination, and where an operator
+actually starts — was not among the surfaces fixed. With 29 free and 2 held it
+shows:
+
+```
+Wheels left: 31
+Available wheels · Whole Wheel · 31 wheels remaining   [Cut wheel]
+```
+
+So the index still advertises 31 and still offers its own **Cut wheel** link off
+that number. With the batch fully held it continued to list the batch under
+**"Ready to cut"**. This is the same fix as the other two surfaces
+(`available_quantity`), on `cheese-cutting/index.blade.php` and whatever feeds
+`CheeseCuttingController::index()` — which the invariant list below already flags
+for separate reasons (it still wraps its `withSum` in `whereNull('fulfilled_at')`).
+Lower severity than before the fix, because the controller refuses and now says
+why — but it is the first screen in the workflow.
+
+**Cutting index fixed (2026-09-12).** `CheeseCuttingController::index()` keeps
+its one `withSum` (alias unchanged, the card's strip still reads it) but the
+`whereNull('fulfilled_at')` wrapper is gone, and after loading it stamps a
+`free_quantity` on every batch item from the sums already in hand —
+`max(0, remaining − owed − maturing)`, the invariant's expression, with no SUM
+per row — then **drops any batch with no free wheel** from `$readyBatches`, so a
+fully held batch no longer appears under "Ready to cut" and the count tag is
+honest. `partials/batch-card.blade.php` builds `$cuttableWheels`, "Wheels left"
+and each "N wheels available" line (was "remaining") from `free_quantity`; the
+empty state now says why ("cut, sold, reserved or set aside to mature"). The
+per-wheel strip and the sub-group header totals are the shared four-way formula
+and were left alone. Pinned in `CheeseCutFreeStockTest` by four index cases:
+29-free-of-31 reads 3-of-5 not 5, a fully held batch is absent, reserved wheels
+are subtracted after a partial pick (5 wheels, 3 reserved, 1 picked ⇒ 2), and
+the same with `fulfilled_at` force-stamped on the partial allocation ⇒ still 2 —
+the case the old `whereNull` gate would have got wrong.
+
+### Finding 10 — the mossorders export reports expired stock as available
+
+`Api\ProductExportController::calculateStockAvailable()` is the `stock_available`
+field the online ordering portal reads. It sums `quantity_remaining` over batches
+that are `status = 'active'` with a passed `ready_date` — and checks **nothing
+else**. No `expiry_date`, no reservations, no maturing hold.
+
+Expiry is the sharp edge, because expired batches are not closed. Batch 16
+(M220626) has `expiry_date = 2026-07-02` — over two months past — and
+`status = active`, confirmed on its own edit form. It and two more expired milk
+batches therefore count in full:
+
+| Variant | export reports | actually sellable |
+| --- | --- | --- |
+| 1L Bottle | ~2,700 | 438 |
+| 2L Bottle | ~1,726 | 192 |
+| 10L Churn | ~11 | 0 |
+
+Roughly a **sixfold oversell** on the one line customers order most.
+
+Note the comment: *"Uses the existing `total_stock` accessor if available."* It
+does not. The `method_exists()` branch reimplements a different sum in PHP over
+the loaded `batchItems`, so the accessor fix in finding 1 did **not** propagate
+here despite the code reading as though it defers to it. That vestigial
+`method_exists()` check is worth deleting outright — both branches always exist,
+and it is what disguised the divergence.
+
+Every other disagreeing surface produces an internal inconsistency someone
+notices. This one produces a customer ordering milk that expired in July.
+
+*Not verified live* — the endpoint is token-gated and the portal was never opened.
+The conclusion is read from the controller plus the confirmed batch statuses.
+
+*Test:* an expired-but-active batch contributes 0 to `stock_available`; a reserved
+unit contributes 0; a held wheel contributes 0; and the exported figure equals the
+`/products` figure for the same variant.
+
+**Fixed (2026-09-12).** `ProductExportController::index()` now calls
+`BatchItem::freeStockByVariant($variants->pluck('id'))` once for the whole
+export and reads `stock_available` from the map — the same function behind
+`ProductVariant::total_stock`, so the portal agrees with `/products` by
+construction. `calculateStockAvailable()`, `isBatchReady()` and the
+`batchItems.batch` eager load are gone, and so is the `method_exists()` shim
+(`getFullName()` had the same false "uses the accessor if available" shape and
+went too — it's `$variant->full_name`). Query count is fixed regardless of
+variant count. `tests/Feature/Api/ProductExportStockTest.php` (7 cases) pins
+expiry (weeks-old and today), reservations after a partial pick, the maturing
+hold, `ready_date`, equality with `total_stock`, and the query ceiling.
+
+### Cosmetic and lower priority
+
+- `/` still serves the **stock Laravel welcome page**, docs links and a Laravel
+  Cloud "Deploy now" button included.
+- Dashboard greeting reads *"All orders allocated, and online sync is behind"* —
+  two unrelated clauses joined by "and".
+- Dashboard reports **online order sync has never completed successfully**. Not
+  investigated.
+- A line with 31 units allocated still displays *"No available stock. No
+  ready-to-sell stock available for this product variant"* beneath it. It means
+  the outstanding 4; it reads as a contradiction.
+- Variable-weight fulfilment renders **one kg input per unit** — 31 boxes in a row
+  for a 31-wheel allocation. Painful on a desktop, unusable on a phone.
+- The batch progress bar draws five segments (`31 · 0 · 2 · 1 · 4 / 38`) against a
+  four-item legend. The stray `0` means nothing on screen.
+- Data: customer **"Avoa Ballsbridge"** (Avoca). Yoghurt **16L Bucket at
+  €72.00/kg** against a 16 kg unit weight implies €1,152 a bucket — likely meant
+  as €72.00 flat, or the €/kg flag is wrong. Garlic & Basil Whole Wheel is €40.00
+  flat where every other wheel is €16.00/kg; possibly deliberate.
+- Batch "total weight" columns use the variant's **nominal** unit weight
+  (33 × 5.000 = 165.00 kg) on a product sold by actual weight.
+- Fonts load from `fonts.bunny.net` — an internal LAN app that needs the internet
+  to render as designed.
+- Destructive actions use native `confirm()` via inline `onclick`. Functional, but
+  unstyleable, untestable, and it blocks browser automation outright.
+
+### Confirmed correct through the UI
+
+Order cancellation returned all 31 allocated **and** 2 fulfilled wheels to the
+batch exactly · auto-allocate excludes maturing stock · the mature-conversion hold
+endpoint validates against real available stock with clear messages · cut-form
+quantity and weight validation refuses negative weight, zero weight and zero packs
+· future cut dates refused · order status advances Pending → Confirmed → Preparing
+on its own as allocation happens · zero-stock lines produce a genuinely good
+message pointing at closing the line short · customers with orders lose their
+Delete link · `/orders/999999`, `/batches/999999`, `/customers/999999`, bad slugs
+and non-numeric IDs all return clean 404s with no stack trace and no `APP_DEBUG`
+leak · no JavaScript console errors on any page visited, and no failed requests
+across 466 captured.
+
+### Not covered by this pass
+
+Invoicing and VAT through the UI (tile reconciliation, multi-rate documents,
+rounding, credit notes, consolidated weekly/monthly) · picking and delivery runs ·
+the online order sync, and the mossorders export endpoint itself (token-gated;
+finding 10 is read from the code) · **every authorisation boundary** — this ran entirely as an
+admin, so `/users` and `/backup` as a non-admin, logged-out access, and IDOR by
+URL on `/orders/{id}`, `/customers/{id}`, `/invoicing/{id}` are all untested ·
+double-submit, back-button resubmit and two-tab concurrent edit · mobile layout.
+
+### Dev-database state
+
+**Repaired in place on 2026-09-13 — verified through the UI.** The damage below
+has been reversed surgically rather than by reseeding, because `CustomerSeeder`
+produces fictional customers and a `migrate:fresh --seed` would have replaced the
+realistic customer set with them. Confirmed after the repair: G030426 reads
+`finished weight 191.50 kg · yield 4.8%`, wheels
+`available 31 · maturing 1 · cut 1 · converted 1 · sold 4 = 38`, vacuum packs back
+to `6 produced / 6 sold / 0 remaining`; `/products` shows Farmhouse Whole Wheel 31
+and the milk figures unchanged at 438 / 192; the CLAUDE-TEST customer is gone
+(16 customers, the original count), `/orders/8` returns 404 and the seven original
+orders are intact. Batch **G030426-1** and its converted wheel were kept on
+purpose. The record of what was wrong is below.
+
+This pass left marks on the dev copy: batch **G030426** had one wheel cut dated
+01/01/2020, one wheel cut into 100 packs, and a finished weight inflated from
+191.50 kg to 216.75 kg. Also customer **CLAUDE-TEST Wholesale** and cancelled
+order **ORD-20260912-002**.
+
+The finding 9 probe held all 31 wheels of G030426 and then returned the hold to
+its original 2; both refused cuts changed nothing.
+
+Verifying the finding 4 fix then released **1 wheel** for real, which is not
+reversible through the UI: batch **G030426-1 · Mossfield Mature Cheese** now
+exists (1 wheel, matured from G030426) and the Mature product and its two
+variants were added by the seeder. Both were kept in the repair: the seeded
+product is intended, and the converted wheel is a working feature demonstrating
+itself.
+
+**Consolidation verification (2026-09-13)** created and cancelled orders 10 and
+11, and held then released G030426's wheels to reach the empty states. `/stock`
+is back where it started the pass: `available 26 · cut 4 · converted 4 · sold 4`.
+
+**Pass 2b verification (2026-09-13)** left two more cuts on G030426 (5.000 and
+5.120 kg wheels), released 3 more wheels to G030426-1, and cancelled a milk order
+10 for Organic Store. `/stock` now reads
+`available 26 · cut 4 · converted 4 · sold 4 = 38`, with G030426-1 holding 4
+wheels. `mossfield:reset-trading-data --confirm --seed=1` is the way back.
+
+**Pass 2a verification (2026-09-13)** left one more real cut on G030426 (wheel
+5.120 kg → 18 packs, 4.680 kg, 0.440 kg waste) and a cancelled order 9 for
+Organic Store whose 3 wheels were returned to stock in full. `/stock` reads
+`available 30 · maturing 1 · cut 2 · converted 1 · sold 4 = 38`.
+`mossfield:reset-trading-data --confirm` now exists if a clean slate is wanted.
+
+### Re-verification of pass 1 (2026-09-13)
+
+Driven through the UI. All confirmed:
+
+- `/cheese-cutting` now reads **"Wheels left: 29"**, matching `/products` and
+  `/stock`. With all 31 wheels held the batch disappears from the list —
+  "Ready to cut · 0 batches".
+- Release refusals are bounded and legible: `50` → *"The quantity field must not
+  be greater than 31."*, `-3` and `0` → *"must be at least 1."*, `two` →
+  *"must be an integer."* Nothing released in any case.
+- A real release of 1 works end to end and carries traceability both ways:
+  G030426 shows *"Matured into G030426-1"*, G030426-1 shows *"Matured from
+  G030426"*, with a `ready_date` of 31/08/2026 (five months after production).
+  `/stock` gained a **CONVERTED** category.
+- `/orders/create` with three lines (valid / `-5` / unknown variant) renders a
+  *"Please fix the following"* summary **plus** the message inline in its own row
+  — quantity error on line 2 only, invalid-product error on line 3 only, line 1
+  clean, no raw `items.1` attribute names anywhere.
+- All 20 main pages still return 200.
+
+Two small things noticed while verifying, neither worth a finding of its own:
+
+- The `/cheese-cutting` empty state explains the wrong reason. When every wheel is
+  held it still says *"Cheese batches need to mature before they can be cut. Check
+  back when batches reach their ready date."* — but the batch **is** ready; its
+  wheels are held or allocated. The refusal message on the cut form gets this
+  right; the empty state should too.
+- The batches list now folds **converted** wheels into "sold" alongside cut ones —
+  it reads `sold 5` where `/stock` reads `sold 4 · converted 1`. That is finding 8
+  (still open) widening rather than a new defect; worth fixing both labels in one
+  go.
+
+---
+
+## 2026-09-12 — Order → allocation → adjustment → invoicing audit
+
+**Scope:** the money-and-stock spine end to end. Order entry, FIFO reservation,
+picking, every stock adjustment path (undo, cancel, line edit, line removal,
+short close, maturing hold), then invoicing.
+
+**Coverage added:** `tests/Feature/StockFlowAuditTest.php` — 22 cases, driven
+through the real HTTP routes rather than the models directly, so the controller
+guards are exercised alongside the model methods. The existing suites cover each
+stage in isolation; this one checks the seams, on one rule: **a unit of stock is
+never decremented twice, never lost, and never billed for more than was actually
+supplied.**
+
+### Confirmed correct (no change needed)
+
+Reservation never decrements stock · picking decrements exactly once · FIFO
+takes the oldest batch · two orders can't reserve the same units ·
+over-allocation past `quantity_ordered` is refused · expired and
+still-maturing batches are excluded · the maturing hold removes wheels from
+allocation · undo restores the batch and keeps the reservation · cancel returns
+reserved **and** picked stock · line edits release the surplus · removing the
+only line cancels the order and keeps it as history · short-closed lines bill
+only what was supplied (exactly €0.00 when nothing was picked) · weight-priced
+lines bill recorded kg, not the nominal estimate · the 23% delivery VAT backs
+out so net + VAT equals the entered gross to the cent · the invoice snapshot
+holds and locks the order against edits · void returns the order to the queue
+and re-issues under a new number.
+
+### Finding 1 — `available_quantity` under-reported after a partial pick
+
+`BatchItem::getHoldableQuantityAttribute()` summed the **whole**
+`quantity_allocated` of every allocation whose `fulfilled_at` was null. The
+fulfilled portion has already left `quantity_remaining`, so those units were
+subtracted a second time.
+
+Batch of 20, order 10, pick 4 → 16 physically remain and 6 are still reserved,
+so 10 are free. It reported **6**. Four units of real stock were invisible to
+every allocation path.
+
+### Pass 2b (2026-09-13) — the weight is derived from what was measured
+
+**The derivation.** `BatchItem::weight_breakdown` puts every unit of an item in
+exactly one state and weighs it from the best source that exists:
+
+| state | units | source |
+| --- | --- | --- |
+| on hand (incl. maturing) | `quantity_remaining` | nominal |
+| dispatched whole | Σ `order_allocations.quantity_fulfilled` (never gated on `fulfilled_at`) | measured — `actual_weight_kg` (the pre-2a rows have the total, no unit list — still measured) |
+| cut | count of `sourceCuttingLogs` | measured — `wheel_weight_kg`; nominal when null (pre-2a) |
+| converted out | Σ `sourceConversionLogs.wheels_converted` — the wheel count, **not** the log count | nominal |
+
+`on_hand + dispatched + cut + converted === produced` is the per-item
+`reconciles` flag. **Vacuum packs that came off a cut wheel contribute nothing** —
+the wheel already did — so only packs no cut log accounts for (`produced − Σ
+targetCuttingLogs.vacuum_packs_created`, clamped) count, nominally. Milk and
+yoghurt items stay `produced × unit weight`. `Batch::finished_product_weight`
+(same name, so `production_yield` and the page keep working) is Σ `total_kg`;
+`Batch::weight_coverage` gives `wheels_weighed / wheels_produced`, `measured_kg`,
+`nominal_kg`, `reconciles`. Both read only *loaded* relations —
+`BatchController::show()` eager-loads `orderAllocations`, `sourceCuttingLogs`,
+`sourceConversionLogs`, `targetCuttingLogs` on the items and the batch hands
+itself down to each item, so the page computes the figure with zero extra
+queries (checked). `quantity_produced` is untouched.
+
+**G030426 now reads ~188.31 kg, yield ~4.7 %, "5 of 38 wheels weighed"** (was
+196.00 / 4.9 %): on hand 31 × 5.000 = 155.000 (the brief's "30 on hand" is the
+*available* count — the held wheel is on hand too); dispatched 4 wheels measured
+4.870 + 4.200 + 9.120 = 18.190; cut 2 — one measured 5.120, one pre-2a at
+nominal 5.000; converted 1 at nominal 5.000. Measured 23.310 kg, nominal
+165.000 kg, reconciles 31 + 4 + 2 + 1 = 38. The 24 packs add nothing.
+
+**Coverage on screen.** The Finished weight figure carries a `~` whenever any of
+it is nominal, a hover title with the measured/nominal split, "N of M wheels
+weighed" under it (and "does not reconcile" in red if the four states don't sum
+to produced), and the yield line is `~4.7%` or `(nominal)` when nothing is
+measured. Milk/yoghurt read `(nominal)`.
+
+**The "Total weight" column: relabelled, not moved.** `BatchItem::total_weight`
+is `remaining × unit weight` — the *on hand* state, which the table above
+defines as nominal because nothing still on the shelf has been weighed (wheels
+are weighed on the way out). There is no measured basis to move it to, and a
+produced-basis measured figure per row would just restate the batch total and
+reintroduce the pack-row double count in the table. Header now "On hand
+(nominal)", cells `~155.00 kg`. Accessor unchanged.
+
+**The Decision's *Test* line, refined.** "A valid cut never raises
+`finished_weight_kg`" was written in the nominal world. Under the measured model
+a cut changes the figure by exactly (measured wheel − nominal wheel) — up or
+down — and *never* by the pack weight. That is what the test pins: a wheel
+weighed at nominal cut into 4.68 kg of packs leaves the figure unchanged; at
+4.900 it drops 0.100.
+
+**Rider.** `StockOverviewService` computed the `/stock` `converted` segment from
+the *count* of conversion logs; `release()` writes one log per release carrying
+`wheels_converted = N`, so a 3-wheel release showed 1. Now `withSum(...
+wheels_converted)`. (`BatchController::deletionBlocker()` keeps its count — it
+names *records* in the way.)
+
+Tests: `tests/Feature/BatchFinishedWeightTest.php` (10) — the reconciliation
+through the real pick / cut / hold+release routes (6 + 2 + 1 + 1 = 10, 50.120 kg,
+3 of 10 weighed, packs add nothing); a cut never adds pack weight; an unweighed
+legacy cut falls back to nominal; packs no cut explains count nominally; a
+measured total with no unit list still counts as measured; milk unchanged; the
+page states coverage and the on-hand label; a wholly measured batch drops the
+tilde; a Mature batch uses the same derivation (nominal until sold, measured
+after); the `/stock` converted segment counts wheels. Finding 2 is **closed**;
+the open question (attributing a converted wheel's eventual sale weight back to
+the source batch) is in the pass 2b report, unbuilt.
+
+**Re-verified through the UI (2026-09-13).** The figure and its arithmetic hold,
+and the conservation-of-mass bug is gone.
+
+`/batches/17` reads **~188.31 kg**, *"5 of 38 wheels weighed"*, **Yield ~4.7%**,
+against 196.00 kg / 4.9% before the pass. The tooltip splits it honestly —
+*"23.310 kg measured · 165.000 kg nominal"* — and the stock table's column is
+relabelled **On hand (nominal)** with its own explanation on hover.
+
+The decisive test, two more cuts through the form:
+
+| cut | expected | read |
+| --- | --- | --- |
+| wheel weighed at the nominal 5.000 | no change | ~188.31 kg |
+| wheel weighed at 5.120 | +0.120 | **~188.43 kg** |
+
+Under the old derivation those two cuts would have added roughly 9 kg between
+them. The measured portion rose 23.310 → 33.430 (the two newly weighed wheels)
+while the nominal fell 165.000 → 155.000, which is the same two wheels leaving
+the unweighed pool — the figure moves by the *difference* between measured and
+nominal, exactly as the report's reformulated test says.
+
+Also confirmed: `/batches/23` (the Mature batch) reads `~5.00 kg · 0 of 1 wheels
+weighed` with no yield line; a milk batch reads `Yield ~100.0% (nominal)`;
+**Finding 11** is closed — `POST /orders` carrying only `customer_id`,
+`order_date` and `items` now creates the order instead of 500-ing; and the
+`/stock` rider is right — holding and releasing **3** wheels in one go moved the
+converted segment 1 → **4**, where the old log-count would have shown 2.
+
+One further check not in the report's list: moving 3 wheels from on hand to
+converted left the finished weight **unchanged at ~188.43 kg**. Both states are
+nominal, so nothing should move, and nothing did.
+
+### The reformulated test line is the right one
+
+The Decision section's original wording — *"a valid cut never raises the batch's
+finished weight"* — was written before the measured model existed and is wrong
+under it. A cut now moves the figure by (measured wheel − nominal wheel), in
+either direction. The pass 2b report's reformulation is correct and this section
+supersedes the earlier line.
+
+### Finding 2 — on a short-closed line, that loss was permanent
+
+`OrderItem::releaseUnits()` pass 1 lowers `quantity_allocated` to match
+`quantity_fulfilled` but never stamps `fulfilled_at`, so the allocation stayed
+"outstanding" forever. Batch of 20, pick 6, close short: 14 remain, nothing is
+outstanding, availability reported **8**. Nothing later cleared it, so those 6
+units were lost to allocation until someone happened to re-pick that batch.
+
+**Fix for 1 and 2 (one line).** `BatchItem::getHoldableQuantityAttribute()` now
+sums the units still *owed*:
+
+```php
+$allocated = (int) $this->orderAllocations()
+    ->sum(DB::raw('quantity_allocated - quantity_fulfilled'));
+```
+
+The `whereNull('fulfilled_at')` filter is gone on purpose — a fully-fulfilled
+allocation contributes zero to this sum anyway, and relying on the stamp is what
+made finding 2 permanent.
+
+`ChilledRunController::stockByVariant()` had the same wrong sum and was fixed
+the same way. Its comment claims it mirrors `available_quantity` "so the footer
+can never promise more than Allocate all will actually take" — it did mirror
+the buggy one, so the two agreed with each other while both under-reported
+against `/stock` and `/batches`. Visible symptom: those screens showed more
+free stock than the allocator would hand out.
+
+### Finding 3 — deleting a batch destroyed the allocations under invoiced orders
+
+`batch_items.batch_id` cascades, and so does every child of a batch item
+(`order_allocations`, `cheese_cutting_logs`, `cheese_conversion_logs`, on both
+their source and target sides). `BatchController::destroy()` had no guard.
+Deleting a batch behind a delivered, invoiced order left
+`order_items.quantity_fulfilled` at 10 while `batch_codes` on the live order
+went empty. The invoice keeps its own snapshotted codes, so the document
+survived — the order's traceability did not.
+
+**Fix.** `BatchController::destroy()` now refuses via a `deletionBlocker()`
+check covering all four dependency types, naming what is in the way and pointing
+at closing the batch (`sold_out` / `expired`) instead. A batch nothing depends
+on is still deletable, so a genuine mis-entry can still be undone — both halves
+are tested.
+
+### Verification
+
+`StockFlowAuditTest` 22/22 pass. Full suite **7 failing / 428 passing** — the 7
+are the known Breeze baseline above, unchanged. `pint` clean on all four
+touched files.
+
+### Invariants worth keeping
+
+- **The reservation is `quantity_allocated - quantity_fulfilled`, never
+  `quantity_allocated`.** Eight places compute free stock:
+  `BatchItem::getHoldableQuantityAttribute()`,
+  `ChilledRunController::stockByVariant()`, `StockOverviewService`,
+  `BatchController::index()`, `CheeseCuttingController::index()`,
+  `CheeseConversionController::index()`, and `BatchItem::freeStockByVariant()`
+  serving two surfaces — `ProductVariant::total_stock` (the `/products` figure)
+  and `Api\ProductExportController` (`stock_available`, what the portal shows
+  customers) — both added by the browser pass above. They must agree, or two
+  screens will quote different stock for the same batch. Never gate the sum on
+  `fulfilled_at`. (All three index-style sums — `CheeseCuttingController`,
+  `BatchController::index()`, `StockOverviewService` — are now ungated.)
+- **Per-wheel state counts** (`BatchItem::weight_breakdown`, `StockOverviewService`)
+  use `quantity_fulfilled` for dispatched units (never `fulfilled_at`) and
+  Σ `wheels_converted` for converted (never the conversion-log count).
+- **`BatchItem::available_quantity` fires a `SUM` on every access** — never read
+  it in a loop. `ChilledRunController::stockByVariant()` exists precisely to do
+  it as one `withSum` query; follow that pattern for any new bulk surface.
+- **Anything that deletes rows under a batch item needs a guard, not a
+  cascade.** The FKs are all `onDelete('cascade')`; the controller is the only
+  thing standing between an operator and a hole in the audit trail.
+
+### Left alone deliberately
+
+`releaseUnits()` still doesn't stamp `fulfilled_at` when pass 1 leaves an
+allocation with `quantity_fulfilled == quantity_allocated`, so the column can
+read null on an allocation that owes nothing. It is now cosmetic — no
+availability path depends on the stamp, and `PickingController::batchOptionsFor()`
+already uses the correct `whereColumn('quantity_fulfilled', '<',
+'quantity_allocated')` comparison. Fixing it would touch the short-supply
+behaviour pinned by the 25 cases in `OrderShortSupplyTest` for no functional
+gain; if you do change it, treat that suite as the contract.

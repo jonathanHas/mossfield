@@ -89,16 +89,18 @@
                                                         @foreach($variants as $variant)
                                                             <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}"
                                                                 {{ $item['product_variant_id'] == $variant->id ? 'selected' : '' }}>
-                                                                {{ $variant->name }} ({{ $variant->price_label }})
+                                                                {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                             </option>
                                                         @endforeach
                                                     </optgroup>
                                                 @endforeach
                                             </select>
+                                            <x-input-error :messages="$errors->get('items.'.$index.'.product_variant_id')" class="mt-1" />
                                         </div>
                                         <div>
                                             <label class="mf-label">Quantity</label>
                                             <input type="number" name="items[{{ $index }}][quantity]" min="1" class="quantity-input mf-input" value="{{ $item['quantity'] }}">
+                                            <x-input-error :messages="$errors->get('items.'.$index.'.quantity')" class="mt-1" />
                                         </div>
                                         <div>
                                             <label class="mf-label">Line total</label>
@@ -119,7 +121,7 @@
                                                 <optgroup label="{{ $productName }}">
                                                     @foreach($variants as $variant)
                                                         <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}">
-                                                            {{ $variant->name }} ({{ $variant->price_label }})
+                                                            {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                         </option>
                                                     @endforeach
                                                 </optgroup>
@@ -189,7 +191,7 @@
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
                                         <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}">
-                                            {{ $variant->name }} ({{ $variant->price_label }})
+                                            {{ $variant->picker_label }} ({{ $variant->price_label }})
                                         </option>
                                     @endforeach
                                 </optgroup>

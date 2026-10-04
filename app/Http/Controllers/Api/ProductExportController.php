@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\BatchItem;
 use App\Models\ProductVariant;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,7 +50,7 @@ class ProductExportController extends Controller
         $updatedSince = $request->input('updated_since');
 
         // Build query
-        $query = ProductVariant::with(['product', 'batchItems.batch'])
+        $query = ProductVariant::with('product')
             ->join('products', 'product_variants.product_id', '=', 'products.id')
             ->select('product_variants.*');
 
@@ -71,22 +72,29 @@ class ProductExportController extends Controller
 
         $variants = $query->get();
 
+        // Free stock per variant in ONE query — the same figure /products shows
+        // (see BatchItem::freeStockByVariant): expired/closed/unready batches,
+        // units still owed to orders and the maturing hold contribute nothing.
+        // This is what the portal shows customers, so it must never exceed
+        // what the allocator would actually hand out.
+        $freeStock = BatchItem::freeStockByVariant($variants->pluck('id'));
+
         // Transform variants into external API format
-        $data = $variants->map(function ($variant) {
+        $data = $variants->map(function ($variant) use ($freeStock) {
             return [
                 'office_product_id' => $variant->product->id,
                 'office_variant_id' => $variant->id,
                 'product_name' => $variant->product->name,
                 'product_type' => $variant->product->type,
                 'variant_name' => $variant->name,
-                'full_name' => $this->getFullName($variant),
+                'full_name' => $variant->full_name,
                 'size' => $variant->size,
                 'unit' => $variant->unit,
                 'weight_kg' => $variant->weight_kg ? (float) $variant->weight_kg : null,
                 'base_price' => (float) $variant->base_price,
                 'is_priced_by_weight' => (bool) $variant->is_priced_by_weight,
                 'is_active' => $variant->product->is_active && $variant->is_active,
-                'stock_available' => $this->calculateStockAvailable($variant),
+                'stock_available' => $freeStock[$variant->id] ?? 0,
                 'updated_at' => $variant->updated_at->toIso8601String(),
             ];
         });
@@ -94,70 +102,5 @@ class ProductExportController extends Controller
         return response()->json([
             'data' => $data,
         ]);
-    }
-
-    /**
-     * Get the full display name for a variant.
-     * Uses the existing accessor if available, otherwise computes it.
-     */
-    private function getFullName(ProductVariant $variant): string
-    {
-        // Use existing accessor if available
-        if (method_exists($variant, 'getFullNameAttribute')) {
-            return $variant->full_name;
-        }
-
-        // Fallback: compute it
-        return $variant->product->name.' - '.$variant->name;
-    }
-
-    /**
-     * Calculate available stock for a variant.
-     *
-     * Uses the existing total_stock accessor if available.
-     * Otherwise, sums batch_items.quantity_remaining for ready batches only.
-     */
-    private function calculateStockAvailable(ProductVariant $variant): int
-    {
-        // Use existing accessor if available
-        if (method_exists($variant, 'getTotalStockAttribute')) {
-            // Filter to only ready batches
-            return $variant->batchItems
-                ->filter(function ($batchItem) {
-                    return $this->isBatchReady($batchItem);
-                })
-                ->sum('quantity_remaining');
-        }
-
-        // Fallback: compute it
-        return $variant->batchItems()
-            ->whereHas('batch', function ($query) {
-                $query->where('status', 'active')
-                    ->where(function ($q) {
-                        $q->whereNull('ready_date')
-                            ->orWhere('ready_date', '<=', now());
-                    });
-            })
-            ->sum('quantity_remaining');
-    }
-
-    /**
-     * Check if a batch item is ready to sell.
-     */
-    private function isBatchReady($batchItem): bool
-    {
-        $batch = $batchItem->batch;
-
-        // Check batch status
-        if ($batch->status !== 'active') {
-            return false;
-        }
-
-        // Check if ready date has passed (for cheese maturation)
-        if ($batch->ready_date && $batch->ready_date > now()) {
-            return false;
-        }
-
-        return true;
     }
 }

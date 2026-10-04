@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Controllers\Concerns\BuildsProductList;
 use App\Http\Requests\ProductRequest;
 use App\Models\Product;
+use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -19,12 +20,15 @@ class ProductController extends Controller
         $this->authorize('viewAny', Product::class);
         $typeOrder = ['milk', 'yoghurt', 'cheese'];
 
-        $products = Product::with(['variants' => function ($query) {
-            $query->withSum('batchItems as total_stock', 'quantity_remaining')
-                ->orderBy('name');
-        }])
+        $products = Product::with(['variants' => fn ($query) => $query->orderBy('name')])
             ->orderBy('name')
-            ->get()
+            ->get();
+
+        // Free stock per variant in one query (not a raw SUM of quantity_remaining
+        // — see ProductVariant::total_stock).
+        ProductVariant::attachFreeStock($products->flatMap->variants);
+
+        $products = $products
             ->groupBy('type')
             ->sortBy(fn ($group, $type) => array_search($type, $typeOrder) === false ? 99 : array_search($type, $typeOrder));
 
@@ -57,14 +61,13 @@ class ProductController extends Controller
     {
         $this->authorize('view', $product);
         $product->load([
-            'variants' => function ($query) {
-                $query->withSum('batchItems as total_stock', 'quantity_remaining');
-            },
+            'variants',
             'batches' => function ($query) {
                 $query->orderByDesc('production_date')->limit(10);
             },
             'batches.batchItems',
         ]);
+        ProductVariant::attachFreeStock($product->variants);
 
         [$productList, $listFilters, $listTotal, $listLimit] = $this->buildProductList($request, $product);
 

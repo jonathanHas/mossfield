@@ -147,13 +147,27 @@ class OrderItem extends Model
         });
     }
 
-    public function fulfillAllocation(OrderAllocation $allocation, int $quantity, ?float $actualWeightKg = null): bool
+    /**
+     * @param  list<float>|null  $unitWeightsKg  One measured weight per unit
+     *                                           (per-unit variable-weight lines). When given it is the source of
+     *                                           truth: it must contain exactly $quantity figures and
+     *                                           $actualWeightKg is recomputed as their sum, never trusted.
+     */
+    public function fulfillAllocation(OrderAllocation $allocation, int $quantity, ?float $actualWeightKg = null, ?array $unitWeightsKg = null): bool
     {
+        if ($unitWeightsKg !== null) {
+            if (count($unitWeightsKg) !== $quantity) {
+                return false;
+            }
+            $unitWeightsKg = array_values(array_map(fn ($w) => round((float) $w, 3), $unitWeightsKg));
+            $actualWeightKg = round(array_sum($unitWeightsKg), 3);
+        }
+
         if ($this->isVariableWeight() && $actualWeightKg === null) {
             return false;
         }
 
-        return DB::transaction(function () use ($allocation, $quantity, $actualWeightKg) {
+        return DB::transaction(function () use ($allocation, $quantity, $actualWeightKg, $unitWeightsKg) {
             // Lock the batch_item first to serialise stock changes, then re-read
             // the allocation under the same transaction so quantities are fresh.
             $lockedBatchItem = BatchItem::whereKey($allocation->batch_item_id)->lockForUpdate()->first();
@@ -182,6 +196,9 @@ class OrderItem extends Model
             if ($actualWeightKg !== null) {
                 $allocation->actual_weight_kg = ($allocation->actual_weight_kg ?? 0) + $actualWeightKg;
             }
+            if ($unitWeightsKg !== null) {
+                $allocation->unit_weights_kg = array_merge($allocation->unit_weights_kg ?? [], $unitWeightsKg);
+            }
             if ($allocation->quantity_fulfilled >= $allocation->quantity_allocated) {
                 $allocation->fulfilled_at = now();
             }
@@ -205,18 +222,18 @@ class OrderItem extends Model
      * full recorded weight. Returns false (nothing changed) on stale stock,
      * over-allocation, or a missing weight on a variable-weight line.
      */
-    public function pickFromBatchItem(BatchItem $batchItem, int $quantity, ?float $actualWeightKg = null): bool
+    public function pickFromBatchItem(BatchItem $batchItem, int $quantity, ?float $actualWeightKg = null, ?array $unitWeightsKg = null): bool
     {
         if ($quantity <= 0) {
             return false;
         }
 
-        if ($this->isVariableWeight() && $actualWeightKg === null) {
+        if ($this->isVariableWeight() && $actualWeightKg === null && $unitWeightsKg === null) {
             return false;
         }
 
         try {
-            return DB::transaction(function () use ($batchItem, $quantity, $actualWeightKg) {
+            return DB::transaction(function () use ($batchItem, $quantity, $actualWeightKg, $unitWeightsKg) {
                 $allocation = $this->orderAllocations()
                     ->where('batch_item_id', $batchItem->id)
                     ->first();
@@ -239,7 +256,7 @@ class OrderItem extends Model
                     }
                 }
 
-                if (! $this->fulfillAllocation($allocation, $quantity, $actualWeightKg)) {
+                if (! $this->fulfillAllocation($allocation, $quantity, $actualWeightKg, $unitWeightsKg)) {
                     throw new \RuntimeException("Failed to fulfil allocation {$allocation->id}.");
                 }
 
@@ -416,8 +433,16 @@ class OrderItem extends Model
                 return false;
             }
 
+            // Per-unit weights are the record of which units went out, so an
+            // undo takes back the LAST $quantity of them and exactly their kg.
+            // Without them (bulk lines, older rows) fall back to the average.
             $weightToRemove = null;
-            if ($allocation->actual_weight_kg && $allocation->quantity_fulfilled > 0) {
+            $unitWeights = $allocation->unit_weights_kg;
+            if (is_array($unitWeights) && count($unitWeights) >= $quantity) {
+                $removed = array_splice($unitWeights, count($unitWeights) - $quantity, $quantity);
+                $weightToRemove = round(array_sum($removed), 3);
+                $allocation->unit_weights_kg = array_values($unitWeights);
+            } elseif ($allocation->actual_weight_kg && $allocation->quantity_fulfilled > 0) {
                 $weightPerUnit = $allocation->actual_weight_kg / $allocation->quantity_fulfilled;
                 $weightToRemove = $weightPerUnit * $quantity;
             }

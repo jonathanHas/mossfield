@@ -132,7 +132,7 @@ class CustomerSpecialPriceTest extends TestCase
         $this->assertSame('80.00', (string) $line->line_total); // 2 × 4kg × €10
     }
 
-    public function test_invoice_unit_price_column_shows_the_special_price_not_the_base_price(): void
+    public function test_dispatch_confirmation_unit_price_column_shows_the_special_price_not_the_base_price(): void
     {
         $office = User::factory()->create();
 
@@ -151,13 +151,13 @@ class CustomerSpecialPriceTest extends TestCase
         ]);
 
         $this->actingAs($office)
-            ->get(route('orders.invoice', $order))
+            ->get(route('orders.dispatch-confirmation', $order))
             ->assertOk()
             ->assertSee('€1.20')       // locked special price in the Unit price column
             ->assertDontSee('€1.50');  // never the variant base_price
     }
 
-    public function test_invoice_weight_priced_unit_price_shows_per_kg_special(): void
+    public function test_dispatch_confirmation_weight_priced_unit_price_shows_per_kg_special(): void
     {
         $office = User::factory()->create();
 
@@ -176,7 +176,7 @@ class CustomerSpecialPriceTest extends TestCase
         ]);
 
         $this->actingAs($office)
-            ->get(route('orders.invoice', $order))
+            ->get(route('orders.dispatch-confirmation', $order))
             ->assertOk()
             ->assertSee('€10.00/kg')       // locked special €/kg
             ->assertDontSee('€12.00/kg');  // never the variant base €/kg

@@ -9,7 +9,7 @@ The runbook assumes mossfield and mossorders are being deployed as a pair, since
 ## 1. Host prerequisites
 
 - **PHP 8.2+** with extensions: `mbstring`, `xml`, `curl`, `zip`, `bcmath`, `gd`, `mysql`/`pdo_mysql`, `intl`, `fileinfo`, `tokenizer`
-- **MySQL 8+** (or MariaDB 10.6+) — SQLite is fine for dev but **not** production
+- **MySQL 8+** (or MariaDB 10.6+) — used in dev and test too, so there is no engine change between environments
 - **Composer 2.x**
 - **Node.js 20+** and **npm** (only needed at deploy time for `npm run build`; not at runtime)
 - **Webserver** — nginx or Apache — with TLS termination in front (Let's Encrypt / corporate cert)
@@ -254,6 +254,42 @@ tail -f storage/logs/sync-$(date +%Y-%m-%d).log
 
 The hourly run appends a `run summary` line. Dashboard freshness strip updates within a minute of the run completing.
 
+### 6.1 The scheduler also drains the queue
+
+There is **no supervised queue worker** on this install. Batch sends (the month-end
+statement run) are queued jobs, so the scheduler runs the worker itself:
+
+```
+queue:work --stop-when-empty --max-time=50   every minute
+```
+
+It exits as soon as the queue is empty, so it costs nothing when idle. This means
+**cron is required for statement batches to go out at all** — with cron down, a
+run's rows sit at `queued` and the run page says so. Set
+`INVOICING_QUEUE_VIA_SCHEDULER=false` only once a real supervised worker exists.
+
+The other two invoicing entries:
+
+| Command | When | Purpose |
+|---|---|---|
+| `invoicing:refresh-overdue` | daily 02:00 | Mirrors overdue state onto `orders.payment_status` so the order badges stay truthful. Finance screens derive overdue live, so this is cosmetic only. |
+| `invoicing:send-statements` | monthly, `INVOICING_STATEMENT_DAY` at 06:00 | Month-end statements. **Off** unless `INVOICING_AUTO_STATEMENTS=true`. |
+
+Check with `php artisan schedule:list`, and dry-run the statement selection
+before switching it on:
+
+```bash
+php artisan invoicing:send-statements --dry-run
+```
+
+### 6.2 Invoicing env vars
+
+Set the seller identity before issuing a real invoice — it prints on every
+document. See the `INVOICING_*` block in `.env.example`; the ones that matter are
+`INVOICING_SELLER_NAME`, `INVOICING_SELLER_ADDRESS` (pipe-separated lines),
+`INVOICING_VAT_NUMBER`, and `INVOICING_IBAN`/`INVOICING_BIC` for the "How to pay"
+block. Invoices also need real mail: `MAIL_MAILER=smtp`.
+
 ---
 
 ## 7. Upgrade / redeploy
@@ -333,8 +369,10 @@ After completing §1 – §6, these should all pass:
 - [ ] `SELECT phone FROM customers LIMIT 1;` → ciphertext starting `eyJpdiI6`
 - [ ] Setting `APP_ENV=production` + `APP_DEBUG=true` in a test env causes boot to fail
 - [ ] A factory-role login redirects to `/picking` and the queue renders (no € amounts visible); a driver-role login gets 403 on `/picking`
-- [ ] As office: create a run + assign a customer at `/delivery-runs`, then on `/chilled-runs` "Enter order" saves a **pending** order and "Confirm all" moves it onto the picking queue. As factory: the sheet renders read-only (no qty inputs, no €) but the loaded tick works. *(No new env vars or operator actions — the `delivery_runs`/`loaded_at` migrations run with the standard §7 `php artisan migrate`.)*
+- [ ] As office: create a run + assign a customer at `/delivery-runs`, then on `/chilled-runs` "Enter order" saves a **pending** order and "Confirm all" moves it onto the picking queue. As factory: the sheet renders read-only (no qty inputs, no €) but the loaded tick works. As office: tick loaded on two ready stops → **Dispatch run** flips them to dispatched, mints `INV-` for the per-order customer only, and two Dispatch confirmations appear under Finance → Sent within a minute (the cron/queue check, §6.1); the invoice waits in Finance → Invoices `?emailed=0`. *(No new env vars or operator actions — the `delivery_runs`/`loaded_at` migrations run with the standard §7 `php artisan migrate`.)*
 - [ ] As office on `/cheese-conversion`: a Farmhouse batch's wheels can be set aside ("Save maturing") and the held wheels drop out of `/stock` available + aren't auto-allocated to orders; a ≥5-month batch shows "Release to mature" → a Mature batch appears in `/batches` & `/stock`; "Return to farmhouse hold" on the mature batch undoes it. As factory: the page renders read-only. *(Requires the §4.1a `ProductSeeder` run; `quantity_maturing` migration runs with the standard `php artisan migrate`.)*
+- [ ] As office: **Finance → To Invoice** lists a delivered order → "Issue invoice" mints `INV-000001`; the order page then links the invoice instead of offering a pro forma, and editing/cancelling that order is refused. "Email invoice" sends and the invoice drops off the **?emailed=0** queue, with a row in **Finance → Sent**. Record a payment covering two invoices → both settle and any surplus shows as credit on the customer page. **Finance → Statements → Month-end run** queues sends and the run page reaches "sent" within a minute (this is the cron/queue check, §6.1). *(Needs the `INVOICING_*` env vars in §6.2 and `MAIL_MAILER=smtp`; migrations run with the standard §7 `php artisan migrate`.)*
+- [ ] As factory: every `/invoicing/*` URL returns 403, and the Finance nav group is absent.
 - [ ] As office: create an order with a **Customer ref** (click "+ Customer ref" on `/orders/create`) → it shows on the order page and survives a status change; tick "Always require a customer reference on orders" on a customer → the field auto-expands on their order form and Chilled Runs row. *(Additive `customer_reference`/`requires_reference` migrations run with the standard `php artisan migrate`; no new env vars.)*
 
 ---

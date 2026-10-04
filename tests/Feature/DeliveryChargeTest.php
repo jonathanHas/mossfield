@@ -368,7 +368,7 @@ class DeliveryChargeTest extends TestCase
 
     // ── Rendering ────────────────────────────────────────────────────
 
-    public function test_show_and_invoice_render_the_charge_for_office(): void
+    public function test_show_and_dispatch_confirmation_render_the_charge_for_office(): void
     {
         $office = User::factory()->create();
         $order = $this->orderWithCharge(4.50, 'ready');
@@ -377,7 +377,7 @@ class DeliveryChargeTest extends TestCase
         $this->actingAs($office)->get(route('orders.show', $order))
             ->assertOk()->assertSee('Delivery charge')->assertSee('3.66');
 
-        $this->actingAs($office)->get(route('orders.invoice', $order))
+        $this->actingAs($office)->get(route('orders.dispatch-confirmation', $order))
             ->assertOk()->assertSee('Delivery charge')->assertSee('3.66');
     }
 
@@ -612,7 +612,7 @@ class DeliveryChargeTest extends TestCase
         $this->assertEquals(1.50, $order->delivery_charge);
     }
 
-    public function test_percentage_shows_on_show_invoice_and_customer_page(): void
+    public function test_percentage_shows_on_show_dispatch_confirmation_and_customer_page(): void
     {
         $office = User::factory()->create();
         $shop = $this->percentCustomer(10, 'Pct Display Shop');
@@ -634,7 +634,7 @@ class DeliveryChargeTest extends TestCase
         $this->actingAs($office)->get(route('orders.show', $order))
             ->assertOk()->assertSee('Delivery charge (10%)')->assertSee('1.22'); // net of €1.50
 
-        $this->actingAs($office)->get(route('orders.invoice', $order))
+        $this->actingAs($office)->get(route('orders.dispatch-confirmation', $order))
             ->assertOk()->assertSee('Delivery charge (10%)');
 
         $this->actingAs($office)->get(route('customers.show', $shop))

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Casts\KilogramList;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,6 +14,7 @@ class OrderAllocation extends Model
         'quantity_allocated',
         'quantity_fulfilled',
         'actual_weight_kg',
+        'unit_weights_kg',
         'allocated_at',
         'fulfilled_at',
         'notes',
@@ -22,6 +24,10 @@ class OrderAllocation extends Model
         'quantity_allocated' => 'integer',
         'quantity_fulfilled' => 'integer',
         'actual_weight_kg' => 'decimal:3',
+        // Per-unit kg figures in pick order, appended across partial picks
+        // (finding 5). Null on bulk-weighed lines and pre-2026-09-13 rows;
+        // actual_weight_kg is derived from it whenever it is present.
+        'unit_weights_kg' => KilogramList::class,
         'allocated_at' => 'datetime',
         'fulfilled_at' => 'datetime',
     ];

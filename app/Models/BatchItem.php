@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 
 class BatchItem extends Model
 {
@@ -81,9 +82,146 @@ class BatchItem extends Model
         return $this->quantity_produced - $this->quantity_remaining;
     }
 
+    /**
+     * Nominal weight of what is ON HAND (remaining × the variant's unit
+     * weight). Deliberately nominal: nothing still on the shelf has been
+     * weighed — wheels are weighed on the way out (fulfilment, cutting), so
+     * this column has no measured basis to move to. Label it as an estimate.
+     */
     public function getTotalWeightAttribute(): float
     {
         return $this->quantity_remaining * ($this->unit_weight_kg ?? 0);
+    }
+
+    /**
+     * The at-a-glance wheel strip: every wheel of this item in exactly one of
+     * free / allocated / maturing / cut / converted / sold, summing to produced.
+     * Shared by the /batches and /cheese-cutting cards and their group headers
+     * (it used to be copied four times, and none of the copies knew about
+     * converted — so a converted wheel showed as "sold", finding 8).
+     *
+     * Uses the aggregates the index queries already load when present
+     * (source_cutting_logs_count, converted_wheels, quantity_currently_allocated)
+     * and falls back to querying, so it is safe on a single item too.
+     *
+     * @return array{produced: int, free: int, allocated: int, maturing: int, cut: int, converted: int, sold: int}
+     */
+    public function wheelStates(): array
+    {
+        $produced = (int) $this->quantity_produced;
+        $cut = (int) ($this->getAttribute('source_cutting_logs_count')
+            ?? ($this->relationLoaded('sourceCuttingLogs') ? $this->sourceCuttingLogs->count() : $this->sourceCuttingLogs()->count()));
+        $converted = (int) ($this->getAttribute('converted_wheels')
+            ?? ($this->relationLoaded('sourceConversionLogs') ? $this->sourceConversionLogs->sum('wheels_converted') : $this->sourceConversionLogs()->sum('wheels_converted')));
+        $reserved = (int) ($this->getAttribute('quantity_currently_allocated')
+            ?? $this->orderAllocations()->sum(DB::raw('quantity_allocated - quantity_fulfilled')));
+
+        // Sold whole = whatever left the shelf that wasn't cut or converted.
+        $sold = max(0, $produced - (int) $this->quantity_remaining - $cut - $converted);
+        $remaining = max(0, $produced - $cut - $converted - $sold);
+        $allocated = max(0, min($remaining, $reserved));
+        $free = max(0, $remaining - $allocated);
+        $maturing = min($free, (int) $this->quantity_maturing); // held wheels live inside free
+        $free = max(0, $free - $maturing);
+
+        return compact('produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold');
+    }
+
+    /**
+     * Where every unit of this item is, and what it weighs — measured where a
+     * measurement exists, nominal where it doesn't (docs/planImp/TESTING_AND_FIXES.md,
+     * finding 2, pass 2b).
+     *
+     * Wheels are in exactly one of four states:
+     *   on hand (incl. maturing)  nominal
+     *   dispatched whole          measured — order_allocations.actual_weight_kg
+     *   cut                       measured — cheese_cutting_logs.wheel_weight_kg
+     *                             (nominal when null: cut before 2026-09-13)
+     *   converted out to Mature   nominal — weighed only when sold from there
+     * and on_hand + dispatched + cut + converted must equal produced.
+     *
+     * Vacuum packs that came off a cut wheel contribute NOTHING — the wheel
+     * already did. Only packs no cut log accounts for count, nominally.
+     * Milk/yoghurt units: produced × unit weight, as always.
+     *
+     * Reads only LOADED relations — eager-load orderAllocations,
+     * sourceCuttingLogs, sourceConversionLogs and targetCuttingLogs on the
+     * batch items first (BatchController::show() does), or every row costs
+     * four queries.
+     *
+     * @return array{kind: string, produced: int, on_hand: int, dispatched: int, cut: int, converted: int, reconciles: bool, weighed: int, measured_kg: float, nominal_kg: float, total_kg: float}
+     */
+    public function getWeightBreakdownAttribute(): array
+    {
+        $unit = (float) ($this->unit_weight_kg ?? 0);
+        $produced = (int) $this->quantity_produced;
+        $variant = $this->productVariant;
+        $isCheese = ($this->batch?->product?->type ?? null) === 'cheese';
+
+        $out = [
+            'kind' => 'unit',
+            'produced' => $produced,
+            'on_hand' => (int) $this->quantity_remaining,
+            'dispatched' => 0,
+            'cut' => 0,
+            'converted' => 0,
+            'reconciles' => true,
+            'weighed' => 0,
+            'measured_kg' => 0.0,
+            'nominal_kg' => 0.0,
+            'total_kg' => 0.0,
+        ];
+
+        if ($isCheese && $variant?->isWheel()) {
+            $out['kind'] = 'wheel';
+
+            $dispatched = 0;
+            $dispatchedNominalUnits = 0;
+            foreach ($this->orderAllocations as $allocation) {
+                $units = (int) $allocation->quantity_fulfilled;
+                if ($units <= 0) {
+                    continue;
+                }
+                $dispatched += $units;
+                if ((float) $allocation->actual_weight_kg > 0) {
+                    $out['weighed'] += $units;
+                    $out['measured_kg'] += (float) $allocation->actual_weight_kg;
+                } else {
+                    $dispatchedNominalUnits += $units;
+                }
+            }
+
+            $cutNominalUnits = 0;
+            foreach ($this->sourceCuttingLogs as $log) {
+                if ($log->isMeasured()) {
+                    $out['weighed']++;
+                    $out['measured_kg'] += (float) $log->wheel_weight_kg;
+                } else {
+                    $cutNominalUnits++;
+                }
+            }
+
+            $converted = (int) $this->sourceConversionLogs->sum('wheels_converted');
+
+            $out['dispatched'] = $dispatched;
+            $out['cut'] = $this->sourceCuttingLogs->count();
+            $out['converted'] = $converted;
+            $out['reconciles'] = ($out['on_hand'] + $dispatched + $out['cut'] + $converted) === $produced;
+            $out['nominal_kg'] = ($out['on_hand'] + $converted + $cutNominalUnits + $dispatchedNominalUnits) * $unit;
+        } elseif ($isCheese) {
+            // Packs: only those no cut log explains are this item's own weight.
+            $out['kind'] = 'pack';
+            $fromCuts = (int) $this->targetCuttingLogs->sum('vacuum_packs_created');
+            $out['nominal_kg'] = max(0, $produced - $fromCuts) * $unit;
+        } else {
+            $out['nominal_kg'] = $produced * $unit;
+        }
+
+        $out['measured_kg'] = round($out['measured_kg'], 3);
+        $out['nominal_kg'] = round($out['nominal_kg'], 3);
+        $out['total_kg'] = round($out['measured_kg'] + $out['nominal_kg'], 3);
+
+        return $out;
     }
 
     public function reduceStock(int $quantity): bool
@@ -114,6 +252,45 @@ class BatchItem extends Model
         return $this->hasMany(OrderAllocation::class);
     }
 
+    /**
+     * Free stock per variant in ONE query — the bulk form of available_quantity
+     * for a list surface (/products, the sibling list) where reading the
+     * accessor per item would fire a SUM on every row.
+     *
+     * Mirrors ChilledRunController::stockByVariant(): allocatable() candidates,
+     * the reservation as units still OWED (quantity_allocated −
+     * quantity_fulfilled — a picked unit has already left quantity_remaining),
+     * then the same PHP predicates the allocator applies, so this figure can
+     * never promise more than auto-allocate would hand out. It is the seventh
+     * member of the free-stock invariant (see docs/planImp/TESTING_AND_FIXES.md) — change
+     * the expression here and in the other six together.
+     *
+     * @param  iterable<int>  $variantIds
+     * @return array<int, int> variant_id => free units (variants with none are absent)
+     */
+    public static function freeStockByVariant(iterable $variantIds): array
+    {
+        $ids = collect($variantIds)->unique()->values();
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        return static::allocatable()
+            ->whereIn('product_variant_id', $ids)
+            ->with('batch.product')
+            ->withSum(
+                'orderAllocations as reserved_units',
+                DB::raw('quantity_allocated - quantity_fulfilled')
+            )
+            ->get()
+            ->filter(fn (self $item) => $item->isReadyToSell() && ! $item->batch->isExpired())
+            ->groupBy('product_variant_id')
+            ->map(fn ($items) => (int) $items->sum(fn (self $item) => max(0, (int) $item->quantity_remaining
+                - (int) ($item->reserved_units ?? 0)
+                - (int) $item->quantity_maturing)))
+            ->all();
+    }
+
     public function getAvailableQuantityAttribute(): int
     {
         // Available = remaining - allocated but not yet fulfilled - maturing hold.
@@ -126,12 +303,23 @@ class BatchItem extends Model
      * Wheels that can be set aside for maturing: remaining stock minus what is
      * already reserved by unfulfilled orders (independent of the current hold).
      * Equals available_quantity + quantity_maturing.
+     *
+     * The reservation is `quantity_allocated - quantity_fulfilled` — the units
+     * still owed, NOT the whole allocation. A picked unit has already left
+     * `quantity_remaining`, so counting it here would subtract it twice and
+     * hide real stock from every allocation path. Do not re-add a
+     * `whereNull('fulfilled_at')` filter: a fully-fulfilled allocation
+     * contributes zero to this sum anyway, and on a short-closed line
+     * `releaseUnits()` leaves `fulfilled_at` null even though nothing is
+     * outstanding — which is exactly how that stock went missing permanently.
+     * Same expression as StockOverviewService, BatchController,
+     * CheeseCuttingController and CheeseConversionController; keep all of them
+     * and ChilledRunController::stockByVariant() in agreement.
      */
     public function getHoldableQuantityAttribute(): int
     {
-        $allocated = $this->orderAllocations()
-            ->whereNull('fulfilled_at')
-            ->sum('quantity_allocated');
+        $allocated = (int) $this->orderAllocations()
+            ->sum(DB::raw('quantity_allocated - quantity_fulfilled'));
 
         return max(0, $this->quantity_remaining - $allocated);
     }

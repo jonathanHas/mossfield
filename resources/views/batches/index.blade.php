@@ -10,26 +10,17 @@
         $typeOrder = ['milk', 'yoghurt', 'cheese'];
         $groupedBatches = $groupedBatches->sortBy(fn ($_, $type) => array_search($type, $typeOrder) === false ? 99 : array_search($type, $typeOrder));
 
+        // Per-variety totals of the wheel strip (BatchItem::wheelStates(),
+        // the one formula shared with the cards and /cheese-cutting).
         $wheelStatsFor = function ($batch) {
-            $stats = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
+            $stats = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold'], 0);
             foreach ($batch->batchItems as $item) {
-                if (! str_contains(strtolower($item->productVariant->name), 'wheel')) {
+                if (! $item->productVariant->isWheel()) {
                     continue;
                 }
-                $produced = (int) $item->quantity_produced;
-                $cut = (int) ($item->source_cutting_logs_count ?? 0);
-                $sold = max(0, $produced - (int) $item->quantity_remaining - $cut);
-                $remaining = max(0, $produced - $cut - $sold);
-                $allocated = max(0, min($remaining, (int) ($item->quantity_currently_allocated ?? 0)));
-                $free = max(0, $remaining - $allocated);
-                $maturing = min($free, (int) $item->quantity_maturing);
-                $free = max(0, $free - $maturing);
-                $stats['produced'] += $produced;
-                $stats['free'] += $free;
-                $stats['allocated'] += $allocated;
-                $stats['maturing'] += $maturing;
-                $stats['cut'] += $cut;
-                $stats['sold'] += $sold;
+                foreach ($item->wheelStates() as $k => $v) {
+                    $stats[$k] += $v;
+                }
             }
             return $stats;
         };
@@ -50,10 +41,6 @@
                 </a>
             @endcan
         </div>
-
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success">{{ session('success') }}</div>
-        @endif
 
         <div class="mf-panel mb-4">
             <form method="GET" action="{{ route('batches.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-3 p-4">
@@ -119,7 +106,7 @@
                             $subBatchCount = $subBatches->count();
                             $subWheelTotals = null;
                             if ($type === 'cheese') {
-                                $subWheelTotals = ['produced' => 0, 'free' => 0, 'allocated' => 0, 'maturing' => 0, 'cut' => 0, 'sold' => 0];
+                                $subWheelTotals = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold'], 0);
                                 foreach ($subBatches as $b) {
                                     $s = $wheelStatsFor($b);
                                     foreach ($subWheelTotals as $k => $v) {
@@ -138,32 +125,8 @@
                                         </svg>
                                         <h3 class="text-[14px] font-semibold">{{ $subLabel }}</h3>
                                         <span class="mf-tag mf-tag-warn">{{ $subBatchCount }} {{ Str::plural('batch', $subBatchCount) }}</span>
-                                        @if ($subWheelTotals && $subWheelTotals['produced'] > 0)
-                                            <span class="inline-flex items-center gap-2 text-[12px] ml-2" style="color: var(--muted);">
-                                                <span class="inline-flex items-center gap-1" title="Free in stock">
-                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-400 border border-yellow-600"></span>
-                                                    {{ $subWheelTotals['free'] }}
-                                                </span>
-                                                <span class="inline-flex items-center gap-1" title="Allocated to orders">
-                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500 border border-amber-700"></span>
-                                                    {{ $subWheelTotals['allocated'] }}
-                                                </span>
-                                                @if ($subWheelTotals['maturing'] > 0)
-                                                    <span class="inline-flex items-center gap-1" title="Set aside to mature">
-                                                        <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-maturing); border-color: oklch(0.42 0.11 56);"></span>
-                                                        {{ $subWheelTotals['maturing'] }}
-                                                    </span>
-                                                @endif
-                                                <span class="inline-flex items-center gap-1" title="Cut to vac packs">
-                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-400 border border-gray-600"></span>
-                                                    {{ $subWheelTotals['cut'] }}
-                                                </span>
-                                                <span class="inline-flex items-center gap-1" title="Whole wheels sold">
-                                                    <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-900 border border-black"></span>
-                                                    {{ $subWheelTotals['sold'] }}
-                                                </span>
-                                                <span style="color: var(--faint);">/ {{ $subWheelTotals['produced'] }} wheels</span>
-                                            </span>
+                                        @if ($subWheelTotals)
+                                            @include('batches.partials._wheel-legend', ['totals' => $subWheelTotals])
                                         @endif
                                     </div>
                                 </summary>

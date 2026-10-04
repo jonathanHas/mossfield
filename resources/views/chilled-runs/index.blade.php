@@ -43,6 +43,22 @@
                             </form>
                         @endcan
                     @endif
+                    @if ($sheet['dispatchableCount'] > 0)
+                        @can('create', App\Models\Order::class)
+                            <form method="POST" action="{{ route('chilled-runs.dispatch-all') }}"
+                                  onsubmit="return confirm('Dispatch {{ $sheet['dispatchableCount'] }} loaded {{ Str::plural('order', $sheet['dispatchableCount']) }}? Figures are frozen: invoices are issued for per-order customers and a dispatch confirmation is emailed to each shop. Invoices are sent from Finance.');">
+                                @csrf
+                                <input type="hidden" name="run" value="{{ $activeRun->id }}">
+                                <input type="hidden" name="date" value="{{ request('date') }}">
+                                <button type="submit" class="mf-btn-primary" data-confirm-unsaved>
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7" /><path d="M5.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM18.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" />
+                                    </svg>
+                                    Dispatch run ({{ $sheet['dispatchableCount'] }})
+                                </button>
+                            </form>
+                        @endcan
+                    @endif
                     <div class="flex items-center gap-2 font-mono text-[12px]" style="color: var(--muted);">
                         <a href="{{ route('chilled-runs.index', ['run' => $activeRun->id, 'date' => $weekAnchor->subWeek()->toDateString()]) }}"
                            data-confirm-unsaved class="mf-btn-ghost" title="Previous week">&larr;</a>
@@ -53,13 +69,6 @@
                 </div>
             @endif
         </div>
-
-        @if (session('success'))
-            <div class="mf-flash mf-flash-success mb-4">{{ session('success') }}</div>
-        @endif
-        @if (session('error'))
-            <div class="mf-flash mf-flash-error mb-4">{{ session('error') }}</div>
-        @endif
 
         @if ($runs->isEmpty())
             @include('chilled-runs.partials._empty')

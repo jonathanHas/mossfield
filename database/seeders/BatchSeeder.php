@@ -13,10 +13,13 @@ class BatchSeeder extends Seeder
 {
     public function run(): void
     {
-        $products = Product::with('variants')->get();
+        $products = static::products()->with('variants')->get();
 
         foreach ($products as $product) {
-            // Create 3-5 batches per product with different dates
+            // Create 3-5 batches per product with different dates. Everything
+            // random here comes from rand()/array_rand(), so a caller that
+            // wants a reproducible run can mt_srand() first
+            // (mossfield:reset-trading-data --seed=N does).
             for ($i = 0; $i < rand(3, 5); $i++) {
                 $productionDate = Carbon::now()->subDays(rand(1, 90));
 
@@ -65,6 +68,16 @@ class BatchSeeder extends Seeder
                 }
             }
         }
+    }
+
+    /**
+     * Products that get fresh batches. Mature cheese is never made fresh — it
+     * is reached by ageing Farmhouse wheels (see CheeseConversionController) —
+     * so no raw-milk batches are invented for it.
+     */
+    public static function products(): \Illuminate\Database\Eloquent\Builder
+    {
+        return Product::query()->where('name', '!=', 'Mossfield Mature Cheese');
     }
 
     private function getRawMilkQuantityByType(string $type): float

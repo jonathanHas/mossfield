@@ -8,12 +8,11 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * `/` is not a page: a closed system sends visitors to login (or, once
+     * signed in, the dashboard). The stock welcome view is gone.
      */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_root_url_sends_visitors_to_login(): void
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(200);
+        $this->get('/')->assertRedirect(route('login'));
     }
 }
