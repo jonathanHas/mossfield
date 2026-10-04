@@ -99,10 +99,11 @@ class DispatchRunTest extends TestCase
 
         $this->dispatchRun($run)
             ->assertRedirect()
-            ->assertSessionHas('success', function (string $m) {
-                return str_contains($m, '1 stop dispatched')
-                    && str_contains($m, 'Forgotten Shop (not loaded)')
-                    && str_contains($m, 'Slow Shop (not ready)');
+            ->assertSessionHas('success', function (string $m) use ($unloaded, $picking) {
+                // Per order, with every reason (cycle 4, F-32).
+                return str_contains($m, '1 order dispatched')
+                    && str_contains($m, $unloaded->order_number.' Forgotten Shop (not loaded)')
+                    && str_contains($m, $picking->order_number.' Slow Shop (not picked)');
             });
 
         $this->assertSame('dispatched', $loaded->fresh()->status);
@@ -111,13 +112,26 @@ class DispatchRunTest extends TestCase
         $this->assertSame('preparing', $picking->fresh()->status);
     }
 
+    public function test_a_skipped_order_lists_every_reason_and_the_loaded_flash_names_the_order(): void
+    {
+        $run = $this->makeRun();
+        $this->orderFor($this->customerOnRun($run, 'Loaded Shop', 1));
+        $both = $this->orderFor($this->customerOnRun($run, 'An Tairseach', 2), status: 'preparing', loaded: false);
+
+        $this->dispatchRun($run)->assertSessionHas('success', fn ($m) => str_contains($m, 'skipped: '.$both->order_number.' An Tairseach (not picked, not loaded)'));
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('chilled-runs.toggle-loaded', $both), ['run' => $run->id])
+            ->assertSessionHas('success', 'An Tairseach · '.$both->order_number.' marked loaded.');
+    }
+
     public function test_per_order_customers_get_an_invoice_and_consolidated_ones_do_not(): void
     {
         $run = $this->makeRun();
         $perOrder = $this->orderFor($this->customerOnRun($run, 'Corner Shop', 1));
         $weekly = $this->orderFor($this->customerOnRun($run, 'Weekly Wholesaler', 2, ['invoicing_mode' => 'weekly']));
 
-        $this->dispatchRun($run)->assertSessionHas('success', fn ($m) => str_contains($m, '2 stops dispatched') && str_contains($m, '1 invoice issued'));
+        $this->dispatchRun($run)->assertSessionHas('success', fn ($m) => str_contains($m, '2 orders dispatched') && str_contains($m, '1 invoice issued'));
 
         $this->assertSame(1, Invoice::count());
         $this->assertNotNull($perOrder->fresh()->invoice_id);
@@ -170,7 +184,7 @@ class DispatchRunTest extends TestCase
             $mock->shouldReceive('issueForOrder')->andThrow(new \App\Services\InvoicingException('Numbering broke'));
         });
 
-        $this->dispatchRun($run)->assertSessionHas('success', fn ($m) => str_contains($m, '1 stop dispatched') && str_contains($m, 'invoice failed'));
+        $this->dispatchRun($run)->assertSessionHas('success', fn ($m) => str_contains($m, '1 order dispatched') && str_contains($m, 'invoice failed'));
 
         $order->refresh();
         $this->assertSame('dispatched', $order->status);

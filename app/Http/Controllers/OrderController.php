@@ -227,7 +227,33 @@ class OrderController extends Controller
             ],
         ]);
 
-        return view('orders.create', compact('customers', 'productVariants', 'customerPrices', 'customerCharges'));
+        // Option labels follow the customer too: the special price in the
+        // same units as price_label (€/unit or €/kg).
+        $customerPriceLabels = $customers->mapWithKeys(fn (Customer $customer) => [
+            $customer->id => $customer->specialPrices
+                ->filter(fn ($special) => $special->productVariant?->is_active)
+                ->mapWithKeys(fn ($special) => [
+                    $special->product_variant_id => '€'.number_format((float) $special->price, 2)
+                        .($special->productVariant->is_priced_by_weight ? '/kg' : ''),
+                ]),
+        ])->filter(fn ($labels) => $labels->isNotEmpty());
+
+        // Delivery date default: the customer's next run date (this week's if
+        // it hasn't passed, else next week's; whole-week runs → week start).
+        $customerRunDates = $customers
+            ->filter(fn (Customer $customer) => $customer->deliveryRun !== null)
+            ->mapWithKeys(function (Customer $customer) {
+                $date = $customer->deliveryRun->dateFor(now());
+                if ($date->lt(today())) {
+                    $date = $customer->deliveryRun->dateFor(now()->addWeek());
+                }
+
+                return [$customer->id => $date->toDateString()];
+            });
+
+        return view('orders.create', compact(
+            'customers', 'productVariants', 'customerPrices', 'customerCharges', 'customerPriceLabels', 'customerRunDates'
+        ));
     }
 
     /**
@@ -274,6 +300,17 @@ class OrderController extends Controller
             'items.*.product_variant_id' => 'product',
             'items.*.quantity' => 'quantity',
         ]);
+
+        // The same variant twice becomes one line with the summed quantity —
+        // the rule storeItem() already applies (F-23).
+        $validated['items'] = collect($validated['items'])
+            ->groupBy(fn ($item) => (int) $item['product_variant_id'])
+            ->map(fn ($rows, $variantId) => [
+                'product_variant_id' => $variantId,
+                'quantity' => (int) $rows->sum(fn ($row) => (int) $row['quantity']),
+            ])
+            ->values()
+            ->all();
 
         $order = DB::transaction(function () use ($validated) {
             // Price lines at the customer's rate and snapshot their delivery
@@ -369,6 +406,7 @@ class OrderController extends Controller
         }
 
         $isCancelling = $validated['status'] === 'cancelled' && $order->status !== 'cancelled';
+        $isConfirming = $order->status === 'pending' && $validated['status'] === 'confirmed';
         $releasedUnits = 0;
 
         DB::transaction(function () use ($order, $validated, $isCancelling, &$releasedUnits) {
@@ -391,7 +429,7 @@ class OrderController extends Controller
             }
         });
 
-        $message = 'Order updated successfully.';
+        $message = $isConfirming ? 'Order confirmed.' : 'Order updated successfully.';
         if ($isCancelling) {
             $message = $releasedUnits > 0
                 ? 'Order cancelled. Reserved and picked stock has been returned to its batch.'
@@ -489,8 +527,10 @@ class OrderController extends Controller
 
         $validated = $request->validate([
             'product_variant_id' => 'required|exists:product_variants,id',
-            'quantity' => 'required|integer|min:1',
+            'quantity' => 'nullable|integer|min:1',
         ]);
+        // The box is blank with a placeholder of 1 (F-22); blank means 1.
+        $validated['quantity'] = (int) ($validated['quantity'] ?? 1);
 
         DB::transaction(function () use ($order, $validated) {
             $variant = ProductVariant::findOrFail($validated['product_variant_id']);
@@ -512,7 +552,9 @@ class OrderController extends Controller
             }
         });
 
-        return redirect()->route('orders.show', $order)
+        $lineId = $order->orderItems()->where('product_variant_id', $validated['product_variant_id'])->value('id');
+
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$lineId)
             ->with('success', 'Item added to order.');
     }
 
@@ -545,7 +587,7 @@ class OrderController extends Controller
         $oldQty = (int) $orderItem->quantity_ordered;
 
         if ($newQty === $oldQty) {
-            return redirect()->route('orders.show', $order)->with('success', 'No change to quantity.');
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)->with('success', 'No change to quantity.');
         }
 
         DB::transaction(function () use ($order, $orderItem, $newQty) {
@@ -556,7 +598,7 @@ class OrderController extends Controller
             $order->reconcilePickingStatus();
         });
 
-        return redirect()->route('orders.show', $order)
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
             ->with('success', 'Item quantity updated.');
     }
 
@@ -598,7 +640,8 @@ class OrderController extends Controller
             $order->reconcilePickingStatus();
         });
 
-        return redirect()->route('orders.show', $order)
+        // The line is gone; land on the items panel it was in.
+        return redirect()->route('orders.show', $order)->withFragment('order-items')
             ->with('success', 'Item removed. Any picked stock has been returned to its batch.');
     }
 
@@ -624,7 +667,7 @@ class OrderController extends Controller
         }
 
         if ($orderItem->isFullyFulfilled()) {
-            return redirect()->route('orders.show', $order)
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
                 ->with('error', 'That line is already fully fulfilled — nothing to mark short.');
         }
 
@@ -637,7 +680,7 @@ class OrderController extends Controller
             $order->reconcilePickingStatus();
         });
 
-        return redirect()->route('orders.show', $order)
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
             ->with('success', "Line closed short — {$shortQty} units released back to stock, not supplied and not billed.");
     }
 
@@ -666,7 +709,7 @@ class OrderController extends Controller
             $order->reconcilePickingStatus();
         });
 
-        return redirect()->route('orders.show', $order)
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
             ->with('success', 'Line reopened — it needs picking again.');
     }
 }

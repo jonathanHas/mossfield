@@ -180,4 +180,20 @@ class ConsolidatedInvoiceTest extends InvoicingTestCase
         $this->assertSame(1, substr_count($html, 'PO-BBB'));
         $this->assertStringNotContainsString('Your ref:', $html, 'the per-order header line is for per-order invoices');
     }
+
+    public function test_this_week_is_a_shortcut_with_monday_to_sunday_bounds(): void
+    {
+        $office = \App\Models\User::factory()->create();
+
+        $this->actingAs($office)->get(route('invoicing.consolidated.create', ['period' => 'this_week']))
+            ->assertOk()
+            ->assertViewHas('period', 'this_week')
+            ->assertViewHas('start', fn ($start) => $start->equalTo(today()->startOfWeek()) && $start->isMonday())
+            ->assertViewHas('end', fn ($end) => $end->toDateString() === today()->endOfWeek()->toDateString() && $end->isSunday())
+            ->assertSee(route('invoicing.consolidated.create', ['period' => 'this_week']), false);
+
+        // The default stays last month.
+        $this->actingAs($office)->get(route('invoicing.consolidated.create'))
+            ->assertViewHas('period', 'last_month');
+    }
 }

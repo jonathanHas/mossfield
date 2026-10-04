@@ -90,6 +90,101 @@ baseline.
 
 ---
 
+## 2026-10-04 — Friction (Plan/Implement cycle 4)
+
+**Scope:** the S3 findings from the end-to-end run plus the cycle-3
+follow-ons — the places where the screen misled or cost the operator effort
+though the arithmetic underneath was right. Twelve steps, all landed, each
+with tests and real-input browser checks. Suite afterwards: **598 passed, 0
+failed** (+41).
+
+### What changed, by finding
+
+- **Expired stock is visible (F-01, F-02, F-07).** The dashboard's "ready
+  now" now means sellable (matured, not expired by the strict rule, with
+  stock); an **Expired stock** tile (batches · units) links to
+  `/batches?status=expired`, which now also matches active batches past
+  expiry (every expired batch in dev was still `status=active`). `/stock`
+  cards carry an `expired` summary from one grouped query
+  (`StockOverviewService::expiredByType()`): "No sellable milk." + "4 expired
+  batches still hold 4,437 units — see Batches." The batch form says so when
+  a product has no shelf life; the batch page prints "None — stays sellable
+  until sold". `DashboardTest` (new), `StockOverviewTest`, `BatchCreateTest`.
+- **The picking queue shows one day (F-30).** `PickingController::index()`
+  partitions `ready` orders dated before today into a collapsed "Ready,
+  awaiting dispatch — N orders from earlier days" bucket (the office's to
+  dispatch); the rest is one day at a time — `?date=`, else today, else the
+  nearest future day, else the latest past day — with ◀ ▶ and the strip
+  counting that day only. `confirmed`/`preparing` orders with past dates stay
+  selectable: they still need picking. `PickingTest`.
+- **Picking ergonomics (F-31 + cycle-3 note).** Skip cycles forward and
+  wraps; stepper `−`/`+` disable at the limits; the short button clears the
+  footer; a `weight_kg` of 0 means no expected-weight thresholds on either
+  surface (the server's rule). `PickingTest`.
+- **Partial mature release (F-13).** "Release [n] of N" — a number input
+  bound to the sibling release form by `form=`, confirm text rewritten live,
+  the button disabled with "Save maturing first" while the zone has unsaved
+  moves. `CheeseConversionTest`.
+- **Order line controls (F-21, F-22, F-23).** The allocation row's box is
+  labelled **Pick** and Fulfil asks ("Record a pick of N × … from batch …?");
+  the line's box is **Ordered:**; Add item's quantity is blank with a
+  placeholder (blank = 1); `store()` merges the same variant into one line
+  like `storeItem()` does. `OrderAddItemTest`, `OrderStoreOptionalFieldsTest`.
+- **The order page as one tool (F-26, F-20 note).** Every line/allocation
+  action redirects `->withFragment('line-{id}')` (`#order-items` after a
+  removal) and rows carry `id="line-{id}" class="scroll-mt-20"`; the create
+  form defaults the delivery date to the customer's next run day and
+  relabels options with the customer's special price (`€1.25 · special`);
+  `tabindex=-1` on Line total; "Order confirmed."; sibling age from
+  `created_at` and summaries name the variant. `OrderItemEditTest`,
+  `OrderTransitionsTest` (15 redirect assertions tightened to the fragment).
+- **Office forms land where the work is (F-16, F-28).** Customer create →
+  the customer; delete keeps the search; special prices → `#special-prices`
+  and the picker omits already-priced variants; run assign/toggle →
+  `#stop-{id}`, unassign → `#run-{id}`; the sheet editor has a **Notes**
+  textarea (dirty-tracked) and saves land on `#stop-{id}`.
+  `CustomerSpecialPriceTest`, `ChilledRunTest`.
+- **Reordering a run is one form (F-15, F-18).** Position boxes + one Save
+  order posting `positions` (id ⇒ wanted position); ↑/↓ post `move`
+  (customer, direction) — exactly one shape per request, every id must be on
+  the run. A stop given a new position is taken out and re-inserted there
+  (so "17" on 17 stops means last — a plain sort would have left it 16th);
+  the page lands on the stop that was moved. A percent-charge stop shows
+  "5 % of order value" instead of a misleading toggle. `ChilledRunTest`.
+- **Dispatch and loaded flashes (F-32, F-34).** "N orders dispatched ·
+  skipped: ORD-… Shop (not picked, not loaded)" — per order, every reason;
+  the loaded tick names the order; an invoiced order shows "On invoice INV-…
+  — void it to edit" instead of Edit. `DispatchRunTest`, `OrderTransitionsTest`.
+- **Finance defaults and messages (F-37, F-38, F-41, cycle-3 note).** A
+  disabled Void names what blocks it ("remove its payments (1) and credit
+  note (CN-…) first"); a **This week** consolidated shortcut; statement
+  preview defaults to this month to date; "€X in credit" never "€-X";
+  allocate refusals say "already fully allocated (N of N)" or "only N
+  available in this batch"; a refused payment keeps its manual split.
+  `InvoiceVoidTest`, `ConsolidatedInvoiceTest`, `StatementTest`,
+  `PaymentAllocationTest`, `OrderAllocationConcurrencyTest`.
+- **Error pages lead home (F-41).** `resources/views/errors/{layout,404,403}`:
+  standalone, one link — factory → `/picking`, signed-in → dashboard, guest →
+  login; the request path in mono; JSON requests still get JSON.
+  `ErrorPagesTest` (new). Known limit: an *unmatched* URL 404s before the
+  `web` group runs, so a signed-in user sees "Sign in" (which then forwards
+  them home) — cycle 5 adds a `Route::fallback()` inside the group.
+
+### Invariants worth keeping
+
+- **Line, stop and panel actions redirect to the element they edited**
+  (`->withFragment(...)`); status-level actions to the top. The element needs
+  an `id` and `scroll-mt-20`. The flash then renders out of view — cycle 5.
+- **Expiry is strict and "expired" is a view of active batches**, not a
+  status: `?status=expired`, the tile and the card notes all read
+  `status=active AND expiry_date <= today AND quantity_remaining > 0`.
+- **The picking queue never hides work**: only `ready` orders go to the stale
+  bucket.
+- **`reorder()` takes `positions` (id ⇒ position) xor `move`**; the old
+  `positions[]` list shape is gone.
+
+---
+
 ## 2026-10-04 — Money and state (Plan/Implement cycle 3)
 
 **Scope:** the eight end-to-end findings that could write wrong money or wrong

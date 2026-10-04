@@ -376,6 +376,118 @@ class PickingTest extends TestCase
         $response->assertDontSee($dispatched->order_number);
     }
 
+    private function orderFor($deliveryDate, int $qty, string $status = 'confirmed'): Order
+    {
+        [$order] = $this->orderWithItem($this->variant(), $qty, $status);
+        $order->update(['delivery_date' => $deliveryDate]);
+
+        return $order;
+    }
+
+    public function test_queue_shows_one_day_and_parks_old_ready_orders(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $tuesday = today()->next('Tuesday');
+        $july = $this->orderFor(today()->subMonths(3), 4, 'ready');
+        $a = $this->orderFor($tuesday, 3);
+        $b = $this->orderFor($tuesday, 5);
+        $later = $this->orderFor($tuesday->copy()->addDays(2), 7);
+
+        $response = $this->actingAs($factory)->get(route('picking.index'))->assertOk();
+        $response->assertViewHas('selected', $tuesday->toDateString());
+        $response->assertViewHas('totalUnits', 8);
+        $response->assertSee($a->order_number);
+        $response->assertSee($b->order_number);
+        $response->assertDontSee($later->order_number);
+        // The July order is in the stale bucket, not a selectable day.
+        $response->assertViewHas('stale', fn ($stale) => $stale->pluck('id')->all() === [$july->id]);
+        $response->assertSeeInOrder(['Ready, awaiting dispatch — 1 order from earlier days', $july->order_number]);
+        $response->assertSee(route('picking.index', ['date' => $later->delivery_date->toDateString()]), false);
+
+        // ?date= switches days.
+        $this->actingAs($factory)->get(route('picking.index', ['date' => $later->delivery_date->toDateString()]))
+            ->assertOk()
+            ->assertViewHas('totalUnits', 7)
+            ->assertSee($later->order_number)
+            ->assertDontSee($a->order_number);
+    }
+
+    public function test_a_past_order_still_to_pick_stays_a_selectable_day(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $past = today()->subDays(5);
+        $late = $this->orderFor($past, 2, 'preparing');
+        $this->orderFor(today()->addDay(), 1);
+
+        // Default goes forward to tomorrow…
+        $this->actingAs($factory)->get(route('picking.index'))
+            ->assertOk()
+            ->assertViewHas('selected', today()->addDay()->toDateString())
+            ->assertViewHas('stale', fn ($stale) => $stale->isEmpty())
+            ->assertSee(route('picking.index', ['date' => $past->toDateString()]), false);
+
+        // …and the late preparing order is one click back.
+        $this->actingAs($factory)->get(route('picking.index', ['date' => $past->toDateString()]))
+            ->assertOk()
+            ->assertSee($late->order_number);
+    }
+
+    public function test_queue_defaults_to_today_when_today_has_work(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $today = $this->orderFor(today(), 1);
+        $this->orderFor(today()->addDay(), 1);
+
+        $this->actingAs($factory)->get(route('picking.index'))
+            ->assertOk()
+            ->assertViewHas('selected', today()->toDateString())
+            ->assertSee($today->order_number);
+    }
+
+    public function test_skip_walks_forward_and_wraps(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        [$order, $one] = $this->orderWithItem($this->variant(), 1);
+        $two = $order->orderItems()->create(['product_variant_id' => $this->variant()->id, 'quantity_ordered' => 1, 'unit_price' => 10]);
+        $three = $order->orderItems()->create(['product_variant_id' => $this->variant()->id, 'quantity_ordered' => 1, 'unit_price' => 10]);
+
+        $this->actingAs($factory)->get(route('picking.item', [$order, $two]))
+            ->assertOk()
+            ->assertViewHas('skipTo', fn ($item) => $item->id === $three->id);
+
+        $this->actingAs($factory)->get(route('picking.item', [$order, $three]))
+            ->assertOk()
+            ->assertViewHas('skipTo', fn ($item) => $item->id === $one->id);
+    }
+
+    public function test_stepper_buttons_disable_at_their_limits(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $variant = $this->variant();
+        [$order, $item] = $this->orderWithItem($variant, 3);
+        // Matured, so the stepper (not the no-stock dead end) renders.
+        $this->batchItem($variant)->batch->forceFill(['ready_date' => now()->subDay()])->saveQuietly();
+
+        $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
+            ->assertOk()
+            ->assertSee(':disabled="qty >= maxQty"', false)
+            ->assertSee(':disabled="qty <= 1"', false);
+    }
+
+    public function test_a_zero_nominal_weight_gives_no_check_threshold(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $variant = $this->variant(['weight_kg' => 0, 'is_variable_weight' => true]);
+        [$order, $item] = $this->orderWithItem($variant, 1);
+        $this->batchItem($variant)->batch->forceFill(['ready_date' => now()->subDay()])->saveQuietly();
+
+        $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
+            ->assertOk()
+            ->assertSee('weigh each one')
+            ->assertDontSee('Check</span>', false)
+            ->assertDontSee('expected ~');
+    }
+
     public function test_orders_outside_the_queue_bounce_back_to_index(): void
     {
         $factory = User::factory()->factoryWorker()->create();

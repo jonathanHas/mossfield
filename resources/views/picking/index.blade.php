@@ -19,32 +19,41 @@
 
         $pct = $totalUnits > 0 ? round($pickedUnits / $totalUnits * 100) : 0;
 
-        // Header label for a delivery-date group (capitalised; undated bucket last).
-        $groupLabel = function ($order) {
-            if (! $order->delivery_date) {
-                return 'No delivery date';
-            }
-            if ($order->delivery_date->isToday()) {
+        // Label for a queue day key (Y-m-d, or 'none' for undated orders).
+        $dayLabel = function (?string $day) {
+            if ($day === null) {
                 return 'Today';
             }
-            if ($order->delivery_date->isTomorrow()) {
+            if ($day === 'none') {
+                return 'No delivery date';
+            }
+            $date = \Illuminate\Support\Carbon::parse($day);
+            if ($date->isToday()) {
+                return 'Today';
+            }
+            if ($date->isTomorrow()) {
                 return 'Tomorrow';
             }
 
-            return $order->delivery_date->format('D j M');
+            return $date->format('D j M');
         };
-
-        // Bucket the (already delivery-date-sorted) queue by date — groupBy keeps
-        // key insertion order, so groups render earliest-first with undated last.
-        $groups = $classified->groupBy(fn ($row) => $row['order']->delivery_date?->toDateString() ?? 'none');
     @endphp
 
     <div style="padding: 18px 18px 12px;" class="flex items-start justify-between gap-3">
         <div>
             <div class="mf-eyebrow">{{ now()->format('l · j M') }}</div>
-            <h1 class="font-display" style="font-size: 24px; font-weight: 500; letter-spacing: -0.5px; margin: 4px 0 0; font-family: Fraunces, Georgia, serif;">
-                Today
-            </h1>
+            {{-- One delivery day at a time (F-30); ◀ ▶ step through the days with work. --}}
+            <div class="flex items-center gap-2" style="margin: 4px 0 0;">
+                @if ($prevDay)
+                    <a href="{{ route('picking.index', ['date' => $prevDay]) }}" class="mob-day-nav" title="{{ $dayLabel($prevDay) }}" aria-label="Previous day: {{ $dayLabel($prevDay) }}">◀</a>
+                @endif
+                <h1 class="font-display" style="font-size: 24px; font-weight: 500; letter-spacing: -0.5px; margin: 0; font-family: Fraunces, Georgia, serif;">
+                    {{ $dayLabel($selected) }}
+                </h1>
+                @if ($nextDay)
+                    <a href="{{ route('picking.index', ['date' => $nextDay]) }}" class="mob-day-nav" title="{{ $dayLabel($nextDay) }}" aria-label="Next day: {{ $dayLabel($nextDay) }}">▶</a>
+                @endif
+            </div>
             <div class="flex items-center gap-1.5 mt-2 flex-wrap">
                 <span class="mf-tag mf-tag-accent"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>{{ $readyCount }} ready</span>
                 <span class="mf-tag mf-tag-info"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>{{ $pickingCount }} picking</span>
@@ -83,12 +92,8 @@
         </div>
     @else
         @php $rowNum = 0; @endphp
-        @foreach ($groups as $group)
-            <div class="mob-section-label" style="padding: 6px 22px 6px;">
-                {{ $groupLabel($group->first()['order']) }} · {{ $group->count() }}
-            </div>
             <div style="background: var(--panel); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);">
-                @foreach ($group as $groupIndex => $row)
+                @foreach ($classified->values() as $groupIndex => $row)
                     @php
                         $order = $row['order'];
                         $rowNum++;
@@ -132,7 +137,25 @@
                     </a>
                 @endforeach
             </div>
-        @endforeach
+    @endif
+
+    {{-- Ready orders from earlier days: the office's to dispatch, not the floor's to pick. --}}
+    @if ($stale->isNotEmpty())
+        <div class="mob-section" style="padding-top: 14px;">
+            <details class="mob-card" data-stale-bucket>
+                <summary style="cursor: pointer; font-size: 13.5px; color: var(--ink-2);">
+                    Ready, awaiting dispatch — {{ $stale->count() }} {{ Str::plural('order', $stale->count()) }} from earlier days
+                </summary>
+                <div style="margin-top: 8px;">
+                    @foreach ($stale as $order)
+                        <a href="{{ route('picking.show', $order) }}" class="block no-underline font-mono"
+                           style="padding: 8px 0; font-size: 12px; color: var(--ink-2); {{ $loop->first ? '' : 'border-top: 1px solid var(--line-2);' }}">
+                            {{ $order->order_number }} · <span style="font-family: inherit;">{{ $order->customer->name }}</span> · {{ $order->delivery_date->format('j M') }}
+                        </a>
+                    @endforeach
+                </div>
+            </details>
+        </div>
     @endif
 
     @if ($continueTo)

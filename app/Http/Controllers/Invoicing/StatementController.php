@@ -129,7 +129,8 @@ class StatementController extends Controller
             ];
         }
 
-        // Default to the last complete month — the period a month-end run covers.
-        return [today()->subMonth()->startOfMonth(), today()->subMonth()->endOfMonth()];
+        // Default to this month to date — what the office asks for when a
+        // customer rings (F-38). The month-end batch run picks its own period.
+        return [today()->startOfMonth(), today()];
     }
 }

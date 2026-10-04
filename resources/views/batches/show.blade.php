@@ -104,15 +104,17 @@
                     @endif
                 </div>
                 @endif
-                @if($batch->expiry_date)
                 <div>
                     <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Expiry date</dt>
-                    <dd class="mt-0.5 font-mono">{{ $batch->expiry_date->format('d/m/Y') }}</dd>
-                    @if($batch->isExpired())
-                        <div class="text-[11.5px] mt-0.5" style="color: var(--danger);">Expired</div>
+                    @if($batch->expiry_date)
+                        <dd class="mt-0.5 font-mono">{{ $batch->expiry_date->format('d/m/Y') }}</dd>
+                        @if($batch->isExpired())
+                            <div class="text-[11.5px] mt-0.5" style="color: var(--danger);">Expired</div>
+                        @endif
+                    @else
+                        <dd class="mt-0.5" style="color: var(--muted);">None — stays sellable until sold</dd>
                     @endif
                 </div>
-                @endif
                 <div>
                     <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Stock remaining</dt>
                     <dd class="mt-0.5 font-mono font-semibold text-[15px]" style="color: {{ $batch->remaining_stock > 0 ? 'var(--accent-ink)' : 'var(--danger)' }};">

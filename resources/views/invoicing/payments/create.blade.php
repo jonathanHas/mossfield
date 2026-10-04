@@ -40,7 +40,7 @@
             @endphp
 
             <form method="POST" action="{{ route('invoicing.payments.store') }}"
-                  x-data="paymentForm({{ Illuminate\Support\Js::from($invoiceData) }}, @js((string) old('amount', '')))">
+                  x-data="paymentForm({{ Illuminate\Support\Js::from($invoiceData) }}, @js((string) old('amount', '')), @js((object) array_filter((array) old('allocations', []), fn ($v) => $v !== null && $v !== '')))">
                 @csrf
                 <input type="hidden" name="customer_id" value="{{ $customer->id }}">
                 <input type="hidden" name="form_token" value="{{ old('form_token', $formToken) }}">
@@ -172,12 +172,15 @@
                    the split exceeds the payment. Unless the operator has edited an
                    Apply box, the amount is applied oldest-first as it's typed, so
                    a payment isn't left sitting as credit by default (E2E F-36). */
-                function paymentForm(invoices, initialAmount) {
+                function paymentForm(invoices, initialAmount, initialAllocations) {
+                    // After a refused submit, old('allocations') is the operator's
+                    // own split — keep it, and keep auto-fill off it.
+                    const restored = Object.keys(initialAllocations || {}).length > 0;
                     return {
                         invoices,
                         amount: initialAmount ?? '',
-                        allocations: {},
-                        allocationsTouched: false,
+                        allocations: restored ? { ...initialAllocations } : {},
+                        allocationsTouched: restored,
                         init() {
                             this.$watch('amount', () => {
                                 if (! this.allocationsTouched) {

@@ -102,7 +102,7 @@ class OrderFulfillmentWeightTest extends TestCase
             ->post(route('order-allocations.fulfill', $alloc), [
                 'quantity' => 4,
                 'actual_weight_kg' => 2.000,
-            ])->assertRedirect(route('orders.show', $order));
+            ])->assertRedirect(route('orders.show', $order).'#line-'.$alloc->order_item_id);
 
         $this->assertSame('2.000', (string) $alloc->fresh()->actual_weight_kg);
         $this->assertSame('2.000', (string) $item->fresh()->weight_fulfilled_kg);
@@ -149,7 +149,7 @@ class OrderFulfillmentWeightTest extends TestCase
             ->post(route('order-allocations.fulfill', $alloc), [
                 'quantity' => 2,
                 'weights' => [2.600, 2.600],
-            ])->assertRedirect(route('orders.show', $order));
+            ])->assertRedirect(route('orders.show', $order).'#line-'.$alloc->order_item_id);
 
         $this->assertSame('5.200', (string) $item->fresh()->weight_fulfilled_kg);
         $this->assertSame('72.80', (string) $item->fresh()->fulfilled_total); // 5.2 × €14

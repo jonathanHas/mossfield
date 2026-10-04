@@ -1,6 +1,6 @@
 # Friction: the S3 findings from the end-to-end run
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
@@ -509,4 +509,66 @@ Check: `grep -n "withFragment\|stale bucket\|positions\b.*move\|errors/" CLAUDE.
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-04 against `implemented.md` (Status: DONE, 712 lines, read to
+the end) and the full diff of the ten controllers/services, the new views and
+the two view families with the most logic (release control, line controls).
+Planner reran: `php artisan test` → **598 passed, 0 failed** (+41);
+`pint --test app tests database routes` → PASS 264 files; `npm run build` ok;
+`grep 'name="positions[]"' resources/views` → none; dev DB: orders 21 (19 +
+two cancelled cycle-4 probes), payments 4, invoices 7, run #1 positions 1…17,
+G010426 item 46 `held=1 remaining=7` (the step-4 release the plan asked for).
+
+### Criteria — all twelve pass
+
+1 Expired stock: dashboard "ready now" strict + has-stock; `expiredCount/Units`
+from one join; `/stock` cards get `expired` from one grouped query; hints on
+batch create/show; **plus** `?status=expired` widened so the tile's link isn't
+empty (deviation 2 — right call, pinned). 2 One-day queue: `partition` stale
+`ready`-before-today; `selectDay()` ?date → today → nearest future → latest
+past → undated; strip counts the day; `$nextOrder` prefers the same day.
+3 Skip cycles (`slice($position)->concat(take($position−1))`), stepper
+disabled at limits, `$expWeight` null when nominal ≤ 0 (both surfaces).
+4 Partial release: number input bound by `form=`, dynamic `data-confirm`,
+`:disabled` while the zone is dirty with a hint. 5 Pick/Ordered labels, Fulfil
+asks ("Record a pick of N × … from batch …" rewritten live), Add item blank →
+1, `store()` merges variants. 6 Fragments on every line action (`#order-items`
+after a removal — right, the line is gone), run-date default, `tabindex=-1`,
+"Order confirmed.", `created_at` age, `picker_label` summaries, special-price
+option labels. 7 Customer create → show; delete keeps filters via the form
+action; special prices → `#special-prices` and the select omits priced
+variants; run actions → `#stop-{id}` (`#run-{id}` after unassign); sheet
+Notes textarea with dirty tracking. 8 `positions` (id ⇒ position) xor `move`,
+unknown id refused, re-insert semantics, lands on the moved stop; percent tag.
+9 Per-order skipped list with both reasons; loaded flash names the order;
+invoiced orders lose Edit. 10 Void blocker named; This week link (the period
+already existed); statement defaults this month; "in credit" on both figures;
+two specific allocate refusals; old allocations restored. 11 Standalone error
+layout with one home link; JSON 404 untouched. 12 Docs present.
+
+### Deviations — all accepted
+
+1 baseline; 2 expired filter widened; 3 extra partial; 4 the fifteen redirect
+assertions and the other adapted tests follow behaviour the plan changed —
+the new assertions are stricter, not looser; 5 container fragments when the
+element is gone; **6 and 7 corrected the plan** (see above); 8 filter carried
+in the delete form's action; 9 Dispatch run not pressed — right, it would
+issue real invoices in dev and `DispatchRunTest` pins the text; 10–12 fine.
+
+### Notes for Planner — decisions
+
+- Flash out of view after a fragment redirect → **cycle 5**: a transient
+  inline "✓ saved" mark on the target element (or render the flash region
+  sticky). Known from this plan's Risks.
+- Sheet `<tr>`s lack `scroll-mt` → **cycle 5**, one line.
+- Unmatched-URL 404 shows "Sign in" to a signed-in user → **cycle 5**:
+  `Route::fallback()` inside the `web` group so the session loads; keep the
+  JSON behaviour.
+- Step-4 release moved dev stock → **keep** (recorded in `RESUME.md`).
+- Footer height → nothing to do.
+- Harness `<select>` keyboard quirk → `handoff/REPORT.md` for the browser
+  session.
+- `allocate()` third message ("Only N more needed on this line") → **cycle 5**.
+- `reorder()` unknown-id flash vs validation error → fine as is.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-friction`
+and move `plan.md` + `implemented.md` there.

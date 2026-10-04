@@ -468,6 +468,25 @@
     cursor: pointer;
     flex-shrink: 0;
 }
+.mob-step-btn[disabled] {
+    opacity: .4;
+    cursor: default;
+}
+
+/* Queue day switcher (◀ Tue 6 Oct ▶) */
+.mob-day-nav {
+    width: 30px;
+    height: 30px;
+    border-radius: 15px;
+    border: 1px solid var(--line);
+    background: var(--panel);
+    color: var(--ink-2);
+    display: grid;
+    place-items: center;
+    font-size: 11px;
+    text-decoration: none;
+    flex-shrink: 0;
+}
 
 /* ─── Chilled run sheet ───
    Ported from the fulfilment design handoff (mf.css). Desktop run-sheet

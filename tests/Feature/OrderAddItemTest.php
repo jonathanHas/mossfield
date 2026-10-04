@@ -96,14 +96,15 @@ class OrderAddItemTest extends TestCase
         $office = User::factory()->create();
         $order = $this->makeOrder('ready'); // 5 × €2 = €10
 
-        $this->actingAs($office)
+        $response = $this->actingAs($office)
             ->post(route('orders.items.store', $order), [
                 'product_variant_id' => $this->variantB->id,
                 'quantity' => 2, // 2 × €3 = €6
-            ])
-            ->assertRedirect(route('orders.show', $order));
+            ]);
 
         $order->refresh()->load('orderItems');
+        // Lands on the new line (cycle 4).
+        $response->assertRedirect(route('orders.show', $order).'#line-'.$order->orderItems->firstWhere('product_variant_id', $this->variantB->id)->id);
         $this->assertCount(2, $order->orderItems);
         $this->assertSame('preparing', $order->status);
         $this->assertSame('16.00', (string) $order->total_amount);
@@ -119,7 +120,7 @@ class OrderAddItemTest extends TestCase
                 'product_variant_id' => $this->variantA->id,
                 'quantity' => 3,
             ])
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#line-'.$order->orderItems->first()->id);
 
         $order->refresh()->load('orderItems');
         $this->assertCount(1, $order->orderItems, 'Merged into the existing line, no duplicate row.');
@@ -136,7 +137,7 @@ class OrderAddItemTest extends TestCase
             ->post(route('orders.items.store', $order), [
                 'product_variant_id' => $this->variantB->id,
                 'quantity' => 1,
-            ])->assertRedirect(route('orders.show', $order));
+            ])->assertRedirectContains(route('orders.show', $order).'#line-');
 
         $this->assertSame('confirmed', $order->fresh()->status);
     }
@@ -188,5 +189,48 @@ class OrderAddItemTest extends TestCase
             ->get(route('orders.show', $delivered))
             ->assertOk()
             ->assertDontSee(route('orders.items.store', $delivered));
+    }
+
+    public function test_add_item_quantity_starts_blank_and_blank_means_one(): void
+    {
+        $office = User::factory()->create();
+        $order = $this->makeOrder('confirmed');
+
+        $html = $this->actingAs($office)->get(route('orders.show', $order))->assertOk()->getContent();
+        $this->assertMatchesRegularExpression('/id="add_quantity"[^>]*placeholder="1"/', $html);
+        $this->assertDoesNotMatchRegularExpression('/id="add_quantity"[^>]*value="1"/', $html);
+
+        $this->actingAs($office)
+            ->post(route('orders.items.store', $order), [
+                'product_variant_id' => $this->variantB->id,
+                'quantity' => '',
+            ])
+            ->assertSessionHasNoErrors()
+            ->assertRedirect();
+
+        $this->assertSame(1, (int) $order->orderItems()->where('product_variant_id', $this->variantB->id)->value('quantity_ordered'));
+    }
+
+    public function test_the_two_line_boxes_are_labelled_and_fulfil_asks_first(): void
+    {
+        $office = User::factory()->create();
+        $order = $this->makeOrder('confirmed');
+        $batch = \App\Models\Batch::create([
+            'product_id' => $this->product->id, 'production_date' => now()->subDay(),
+            'expiry_date' => now()->addDays(5), 'raw_milk_litres' => 10, 'status' => 'active',
+        ]);
+        $batchItem = \App\Models\BatchItem::create([
+            'batch_id' => $batch->id, 'product_variant_id' => $this->variantA->id,
+            'quantity_produced' => 10, 'quantity_remaining' => 10, 'unit_weight_kg' => 1.0,
+        ]);
+        $order->orderItems->first()->allocateFromBatchItem($batchItem, 5);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('aria-label="Units to pick now"', false)
+            ->assertSee('>Pick</label>', false)
+            ->assertSee('Ordered:')
+            ->assertSee('data-confirm="Record a pick of 5 × Test Milk · 1L Bottle from batch '.$batch->batch_code.'?"', false)
+            ->assertSee('data-confirm-label="Record pick"', false);
     }
 }

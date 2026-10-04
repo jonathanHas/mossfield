@@ -50,7 +50,7 @@
                     <div>
                         <x-input-label for="expiry_date" :value="__('Expiry date')" />
                         <x-text-input id="expiry_date" type="date" name="expiry_date" :value="old('expiry_date')" />
-                        <p class="text-[12px] mt-1" id="expiry-note" style="color: var(--muted);">Auto-filled from the product's shelf life, when set.</p>
+                        <p class="text-[12px] mt-1" id="expiry-note" style="color: var(--muted);" data-default-text="Auto-filled from the product's shelf life, when set.">Auto-filled from the product's shelf life, when set.</p>
                         <x-input-error :messages="$errors->get('expiry_date')" class="mt-1" />
                     </div>
                 </div>
@@ -222,6 +222,15 @@
                 const selectedOption = productSelect.options[productSelect.selectedIndex];
                 const expiryDateInput = document.getElementById('expiry_date');
                 const shelfLifeDays = parseInt(selectedOption.dataset.shelfLifeDays);
+
+                // No shelf life means no auto-filled expiry, and a batch with
+                // no expiry never drops out of stock — say so (F-07).
+                const expiryNote = document.getElementById('expiry-note');
+                if (productSelect.value && !shelfLifeDays) {
+                    expiryNote.innerHTML = 'This product has no shelf life set — the batch will have <strong>no expiry</strong> and stays sellable until sold. Enter one if it should expire.';
+                } else {
+                    expiryNote.textContent = expiryNote.dataset.defaultText;
+                }
 
                 // On load the field may hold a refused old('expiry_date'): keep it.
                 if (initialising && expiryDateInput.value) {

@@ -119,7 +119,7 @@ class FulfilmentUnitWeightsTest extends TestCase
                 'quantity' => 2,
                 'weights' => [4.8, 5.2],
                 'actual_weight_kg' => 100, // the tampered / mis-summed client total
-            ])->assertRedirect(route('orders.show', $order))->assertSessionHasNoErrors();
+            ])->assertRedirect(route('orders.show', $order).'#line-'.$alloc->order_item_id)->assertSessionHasNoErrors();
 
         $alloc->refresh();
         $this->assertSame('10.000', (string) $alloc->actual_weight_kg, 'the total is the sum of the weights, not what the browser said');
@@ -181,7 +181,7 @@ class FulfilmentUnitWeightsTest extends TestCase
         $this->actingAs(User::factory()->create())
             ->post(route('order-allocations.fulfill', $alloc), [
                 'quantity' => 4, 'actual_weight_kg' => 1.050,
-            ])->assertRedirect(route('orders.show', $order))->assertSessionHasNoErrors();
+            ])->assertRedirect(route('orders.show', $order).'#line-'.$alloc->order_item_id)->assertSessionHasNoErrors();
 
         $alloc->refresh();
         $this->assertSame('1.050', (string) $alloc->actual_weight_kg);

@@ -89,7 +89,9 @@ class CustomerController extends Controller
 
         $customer = Customer::create($validated);
 
-        $redirect = redirect()->route('customers.index')
+        // Straight onto the new customer — special prices, run and account
+        // all live on its page (F-16).
+        $redirect = redirect()->route('customers.show', $customer)
             ->with('success', 'Customer created successfully.');
 
         return $this->withDuplicateEmailWarning($redirect, $customer);
@@ -209,17 +211,21 @@ class CustomerController extends Controller
         return $redirect;
     }
 
-    public function destroy(Customer $customer): RedirectResponse
+    public function destroy(Request $request, Customer $customer): RedirectResponse
     {
+        // Back to the list as it was filtered (the delete form carries the
+        // index's search / is_active query).
+        $filters = array_filter($request->only('search', 'is_active'), fn ($value) => $value !== null && $value !== '');
+
         // Check if customer has orders
         if ($customer->orders()->count() > 0) {
-            return redirect()->route('customers.index')
+            return redirect()->route('customers.index', $filters)
                 ->with('error', 'Cannot delete customer with existing orders. Please set customer to inactive instead.');
         }
 
         $customer->delete();
 
-        return redirect()->route('customers.index')
+        return redirect()->route('customers.index', $filters)
             ->with('success', 'Customer deleted successfully.');
     }
 }

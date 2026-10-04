@@ -99,7 +99,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->patch(route('orders.items.update', [$order, $item]), ['quantity' => 3])
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#line-'.$item->id);
 
         $item->refresh();
         $this->assertSame(3, $item->quantity_ordered);
@@ -118,7 +118,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->patch(route('orders.items.update', [$order, $item]), ['quantity' => 2])
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#line-'.$item->id);
 
         $item->refresh();
         $this->assertSame(2, $item->quantity_ordered);
@@ -142,7 +142,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->patch(route('orders.items.update', [$order, $item]), ['quantity' => 2])
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#line-'.$item->id);
 
         $item->refresh();
         $this->assertSame(2, $item->quantity_ordered);
@@ -161,7 +161,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->patch(route('orders.items.update', [$order, $item]), ['quantity' => 8])
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#line-'.$item->id);
 
         $item->refresh();
         $this->assertSame(8, $item->quantity_ordered);
@@ -180,7 +180,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->delete(route('orders.items.destroy', [$order, $remove]))
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#order-items');
 
         $this->assertNull(OrderItem::find($remove->id));
         $this->assertCount(1, $order->fresh()->orderItems);
@@ -199,7 +199,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->delete(route('orders.items.destroy', [$order, $remove]))
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#order-items');
 
         $this->assertNull(OrderItem::find($remove->id));
         $this->assertSame(10, (int) $this->batchItemB->fresh()->quantity_remaining); // 4 returned
@@ -217,7 +217,7 @@ class OrderItemEditTest extends TestCase
 
         $this->actingAs($office)
             ->delete(route('orders.items.destroy', [$order, $unpicked]))
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#order-items');
 
         // Only the fully-fulfilled line remains → order advances to ready.
         $this->assertSame('ready', $order->fresh()->status);
@@ -272,5 +272,47 @@ class OrderItemEditTest extends TestCase
 
         $this->assertSame(5, (int) $a->fresh()->quantity_ordered);
         $this->assertSame('dispatched', $order->fresh()->status);
+    }
+
+    public function test_line_actions_land_on_the_line_and_the_page_carries_its_anchor(): void
+    {
+        $office = User::factory()->create();
+        $order = $this->makeOrder('confirmed');
+        $item = $this->addItem($order, $this->variantA, 5);
+
+        $this->actingAs($office)
+            ->patch(route('orders.items.update', [$order, $item]), ['quantity' => 4])
+            ->assertRedirect(route('orders.show', $order).'#line-'.$item->id);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('id="line-'.$item->id.'"', false)
+            ->assertSee('id="order-items"', false);
+    }
+
+    public function test_the_create_form_knows_each_customers_next_run_date_and_special_labels(): void
+    {
+        $run = \App\Models\DeliveryRun::create(['name' => 'Tuesday run', 'day_of_week' => 2, 'is_active' => true]);
+        $this->customer->update(['delivery_run_id' => $run->id, 'run_position' => 1]);
+        \App\Models\CustomerSpecialPrice::create([
+            'customer_id' => $this->customer->id, 'product_variant_id' => $this->variantA->id, 'price' => 1.25,
+        ]);
+        $tuesday = today()->isTuesday() ? today() : today()->next('Tuesday');
+
+        $response = $this->actingAs(User::factory()->create())->get(route('orders.create'))->assertOk();
+        $response->assertViewHas('customerRunDates', fn ($dates) => $dates[$this->customer->id] === $tuesday->toDateString());
+        $response->assertViewHas('customerPriceLabels', fn ($labels) => $labels[$this->customer->id][$this->variantA->id] === '€1.25');
+        $response->assertSee('data-picker="Test Milk · 1L Bottle"', false);
+        $response->assertSee('tabindex="-1"', false);
+    }
+
+    public function test_the_sibling_list_names_the_variant(): void
+    {
+        $order = $this->makeOrder('pending');
+        $this->addItem($order, $this->variantB, 24);
+
+        $this->actingAs(User::factory()->create())->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('24× Test Milk · 2L Bottle');
     }
 }

@@ -1,6 +1,21 @@
 <x-app-layout>
     <x-slot name="header">Invoice {{ $invoice->number }}</x-slot>
 
+    @php
+        // Why an issued invoice can't be voided (Invoice::isVoidable()):
+        // allocated payments and issued credit notes.
+        $voidBlocker = null;
+        if ($invoice->isIssued() && ! $invoice->isVoidable()) {
+            $paymentCount = $invoice->allocations()->distinct()->count('payment_id');
+            $creditNumbers = $invoice->creditNotes()->where('status', 'issued')->pluck('number');
+            $blocks = array_filter([
+                $paymentCount ? 'its payments ('.$paymentCount.')' : null,
+                $creditNumbers->isNotEmpty() ? Str::plural('credit note', $creditNumbers->count()).' ('.$creditNumbers->implode(', ').')' : null,
+            ]);
+            $voidBlocker = $blocks ? "Can't void — remove ".implode(' and ', $blocks).' first.' : null;
+        }
+    @endphp
+
     <div class="px-6 py-5">
         <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-4">
             <div>
@@ -43,10 +58,20 @@
                     @can('void', $invoice)
                         <button type="button" class="mf-btn-danger"
                                 x-data @click="$dispatch('open-modal', 'void-invoice')">Void</button>
+                    @else
+                        @if($voidBlocker)
+                            <button type="button" class="mf-btn-danger" disabled style="opacity: .45; cursor: default;"
+                                    title="{{ $voidBlocker }}">Void</button>
+                        @endif
                     @endcan
                 @endif
             </div>
         </div>
+
+        {{-- Name what stops a void rather than hiding the button (F-37). --}}
+        @if($voidBlocker)
+            <div class="mb-4 text-[12.5px]" style="color: var(--muted);" data-void-blocker>{{ $voidBlocker }}</div>
+        @endif
 
 
         @if($invoice->isVoid())

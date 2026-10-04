@@ -373,4 +373,35 @@ class OrderTransitionsTest extends TestCase
             ->assertDontSee('name="status"', false)
             ->assertSee('Status changes from the order page.');
     }
+
+    public function test_confirming_says_confirmed_other_edits_say_updated(): void
+    {
+        $pending = $this->makeOrder('pending');
+        $this->patchStatus($pending, 'confirmed')->assertSessionHas('success', 'Order confirmed.');
+
+        $this->patchStatus($pending->fresh(), null)->assertSessionHas('success', 'Order updated successfully.');
+    }
+
+    public function test_an_invoiced_order_offers_no_edit_link(): void
+    {
+        $office = User::factory()->create();
+        $order = $this->makeOrder('ready');
+        $milk = Product::create(['name' => 'Milk', 'type' => 'milk', 'is_active' => true]);
+        $bottle = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L', 'size' => '1L', 'unit' => 'bottle', 'base_price' => 2.00, 'is_active' => true,
+        ]);
+        $order->orderItems()->create(['product_variant_id' => $bottle->id, 'quantity_ordered' => 2, 'quantity_fulfilled' => 2, 'unit_price' => 2.00]);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertSee(route('orders.edit', $order), false);
+
+        $this->actingAs($office)->post(route('orders.dispatch', $order));
+        $order->refresh();
+        $this->assertNotNull($order->invoice_id, 'dispatch issued the per-order invoice');
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertDontSee(route('orders.edit', $order), false)
+            ->assertSee('On invoice '.$order->invoice->number.' — void it to edit.');
+    }
 }

@@ -36,8 +36,12 @@
                 </x-slot>
             @endif
             @if($milkVariantCount === 0)
-                <div class="text-[13px] py-2" style="color: var(--muted);">No active milk batches.</div>
+                <div class="text-[13px] py-2" style="color: var(--muted);">
+                    No sellable milk.
+                    @include('stock.partials._expired-note', ['expired' => $milk['expired'], 'class' => 'mt-1'])
+                </div>
             @else
+                @include('stock.partials._expired-note', ['expired' => $milk['expired'], 'class' => 'mb-3'])
                 <div class="flex flex-col gap-5">
                     @foreach($milk['variants'] as $variant)
                         <x-stock.case-blocks
@@ -71,8 +75,12 @@
                 </x-slot>
             @endif
             @if($yogVariantCount === 0)
-                <div class="text-[13px] py-2" style="color: var(--muted);">No active yoghurt batches.</div>
+                <div class="text-[13px] py-2" style="color: var(--muted);">
+                    No sellable yoghurt.
+                    @include('stock.partials._expired-note', ['expired' => $yoghurt['expired'], 'class' => 'mt-1'])
+                </div>
             @else
+                @include('stock.partials._expired-note', ['expired' => $yoghurt['expired'], 'class' => 'mb-3'])
                 <div class="flex flex-col gap-5">
                     @foreach($yoghurt['variants'] as $variant)
                         <x-stock.case-pictograph
@@ -103,8 +111,12 @@
                 </x-slot>
             @endif
             @if($cheeseRowCount === 0)
-                <div class="text-[13px] py-2" style="color: var(--muted);">No active cheese batches.</div>
+                <div class="text-[13px] py-2" style="color: var(--muted);">
+                    No sellable cheese.
+                    @include('stock.partials._expired-note', ['expired' => $cheese['expired'], 'class' => 'mt-1'])
+                </div>
             @else
+                @include('stock.partials._expired-note', ['expired' => $cheese['expired'], 'class' => 'mb-3'])
                 <div class="flex flex-col gap-5">
                     @foreach($cheese['wheels'] as $row)
                         <x-stock.cheese-row

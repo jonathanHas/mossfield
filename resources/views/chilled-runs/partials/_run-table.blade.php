@@ -109,6 +109,7 @@
                                     labels: {{ Js::from((object) $variantLabels->all()) }},
                                     customer: {{ Js::from($customer->name) }},
                                     reference: {{ Js::from($sheet['editCustomerReference']) }},
+                                    notes: {{ Js::from($sheet['editNotes'] ?? '') }},
                                     requiresRef: {{ $customer->requires_reference ? 'true' : 'false' }},
                                 })">
                                 <td class="pad"></td>
@@ -179,9 +180,13 @@
                                             @endforeach
                                         </select>
                                     @endif
-                                    @if ($sheet['extras'][$customer->id] !== '')
-                                        <div class="mt-1.5" style="color: var(--muted); font-size: 11.5px;">{{ $sheet['extras'][$customer->id] }}</div>
-                                    @endif
+                                    {{-- Order notes (F-28) — saved with the row. --}}
+                                    <textarea rows="2" maxlength="2000" class="mf-input mt-1.5" style="width: 100%; min-width: 180px; font-size: 12px; padding: 4px 6px;"
+                                              form="stop-form-{{ $customer->id }}"
+                                              name="notes"
+                                              x-model="notes"
+                                              placeholder="Notes"
+                                              aria-label="Order notes"></textarea>
                                 </td>
                             </tr>
                         @else
@@ -397,6 +402,7 @@
                         hIndex: -1,        // -1 = not previewing history
                         addedLines: [],    // cheese (non-column) lines: [{variant_id, qty}]
                         reference: init.reference ?? '',          // optional customer ref / PO number
+                        notes: init.notes ?? '',                  // order notes
                         showExtras: !!(init.reference || init.requiresRef),  // auto-open for ref'd customers
                         baseline: '',      // snapshot of the as-loaded order, for dirty detection
 
@@ -407,6 +413,7 @@
                             this.$watch('qty', () => this.sync());
                             this.$watch('addedLines', () => this.sync());
                             this.$watch('reference', () => this.sync());
+                            this.$watch('notes', () => this.sync());
                             // Save clears the dirty flag so neither guard prompts on submit.
                             const form = document.getElementById('stop-form-{{ $editId }}');
                             if (form) form.addEventListener('submit', () => { window.__stopDirty = false; });
@@ -416,7 +423,7 @@
                             });
                         },
                         serialize() {
-                            return JSON.stringify({ qty: this.qty, added: this.addedLines, reference: this.reference });
+                            return JSON.stringify({ qty: this.qty, added: this.addedLines, reference: this.reference, notes: this.notes });
                         },
                         sync() {
                             window.__stopDirty = this.serialize() !== this.baseline;

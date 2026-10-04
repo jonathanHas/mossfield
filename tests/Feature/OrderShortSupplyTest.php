@@ -140,7 +140,7 @@ class OrderShortSupplyTest extends TestCase
 
         $this->actingAs($this->office())
             ->post(route('orders.items.short', [$order, $shortLine]))
-            ->assertRedirect(route('orders.show', $order));
+            ->assertRedirect(route('orders.show', $order).'#line-'.$shortLine->id);
 
         $this->assertSame('ready', $order->fresh()->status);
     }

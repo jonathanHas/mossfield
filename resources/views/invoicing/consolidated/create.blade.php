@@ -27,6 +27,7 @@
                     <a href="{{ route('invoicing.consolidated.create', ['period' => 'last_month']) }}" class="mf-link">Last month</a>
                     <a href="{{ route('invoicing.consolidated.create', ['period' => 'this_month']) }}" class="mf-link">This month</a>
                     <a href="{{ route('invoicing.consolidated.create', ['period' => 'last_week']) }}" class="mf-link">Last week</a>
+                    <a href="{{ route('invoicing.consolidated.create', ['period' => 'this_week']) }}" class="mf-link">This week</a>
                 </div>
             </form>
         </div>

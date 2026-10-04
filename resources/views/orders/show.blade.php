@@ -55,7 +55,7 @@
                             default => 'neutral',
                         };
                         $itemSummary = $sibling->orderItems->take(3)->map(function ($i) {
-                            return $i->quantity_ordered.'× '.$i->productVariant->product->name;
+                            return $i->quantity_ordered.'× '.$i->productVariant->picker_label;
                         })->implode(' · ');
                         $extra = $sibling->orderItems->count() - 3;
                     @endphp
@@ -65,7 +65,7 @@
                            style="border-bottom: 1px solid var(--line-2); {{ $isActive ? 'background: var(--accent-soft, #f5f3ee); border-left: 3px solid var(--accent, #4a7c4d); padding-left: 13px;' : '' }}">
                             <div class="flex items-baseline justify-between gap-2">
                                 <div class="font-mono text-[12px]" style="color: var(--muted);">{{ $sibling->order_number }}</div>
-                                <div class="text-[11px]" style="color: var(--muted);">{{ $sibling->order_date->diffForHumans(null, true, true) }}</div>
+                                <div class="text-[11px]" style="color: var(--muted);">{{ $sibling->created_at->diffForHumans(null, true, true) }}</div>
                             </div>
                             <div class="mt-0.5 text-[13px] font-medium truncate">{{ $sibling->customer->name }}</div>
                             @if($itemSummary)
@@ -127,7 +127,13 @@
                             </a>
                         @endif
                         @can('update', $order)
-                            <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
+                            {{-- An invoiced order is frozen (blockedByInvoice); say so
+                                 rather than offer an Edit that refuses on save (F-34). --}}
+                            @if($order->invoice_id)
+                                <span class="text-[12px]" style="color: var(--muted);">On invoice {{ $order->invoice?->number }} — void it to edit.</span>
+                            @else
+                                <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
+                            @endif
                             @if($order->status === 'pending')
                                 <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
                                     @csrf @method('PATCH')
@@ -298,8 +304,8 @@
                     </div>
                 @endif
 
-                {{-- Items --}}
-                <div class="flex items-center justify-between mb-3.5">
+                {{-- Items (#order-items: where a removed line's redirect lands) --}}
+                <div id="order-items" class="flex items-center justify-between mb-3.5 scroll-mt-20">
                     <h2 class="text-[15px] font-semibold" style="letter-spacing: -0.01em;">
                         Items <span class="font-normal" style="color: var(--muted);">{{ $order->orderItems->count() }}</span>
                     </h2>
@@ -346,7 +352,7 @@
                     @else
                         @foreach($order->orderItems as $item)
                             @php $isOnlyLine = $order->orderItems->count() <= 1; @endphp
-                            <x-order.item-row :item="$item" :order="$order">
+                            <x-order.item-row :item="$item" :order="$order" id="line-{{ $item->id }}" class="scroll-mt-20">
                                 <x-slot:summary>
                                     <div class="flex items-center gap-3.5 mt-2.5 text-[12.5px] flex-wrap" style="color: var(--muted);">
                                         @if($item->isFullyFulfilled())
@@ -371,7 +377,8 @@
                                                 <span style="color: var(--line);">·</span>
                                                 <form method="POST" action="{{ route('orders.items.update', [$order, $item]) }}" class="inline-flex items-center gap-1.5">
                                                     @csrf @method('PATCH')
-                                                    <input type="number" name="quantity" min="1" value="{{ $item->quantity_ordered }}"
+                                                    <label for="ordered_{{ $item->id }}" class="text-[11.5px]" style="color: var(--muted);">Ordered:</label>
+                                                    <input type="number" name="quantity" id="ordered_{{ $item->id }}" aria-label="Quantity ordered" min="1" value="{{ $item->quantity_ordered }}"
                                                         class="mf-input w-16 px-2 py-0.5 text-[12px]">
                                                     <button type="submit" class="mf-link" style="color: var(--accent-ink);">Update</button>
                                                 </form>
@@ -424,7 +431,8 @@
                                         </div>
                                         <div>
                                             <label class="mf-label" for="add_quantity">Quantity</label>
-                                            <input type="number" name="quantity" id="add_quantity" min="1" value="{{ old('quantity', 1) }}" required class="mf-input">
+                                            {{-- Blank means 1 (F-22): a pre-filled 1 got typed after ("15" → "115"). --}}
+                                            <input type="number" name="quantity" id="add_quantity" min="1" value="{{ old('quantity') }}" placeholder="1" class="mf-input">
                                             @error('quantity')
                                                 <p class="mf-error">{{ $message }}</p>
                                             @enderror

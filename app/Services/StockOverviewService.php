@@ -36,13 +36,45 @@ class StockOverviewService
             ->get();
 
         $byType = $items->groupBy(fn ($i) => $i->batch->product->type);
+        $expired = $this->expiredByType($today);
 
         return [
             'total_value' => $this->totalValue($items),
-            'milk' => $this->buildSimpleCard($byType->get('milk', collect()), 'milk'),
-            'yoghurt' => $this->buildSimpleCard($byType->get('yoghurt', collect()), 'yoghurt'),
-            'cheese' => $this->buildCheeseCard($byType->get('cheese', collect())),
+            'milk' => $this->buildSimpleCard($byType->get('milk', collect()), 'milk') + ['expired' => $expired['milk']],
+            'yoghurt' => $this->buildSimpleCard($byType->get('yoghurt', collect()), 'yoghurt') + ['expired' => $expired['yoghurt']],
+            'cheese' => $this->buildCheeseCard($byType->get('cheese', collect())) + ['expired' => $expired['cheese']],
         ];
+    }
+
+    /**
+     * Stock the cards above leave out because it has expired: batches still
+     * marked active, past expiry (strict — the complement of the sellable
+     * filter in build()), with units left. One grouped query for all types.
+     *
+     * @return array<string, array{batches: int, units: int}>
+     */
+    private function expiredByType(string $today): array
+    {
+        $rows = BatchItem::query()
+            ->join('batches', 'batches.id', '=', 'batch_items.batch_id')
+            ->join('products', 'products.id', '=', 'batches.product_id')
+            ->where('batches.status', 'active')
+            ->where('batches.expiry_date', '<=', $today)
+            ->where('batch_items.quantity_remaining', '>', 0)
+            ->groupBy('products.type')
+            ->selectRaw('products.type as type, COUNT(DISTINCT batches.id) as batches, SUM(batch_items.quantity_remaining) as units')
+            ->get()
+            ->keyBy('type');
+
+        $out = [];
+        foreach (['milk', 'yoghurt', 'cheese'] as $type) {
+            $out[$type] = [
+                'batches' => (int) ($rows[$type]->batches ?? 0),
+                'units' => (int) ($rows[$type]->units ?? 0),
+            ];
+        }
+
+        return $out;
     }
 
     private function totalValue($items): float

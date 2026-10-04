@@ -100,7 +100,7 @@ class DeliveryChargeTest extends TestCase
 
         $this->actingAs($office)
             ->post(route('delivery-runs.toggle-charge', $shop))
-            ->assertRedirect(route('delivery-runs.index', ['charges' => 1]));
+            ->assertRedirect(route('delivery-runs.index', ['charges' => 1]).'#stop-'.$shop->id);
         $this->assertTrue($shop->fresh()->apply_delivery_charge);
 
         $this->actingAs($office)->post(route('delivery-runs.toggle-charge', $shop));

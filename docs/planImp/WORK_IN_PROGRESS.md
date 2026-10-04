@@ -8,6 +8,30 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Friction fixes (2026-10-04)
+
+Plan/Implement cycle 4: the S3 findings from the end-to-end browser run plus
+cycle 3's follow-ons. F-01/F-02/F-07 expired stock is visible (dashboard
+tile, `/stock` note, "no expiry" warning and batch-page row) and "ready now"
+counts only sellable batches; F-30 the picking queue shows one day with a
+stale bucket for old ready orders; F-31 Skip cycles forward, the stepper
+greys out at its limits, the short button clears the footer, and the weight
+thresholds ignore a 0 kg nominal; F-13 part of a maturing hold can be
+released; F-21/F-22/F-23 labelled Pick / Ordered boxes, Fulfil confirms, Add
+item defaults to 1 when blank, and duplicate variants merge on create; F-26
+line actions land on the line, the create form defaults the delivery date to
+the next run and shows special prices in the option labels, Confirm says
+"Order confirmed."; F-16/F-28 office forms land on what they edited and
+the run-sheet row editor has Notes; F-15/F-18 a run is reordered with
+Position boxes + Save order (↑/↓ kept, as `move`) and percentage customers
+show their rate; F-32/F-34 dispatch flashes name orders and reasons and an
+invoiced order hides Edit; F-37/F-38/F-41 the invoice page names what blocks
+a void, This week shortcut, statements default to this month, "€X in
+credit", specific allocate refusals, a payment split survives a refused
+submit; F-41 404/403 pages lead home.
+
+---
+
 ## Recently Completed: Money and state fixes (2026-10-04)
 
 Plan/Implement cycle 3: the eight findings from the end-to-end browser run

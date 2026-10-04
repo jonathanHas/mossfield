@@ -87,7 +87,7 @@
                                                 @foreach($productVariants as $productName => $variants)
                                                     <optgroup label="{{ $productName }}">
                                                         @foreach($variants as $variant)
-                                                            <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}"
+                                                            <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}"
                                                                 {{ $item['product_variant_id'] == $variant->id ? 'selected' : '' }}>
                                                                 {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                             </option>
@@ -104,7 +104,7 @@
                                         </div>
                                         <div>
                                             <label class="mf-label">Line total</label>
-                                            <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly>
+                                            <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly tabindex="-1">
                                         </div>
                                     </div>
                                 </div>
@@ -120,7 +120,7 @@
                                             @foreach($productVariants as $productName => $variants)
                                                 <optgroup label="{{ $productName }}">
                                                     @foreach($variants as $variant)
-                                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}">
+                                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}">
                                                             {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                         </option>
                                                     @endforeach
@@ -134,7 +134,7 @@
                                     </div>
                                     <div>
                                         <label class="mf-label">Line total</label>
-                                        <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly>
+                                        <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly tabindex="-1">
                                     </div>
                                 </div>
                             </div>
@@ -176,6 +176,7 @@
             const orderItems = document.getElementById('orderItems');
             const newItem = createOrderItem(itemIndex);
             orderItems.appendChild(newItem);
+            relabelOptions(newItem);
             itemIndex++;
             updateOrderTotal();
         }
@@ -200,7 +201,7 @@
                             @foreach($productVariants as $productName => $variants)
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
-                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}">
+                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}">
                                             {{ $variant->picker_label }} ({{ $variant->price_label }})
                                         </option>
                                     @endforeach
@@ -214,7 +215,7 @@
                     </div>
                     <div>
                         <label class="mf-label">Line total</label>
-                        <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly>
+                        <input type="text" class="line-total mf-input font-mono" style="background: var(--line-2);" readonly tabindex="-1">
                     </div>
                 </div>
             `;
@@ -260,6 +261,37 @@
         // delivery settings, so the preview matches what will be saved.
         const customerPrices = @json($customerPrices);
         const customerCharges = @json($customerCharges);
+        const customerPriceLabels = @json($customerPriceLabels);
+        const customerRunDates = @json($customerRunDates);
+
+        // Option text shows the customer's price where they have a special;
+        // the server-rendered label (standard price) otherwise.
+        function relabelOptions(root) {
+            const labels = customerPriceLabels[currentCustomerId()] || {};
+            (root || document).querySelectorAll('.product-select option[data-picker]').forEach(function(option) {
+                if (option.dataset.defaultLabel === undefined) {
+                    option.dataset.defaultLabel = option.textContent.trim();
+                }
+                const special = labels[option.value];
+                option.textContent = special
+                    ? option.dataset.picker + ' (' + special + ' · special)'
+                    : option.dataset.defaultLabel;
+            });
+        }
+
+        // Delivery date follows the customer's next run, but never over a
+        // date the operator typed: only an empty field, or one still holding
+        // the previous auto-fill, is (re)filled.
+        let autoDeliveryDate = null;
+        function fillDeliveryDate() {
+            const input = document.getElementById('delivery_date');
+            if (input.value && input.value !== autoDeliveryDate) {
+                return;
+            }
+            const next = customerRunDates[currentCustomerId()] || '';
+            input.value = next;
+            autoDeliveryDate = next || null;
+        }
 
         function currentCustomerId() {
             return document.getElementById('customer_id').value;
@@ -349,7 +381,15 @@
                 }
             });
 
-            document.getElementById('customer_id').addEventListener('change', repriceAllLines);
+            document.getElementById('customer_id').addEventListener('change', function() {
+                relabelOptions();
+                fillDeliveryDate();
+                repriceAllLines();
+            });
+            relabelOptions();
+            if (currentCustomerId()) {
+                fillDeliveryDate();
+            }
 
             ensureTrailingEmptyItem();
             updateOrderTotal();

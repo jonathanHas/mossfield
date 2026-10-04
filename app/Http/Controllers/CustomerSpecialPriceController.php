@@ -19,7 +19,7 @@ class CustomerSpecialPriceController extends Controller
     {
         $customer->specialPrices()->create($request->validated());
 
-        return redirect()->route('customers.show', $customer)
+        return redirect()->route('customers.show', $customer)->withFragment('special-prices')
             ->with('success', 'Special price added.');
     }
 
@@ -29,7 +29,7 @@ class CustomerSpecialPriceController extends Controller
 
         $specialPrice->update($request->validated());
 
-        return redirect()->route('customers.show', $customer)
+        return redirect()->route('customers.show', $customer)->withFragment('special-prices')
             ->with('success', 'Special price updated.');
     }
 
@@ -39,7 +39,7 @@ class CustomerSpecialPriceController extends Controller
 
         $specialPrice->delete();
 
-        return redirect()->route('customers.show', $customer)
+        return redirect()->route('customers.show', $customer)->withFragment('special-prices')
             ->with('success', 'Special price removed.');
     }
 }

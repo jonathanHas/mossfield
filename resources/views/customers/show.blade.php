@@ -92,7 +92,12 @@
                         <dd class="font-mono">{{ rtrim(rtrim(number_format($customer->delivery_charge_percent, 2), '0'), '.') }}% of order</dd>
                     @endif
                     <dt style="color: var(--muted);">Outstanding</dt>
-                    <dd class="font-mono">€{{ number_format($customer->outstanding_balance, 2) }}</dd>
+                    {{-- In credit reads as such, never as a minus sign (F-38). --}}
+                    @if($customer->outstanding_balance < 0)
+                        <dd class="font-mono" style="color: var(--accent-ink);">€{{ number_format(abs($customer->outstanding_balance), 2) }} in credit</dd>
+                    @else
+                        <dd class="font-mono">€{{ number_format($customer->outstanding_balance, 2) }}</dd>
+                    @endif
                     <dt style="color: var(--muted);">Invoicing</dt>
                     <dd>{{ $customer->invoicing_mode?->label() ?? 'Per order' }}</dd>
                     <dt style="color: var(--muted);">Invoices</dt>
@@ -155,7 +160,11 @@
                     </div>
                     <div>
                         <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Net owed</div>
-                        <div class="font-mono text-[18px] mt-0.5">€{{ number_format($aged['total'], 2) }}</div>
+                        @if($aged['total'] < 0)
+                            <div class="font-mono text-[18px] mt-0.5" style="color: var(--accent-ink);">€{{ number_format(abs($aged['total']), 2) }} in credit</div>
+                        @else
+                            <div class="font-mono text-[18px] mt-0.5">€{{ number_format($aged['total'], 2) }}</div>
+                        @endif
                     </div>
                     <div>
                         <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Credit limit</div>
@@ -332,7 +341,7 @@
         {{-- Per-customer alternative prices. The value stored here replaces the
              variant's base_price on NEW office-entered order lines for this
              customer; existing orders keep their locked unit_price. --}}
-        <div class="mf-panel mt-4">
+        <div class="mf-panel mt-4 scroll-mt-20" id="special-prices">
             <div class="mf-panel-header">
                 <div class="flex-1">
                     <div class="text-[13px] font-semibold">Special prices <span style="color: var(--muted); font-weight: 400;">({{ $customer->specialPrices->count() }})</span></div>
@@ -399,7 +408,12 @@
                         <label class="mf-label" for="sp-variant">Variant</label>
                         <select id="sp-variant" name="product_variant_id" class="mf-input" style="min-width: 260px;" required>
                             <option value="">Select a variant…</option>
+                            {{-- A variant that already has a special price is edited in the
+                                 table above, not added again (the unique rule would refuse it). --}}
+                            @php $pricedVariantIds = $customer->specialPrices->pluck('product_variant_id')->all(); @endphp
                             @foreach($productVariants as $productName => $variants)
+                                @php $variants = collect($variants)->reject(fn ($v) => in_array($v->id, $pricedVariantIds)); @endphp
+                                @continue($variants->isEmpty())
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
                                         <option value="{{ $variant->id }}" @selected(old('product_variant_id') == $variant->id)>

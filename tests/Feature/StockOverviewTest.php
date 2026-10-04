@@ -65,7 +65,8 @@ class StockOverviewTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('Stock overview');
-        $response->assertSee('No active milk batches');
+        $response->assertSee('No sellable milk.');
+        $response->assertDontSee('data-expired-note', false);
     }
 
     public function test_a_batch_expiring_today_is_excluded_like_the_allocator_excludes_it(): void
@@ -120,5 +121,55 @@ class StockOverviewTest extends TestCase
         // The allocator agrees by construction: only the tomorrow batch is a candidate.
         $this->assertSame(1, BatchItem::allocatable()->count());
         $this->assertSame(300, (int) BatchItem::allocatable()->sum('quantity_remaining'));
+    }
+
+    public function test_an_expired_batch_with_stock_is_named_on_the_card_not_counted_as_sellable(): void
+    {
+        $milk = Product::create(['name' => 'Test Organic Milk', 'type' => 'milk', 'is_active' => true]);
+        $variant = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle',
+            'weight_kg' => 1.0, 'base_price' => 2.50, 'case_size' => 16, 'is_active' => true,
+        ]);
+        foreach ([[now()->subDays(2), 40, 10], [now()->addDays(5), 60, 3]] as [$expiry, $units, $ago]) {
+            $batch = Batch::create([
+                'product_id' => $milk->id, 'production_date' => now()->subDays($ago),
+                'expiry_date' => $expiry, 'raw_milk_litres' => 100, 'status' => 'active',
+            ]);
+            BatchItem::create([
+                'batch_id' => $batch->id, 'product_variant_id' => $variant->id,
+                'quantity_produced' => $units, 'quantity_remaining' => $units, 'unit_weight_kg' => 1.0,
+            ]);
+        }
+
+        $card = app(StockOverviewService::class)->build()['milk'];
+        $this->assertCount(1, $card['active_batches']);
+        $this->assertSame(['batches' => 1, 'units' => 40], $card['expired']);
+
+        $this->actingAs(User::factory()->admin()->create())->get('/stock')
+            ->assertOk()
+            ->assertSee('1 expired batch')
+            ->assertSee('still holds 40 units', false)
+            ->assertSee('status=expired', false);
+    }
+
+    public function test_with_only_expired_stock_the_empty_card_says_where_it_went(): void
+    {
+        $milk = Product::create(['name' => 'Test Organic Milk', 'type' => 'milk', 'is_active' => true]);
+        $variant = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle',
+            'weight_kg' => 1.0, 'base_price' => 2.50, 'is_active' => true,
+        ]);
+        $batch = Batch::create([
+            'product_id' => $milk->id, 'production_date' => now()->subDays(10),
+            'expiry_date' => now()->subDay(), 'raw_milk_litres' => 100, 'status' => 'active',
+        ]);
+        BatchItem::create([
+            'batch_id' => $batch->id, 'product_variant_id' => $variant->id,
+            'quantity_produced' => 30, 'quantity_remaining' => 30, 'unit_weight_kg' => 1.0,
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())->get('/stock')
+            ->assertOk()
+            ->assertSeeInOrder(['No sellable milk.', '1 expired batch', '30 units']);
     }
 }

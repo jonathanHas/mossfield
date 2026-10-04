@@ -47,4 +47,34 @@ class OrderStoreOptionalFieldsTest extends TestCase
         $this->assertNull($order->customer_reference);
         $this->assertSame(3, $order->orderItems()->sole()->quantity_ordered);
     }
+
+    public function test_the_same_variant_twice_becomes_one_line_with_the_summed_quantity(): void
+    {
+        $customer = Customer::create([
+            'name' => 'Dublin Farmers Market', 'email' => 'orders@dublinfarmersmarket.ie',
+            'address' => 'Temple Bar', 'city' => 'Dublin', 'postal_code' => 'D02 X285', 'is_active' => true,
+        ]);
+        $milk = Product::create(['name' => 'Organic Milk', 'type' => 'milk', 'is_active' => true]);
+        $bottle = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle', 'base_price' => 1.50, 'is_active' => true,
+        ]);
+        $big = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '2L Bottle', 'size' => '2L', 'unit' => 'bottle', 'base_price' => 2.50, 'is_active' => true,
+        ]);
+
+        $this->actingAs(User::factory()->create())->post(route('orders.store'), [
+            'customer_id' => $customer->id,
+            'order_date' => today()->toDateString(),
+            'items' => [
+                ['product_variant_id' => $bottle->id, 'quantity' => 3],
+                ['product_variant_id' => $big->id, 'quantity' => 1],
+                ['product_variant_id' => $bottle->id, 'quantity' => 4],
+            ],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+
+        $order = Order::sole();
+        $this->assertCount(2, $order->orderItems);
+        $this->assertSame(7, $order->orderItems()->where('product_variant_id', $bottle->id)->sole()->quantity_ordered);
+        $this->assertSame('13.00', (string) $order->total_amount); // 7 × 1.50 + 2.50
+    }
 }

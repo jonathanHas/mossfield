@@ -330,9 +330,10 @@ class ChilledRunTest extends TestCase
             ->assertSee('Shop A')
             ->assertSee('Shop B');
 
+        // positions is customer id ⇒ wanted position (cycle 4, F-15).
         $this->actingAs($office)->post(route('delivery-runs.reorder', $run), [
-            'positions' => [$b->id, $a->id],
-        ])->assertRedirect();
+            'positions' => [$b->id => 1, $a->id => 2],
+        ])->assertRedirect(route('delivery-runs.index').'#stop-'.$b->id);
 
         $this->assertSame(1, $b->refresh()->run_position);
         $this->assertSame(2, $a->refresh()->run_position);
@@ -340,6 +341,100 @@ class ChilledRunTest extends TestCase
         $this->actingAs($office)->post(route('delivery-runs.unassign', $a))->assertRedirect();
         $this->assertNull($a->refresh()->delivery_run_id);
         $this->assertNull($a->refresh()->run_position);
+    }
+
+    public function test_positions_map_id_to_wanted_position_and_renumber(): void
+    {
+        $run = $this->makeRun();
+        $office = User::factory()->create();
+        $stops = collect(range(1, 4))->map(fn ($i) => $this->customerOnRun($run, "Stop $i", $i));
+
+        // Stop 1 → position 4 (last); the rest close up.
+        $this->actingAs($office)->post(route('delivery-runs.reorder', $run), [
+            'positions' => [$stops[0]->id => 4, $stops[1]->id => 2, $stops[2]->id => 3, $stops[3]->id => 4],
+        ])->assertRedirect(route('delivery-runs.index').'#stop-'.$stops[0]->id); // the stop that was moved
+
+        $this->assertSame([2, 3, 4, 1], $run->customers()->pluck('name')->map(fn ($n) => (int) substr($n, 5))->all());
+        $this->assertSame([1, 2, 3, 4], $run->customers()->pluck('run_position')->map(fn ($p) => (int) $p)->all());
+
+        // Stop 4 → position 1.
+        $this->actingAs($office)->post(route('delivery-runs.reorder', $run), [
+            'positions' => [$stops[3]->id => 1],
+        ])->assertRedirect(route('delivery-runs.index').'#stop-'.$stops[3]->id);
+        $this->assertSame([4, 2, 3, 1], $run->customers()->pluck('name')->map(fn ($n) => (int) substr($n, 5))->all());
+    }
+
+    public function test_move_swaps_with_the_neighbour_and_lands_on_the_stop(): void
+    {
+        $run = $this->makeRun();
+        $office = User::factory()->create();
+        $a = $this->customerOnRun($run, 'Shop A', 1);
+        $b = $this->customerOnRun($run, 'Shop B', 2);
+        $c = $this->customerOnRun($run, 'Shop C', 3);
+
+        $this->actingAs($office)->post(route('delivery-runs.reorder', $run), [
+            'move' => ['customer_id' => $a->id, 'direction' => 'down'],
+        ])->assertRedirect(route('delivery-runs.index').'#stop-'.$a->id);
+
+        $this->assertSame(['Shop B', 'Shop A', 'Shop C'], $run->customers()->pluck('name')->all());
+
+        // positions and move together are refused.
+        $this->actingAs($office)->post(route('delivery-runs.reorder', $run), [
+            'positions' => [$a->id => 1],
+            'move' => ['customer_id' => $a->id, 'direction' => 'up'],
+        ])->assertSessionHasErrors();
+        $this->assertSame(['Shop B', 'Shop A', 'Shop C'], $run->customers()->pluck('name')->all());
+    }
+
+    public function test_reorder_refuses_a_customer_not_on_the_run(): void
+    {
+        $run = $this->makeRun();
+        $other = $this->makeRun(['name' => 'Cork']);
+        $office = User::factory()->create();
+        $a = $this->customerOnRun($run, 'Shop A', 1);
+        $b = $this->customerOnRun($run, 'Shop B', 2);
+        $stranger = $this->customerOnRun($other, 'Elsewhere', 1);
+
+        $this->actingAs($office)->post(route('delivery-runs.reorder', $run), [
+            'positions' => [$stranger->id => 1, $b->id => 1],
+        ])->assertRedirect(route('delivery-runs.index'))->assertSessionHas('error');
+
+        $this->assertSame(['Shop A', 'Shop B'], $run->customers()->pluck('name')->all());
+        $this->assertSame($other->id, $stranger->fresh()->delivery_run_id);
+    }
+
+    public function test_run_page_has_position_inputs_one_save_and_a_percent_tag(): void
+    {
+        $run = $this->makeRun();
+        $a = $this->customerOnRun($run, 'Shop A', 1);
+        $pct = $this->customerOnRun($run, 'Percent Deli', 2);
+        $pct->update(['delivery_charge_percent' => 5]);
+
+        $html = $this->actingAs(User::factory()->create())->get(route('delivery-runs.index'))
+            ->assertOk()
+            ->assertSee('id="stop-'.$a->id.'"', false)
+            ->assertSee('name="positions['.$a->id.']"', false)
+            ->assertSee('Save order')
+            ->assertSee('5 % of order value')
+            ->assertSee('name="move[direction]"', false)
+            ->assertDontSee('name="positions[]"', false)
+            ->getContent();
+
+        // The percent customer has no on/off toggle; the other stop still does.
+        $this->assertSame(1, substr_count($html, route('delivery-runs.toggle-charge', $a)));
+        $this->assertSame(0, substr_count($html, route('delivery-runs.toggle-charge', $pct)));
+    }
+
+    public function test_assign_and_unassign_land_where_the_work_is(): void
+    {
+        $run = $this->makeRun();
+        $office = User::factory()->create();
+        $shop = Customer::create(['name' => 'Shop A', 'email' => 'a@example.ie', 'address' => 'Main St', 'city' => 'Wicklow', 'postal_code' => 'A67', 'is_active' => true]);
+
+        $this->actingAs($office)->post(route('delivery-runs.assign', $run), ['customer_id' => $shop->id])
+            ->assertRedirect(route('delivery-runs.index').'#stop-'.$shop->id);
+        $this->actingAs($office)->post(route('delivery-runs.unassign', $shop))
+            ->assertRedirect(route('delivery-runs.index').'#run-'.$run->id);
     }
 
     public function test_deleting_a_run_unassigns_customers_without_deleting_them(): void
@@ -413,6 +508,43 @@ class ChilledRunTest extends TestCase
         $this->assertSame($run->dateFor()->toDateString(), $order->delivery_date->toDateString());
         $this->assertSame(6, $order->orderItems()->sole()->quantity_ordered);
         $this->assertStringStartsWith('ORD-', $order->order_number);
+    }
+
+    public function test_entry_saves_notes_and_lands_on_the_row(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Notes Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $office = User::factory()->create();
+
+        $this->actingAs($office)
+            ->post(route('chilled-runs.save-stop', $shop), [
+                'run' => $run->id,
+                'qty' => [$oneL->id => 6],
+                'notes' => 'Back door, before 7',
+            ])
+            ->assertRedirect(route('chilled-runs.index', ['run' => $run->id]).'#stop-'.$shop->id);
+
+        $order = Order::where('customer_id', $shop->id)->sole();
+        $this->assertSame('Back door, before 7', $order->notes);
+
+        // The editor pre-fills them; a blank textarea clears them.
+        $this->actingAs($office)->get(route('chilled-runs.index', ['run' => $run->id, 'edit' => $shop->id]))
+            ->assertOk()
+            ->assertSee('name="notes"', false)
+            ->assertViewHas('sheet', fn ($sheet) => $sheet['editNotes'] === 'Back door, before 7');
+
+        $this->actingAs($office)->post(route('chilled-runs.save-stop', $shop), [
+            'run' => $run->id, 'qty' => [$oneL->id => 6], 'notes' => '',
+        ]);
+        $this->assertNull($order->fresh()->notes);
+
+        // A post without the field leaves notes alone.
+        $order->update(['notes' => 'Kept']);
+        $this->actingAs($office)->post(route('chilled-runs.save-stop', $shop), [
+            'run' => $run->id, 'qty' => [$oneL->id => 7],
+        ]);
+        $this->assertSame('Kept', $order->fresh()->notes);
     }
 
     public function test_entry_updates_an_existing_line_without_duplicating(): void

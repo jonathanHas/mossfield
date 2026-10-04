@@ -193,7 +193,7 @@ class CustomerSpecialPriceTest extends TestCase
                 'product_variant_id' => $this->bottle->id,
                 'price' => 1.10,
             ])
-            ->assertRedirect(route('customers.show', $this->customer));
+            ->assertRedirect(route('customers.show', $this->customer).'#special-prices');
 
         $sp = CustomerSpecialPrice::sole();
         $this->assertSame('1.10', (string) $sp->price);
@@ -204,13 +204,13 @@ class CustomerSpecialPriceTest extends TestCase
                 'product_variant_id' => $this->bottle->id,
                 'price' => 1.05,
             ])
-            ->assertRedirect(route('customers.show', $this->customer));
+            ->assertRedirect(route('customers.show', $this->customer).'#special-prices');
         $this->assertSame('1.05', (string) $sp->fresh()->price);
 
         // Destroy
         $this->actingAs($office)
             ->delete(route('customers.special-prices.destroy', [$this->customer, $sp]))
-            ->assertRedirect(route('customers.show', $this->customer));
+            ->assertRedirect(route('customers.show', $this->customer).'#special-prices');
         $this->assertNull(CustomerSpecialPrice::find($sp->id));
     }
 
@@ -304,5 +304,38 @@ class CustomerSpecialPriceTest extends TestCase
         preg_match('/const '.$name.' = (.+?);\n/', $page, $m);
 
         return $m[1];
+    }
+
+    public function test_the_add_select_omits_variants_that_already_have_a_special(): void
+    {
+        $office = User::factory()->create();
+        $this->actingAs($office)->post(route('customers.special-prices.store', $this->customer), [
+            'product_variant_id' => $this->bottle->id, 'price' => 1.10,
+        ]);
+
+        $html = $this->actingAs($office)->get(route('customers.show', $this->customer))
+            ->assertOk()
+            ->assertSee('id="special-prices"', false)
+            ->getContent();
+
+        $select = substr($html, strpos($html, 'id="sp-variant"'));
+        $select = substr($select, 0, strpos($select, '</select>'));
+        $this->assertStringNotContainsString('value="'.$this->bottle->id.'"', $select);
+    }
+
+    public function test_a_new_customer_lands_on_its_own_page_and_delete_keeps_the_filter(): void
+    {
+        $office = User::factory()->create();
+
+        $response = $this->actingAs($office)->post(route('customers.store'), [
+            'name' => 'Brand New Shop', 'email' => 'new@example.ie', 'address' => 'Main St', 'city' => 'Bray',
+            'postal_code' => 'A98', 'country' => 'Ireland', 'credit_limit' => 0, 'payment_terms' => 'net_30',
+            'is_active' => '1',
+        ])->assertSessionHasNoErrors();
+        $new = Customer::where('name', 'Brand New Shop')->sole();
+        $response->assertRedirect(route('customers.show', $new));
+
+        $this->actingAs($office)->delete(route('customers.destroy', ['customer' => $new, 'search' => 'Brand', 'is_active' => '1']))
+            ->assertRedirect(route('customers.index', ['search' => 'Brand', 'is_active' => '1']));
     }
 }

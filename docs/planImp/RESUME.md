@@ -52,10 +52,20 @@ worth returning to.
   negative amount). Suite **557 passed, 0 failed**. Write-up in
   `TESTING_AND_FIXES.md` → 2026-10-04 Money and state. Jon archives
   `plan.md` + `implemented.md` to `archive/2026-10-04-money-and-state/`.
-- **Next, in either order:** cycle 4 (S3/S4 friction from the E2E run — list
-  in the cycle-2 Review, plus the four follow-ons in the cycle-3 Review);
-  `OPEN_QUESTIONS.md` #1 (write-offs) and #5 (E2E decisions) once Jon
-  answers — each answer is a one-step plan; `FULFILMENT_PLAN.md` Phase 4.
+- **Cycle 4 "Friction" — ACCEPTED 2026-10-04:** the S3 findings landed
+  (expired stock visible; one-day picking queue with a stale bucket; cyclic
+  Skip; partial mature release; Pick/Ordered labels + Fulfil confirm; merge
+  duplicate variants; fragment redirects everywhere; sheet Notes; run reorder
+  as one form; per-order dispatch flash; Void blocker named; statement
+  defaults; "in credit"; error pages). Suite **598 passed, 0 failed**.
+  Write-up in `TESTING_AND_FIXES.md` → 2026-10-04 Friction. Jon archives
+  `plan.md` + `implemented.md` to `archive/2026-10-04-friction/`.
+- **Next, in either order:** **cycle 5 — copy & polish** (the S4 list in the
+  cycle-4 plan's Out of scope + its Review notes: flash near the fragment,
+  sheet `scroll-mt`, `Route::fallback()` in the web group, the third
+  allocate message); `OPEN_QUESTIONS.md` #1 (write-offs) and #5 (E2E
+  decisions) once Jon answers — each answer is a one-step plan;
+  `FULFILMENT_PLAN.md` Phase 4.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -99,7 +109,10 @@ run #1 positions 1–2; run #1 charge is now €6.15). Order 14 is `preparing`
 with 12 units reserved — pick it, short it or cancel it when it gets in the
 way. Cycle 3's browser checks added orders 19–20 (cancelled) and payment 8
 (€1.00 on INV-000006, the double-click check — the one row with a
-`form_token`); counts now 19 orders, 4 payments. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+`form_token`). Cycle 4's added orders 21–22 (cancelled) and **released one
+more G010426 wheel to Mature** (item 46 now `remaining 7 · held 1`; G010426-1
+has 2) — reversible from the Mature batch page. Counts now 21 orders, 4
+payments, 7 invoices. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.

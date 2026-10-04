@@ -93,7 +93,7 @@
                                     <a href="{{ route('customers.edit', $customer) }}" class="mf-link">Edit</a>
                                     @if($customer->orders_count === 0)
                                         <span style="color: var(--faint);"> · </span>
-                                        <form action="{{ route('customers.destroy', $customer) }}" method="POST" class="inline">
+                                        <form action="{{ route('customers.destroy', array_merge(['customer' => $customer], request()->only('search', 'is_active'))) }}" method="POST" class="inline">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);"

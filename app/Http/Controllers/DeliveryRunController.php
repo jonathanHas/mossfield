@@ -6,6 +6,7 @@ use App\Models\Customer;
 use App\Models\DeliveryRun;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -105,32 +106,110 @@ class DeliveryRunController extends Controller
             'run_position' => ((int) $deliveryRun->customers()->max('run_position')) + 1,
         ]);
 
-        return redirect()->route('delivery-runs.index')
+        return redirect()->route('delivery-runs.index')->withFragment('stop-'.$customer->id)
             ->with('success', "{$customer->name} added to {$deliveryRun->name}.");
     }
 
     /**
-     * Save a new stop order — an array of customer ids in the wanted order.
+     * Change the stop order. Two shapes, exactly one per request:
+     *  - positions: [customer_id => wanted position] — the run panel's
+     *    Position boxes + Save order;
+     *  - move: {customer_id, direction: up|down} — the ↑/↓ buttons, a swap
+     *    with the neighbour.
+     * Either way the run is renumbered 1…n and the page lands on the stop
+     * that moved (F-15).
      */
     public function reorder(Request $request, DeliveryRun $deliveryRun): RedirectResponse
     {
         $this->authorize('update', $deliveryRun);
 
         $validated = $request->validate([
-            'positions' => 'required|array',
-            'positions.*' => 'integer|exists:customers,id',
+            'positions' => 'required_without:move|prohibits:move|array',
+            'positions.*' => 'required|integer|min:1',
+            'move' => 'required_without:positions|array',
+            'move.customer_id' => 'required_with:move|integer',
+            'move.direction' => 'required_with:move|in:up,down',
         ]);
 
-        DB::transaction(function () use ($deliveryRun, $validated) {
-            foreach (array_values($validated['positions']) as $index => $customerId) {
-                Customer::where('id', $customerId)
-                    ->where('delivery_run_id', $deliveryRun->id)
-                    ->update(['run_position' => $index + 1]);
+        $stops = $deliveryRun->customers()->get()->values();
+        $onRun = $stops->pluck('id')->all();
+
+        $posted = isset($validated['positions'])
+            ? array_map('intval', array_keys($validated['positions']))
+            : [(int) $validated['move']['customer_id']];
+        if (array_diff($posted, $onRun)) {
+            return redirect()->route('delivery-runs.index')
+                ->with('error', 'That stop is not on '.$deliveryRun->name.' — reload the page and try again.');
+        }
+
+        $ordered = isset($validated['positions'])
+            ? $this->orderByWantedPosition($stops, $validated['positions'])
+            : $this->swapWithNeighbour($stops, (int) $validated['move']['customer_id'], $validated['move']['direction']);
+
+        // Land on the stop the operator moved: the ↑/↓ one, or the first
+        // whose Position box was changed (in its new place). Falls back to
+        // the first stop whose number changed.
+        if (isset($validated['move'])) {
+            $landOn = (int) $validated['move']['customer_id'];
+        } else {
+            $current = $stops->mapWithKeys(fn ($stop, $index) => [$stop->id => $index + 1]);
+            $landOn = $ordered->first(fn ($stop) => isset($validated['positions'][$stop->id])
+                    && (int) $validated['positions'][$stop->id] !== $current[$stop->id])?->id
+                ?? $ordered->first(fn ($stop, $index) => (int) $stop->run_position !== $index + 1)?->id;
+        }
+
+        DB::transaction(function () use ($ordered) {
+            foreach ($ordered as $index => $stop) {
+                if ((int) $stop->run_position !== $index + 1) {
+                    $stop->update(['run_position' => $index + 1]);
+                }
             }
         });
 
-        return redirect()->route('delivery-runs.index')
-            ->with('success', "Stop order updated for {$deliveryRun->name}.");
+        $redirect = redirect()->route('delivery-runs.index');
+        if ($landOn) {
+            $redirect = $redirect->withFragment('stop-'.$landOn);
+        }
+
+        return $redirect->with('success', "Stop order updated for {$deliveryRun->name}.");
+    }
+
+    /**
+     * A stop given a new position is taken out and put back in at that
+     * position; everyone else keeps their relative order and closes up
+     * around it. So "17" on a 17-stop run means last, and "1" means first.
+     */
+    private function orderByWantedPosition(Collection $stops, array $positions): Collection
+    {
+        $current = $stops->mapWithKeys(fn ($stop, $index) => [$stop->id => $index + 1]);
+
+        $moved = $stops
+            ->filter(fn ($stop) => isset($positions[$stop->id]) && (int) $positions[$stop->id] !== $current[$stop->id])
+            ->sortBy([
+                fn ($a, $b) => (int) $positions[$a->id] <=> (int) $positions[$b->id],
+                fn ($a, $b) => $current[$a->id] <=> $current[$b->id],
+            ]);
+
+        $result = $stops->reject(fn ($stop) => $moved->contains('id', $stop->id))->values()->all();
+        foreach ($moved as $stop) {
+            $at = min(max((int) $positions[$stop->id], 1) - 1, count($result));
+            array_splice($result, $at, 0, [$stop]);
+        }
+
+        return collect($result);
+    }
+
+    private function swapWithNeighbour(Collection $stops, int $customerId, string $direction): Collection
+    {
+        $list = $stops->all();
+        $index = $stops->search(fn ($stop) => $stop->id === $customerId);
+        $other = $direction === 'up' ? $index - 1 : $index + 1;
+
+        if ($other >= 0 && $other < count($list)) {
+            [$list[$index], $list[$other]] = [$list[$other], $list[$index]];
+        }
+
+        return collect($list);
     }
 
     /**
@@ -149,7 +228,8 @@ class DeliveryRunController extends Controller
 
         $customer->update(['delivery_run_id' => null, 'run_position' => null]);
 
-        return redirect()->route('delivery-runs.index')
+        // The stop row is gone; land on the run it left.
+        return redirect()->route('delivery-runs.index')->withFragment('run-'.$run->id)
             ->with('success', "{$customer->name} removed from {$run->name}.");
     }
 
@@ -171,7 +251,7 @@ class DeliveryRunController extends Controller
 
         $customer->update(['apply_delivery_charge' => ! $customer->apply_delivery_charge]);
 
-        return redirect()->route('delivery-runs.index', ['charges' => 1])
+        return redirect()->route('delivery-runs.index', ['charges' => 1])->withFragment('stop-'.$customer->id)
             ->with('success', $customer->apply_delivery_charge
                 ? "{$customer->name} will now get the {$run->name} delivery charge on new orders."
                 : "{$customer->name} will no longer get a delivery charge.");

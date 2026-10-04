@@ -9,7 +9,10 @@
         $isVariable = $orderItem->isVariableWeight();
         $isBulk = $orderItem->isBulkWeighed();
         $canSeeMoney = auth()->user()->can('see-financials');
-        $expWeight = (float) ($variant->weight_kg ?? 1);
+        // Nominal unit weight, as the server's weight bound reads it: only a
+        // positive weight_kg gives OK/Check thresholds (a stored 0 used to
+        // flag every weight as "Check").
+        $expWeight = (float) $variant->weight_kg > 0 ? (float) $variant->weight_kg : null;
         $thumbClass = match ($product->type) {
             'milk' => 'mf-thumb--milk',
             'yoghurt' => 'mf-thumb--yog',
@@ -255,12 +258,12 @@
             <div class="mob-section" style="margin-top: 18px;">
                 <div class="mf-eyebrow" style="padding-left: 4px;">How many are you picking?</div>
                 <div class="mob-card flex items-center" style="margin-top: 6px; padding: 12px 16px; gap: 18px;">
-                    <button type="button" class="mob-step-btn" @click="qty = Math.max(1, qty - 1)">−</button>
+                    <button type="button" class="mob-step-btn" @click="qty = Math.max(1, qty - 1)" :disabled="qty <= 1">−</button>
                     <div class="flex-1 text-center">
                         <div style="font-family: Fraunces, Georgia, serif; font-size: 40px; font-weight: 500; letter-spacing: -1.5px; line-height: 1;" x-text="qty"></div>
                         <div style="font-size: 11px; color: var(--muted); margin-top: 4px;">of {{ $needed }} needed · <span x-text="maxQty"></span> in batch</div>
                     </div>
-                    <button type="button" class="mob-step-btn" @click="qty = Math.min(maxQty, qty + 1)">+</button>
+                    <button type="button" class="mob-step-btn" @click="qty = Math.min(maxQty, qty + 1)" :disabled="qty >= maxQty">+</button>
                 </div>
                 @if ($needed > 1)
                     <div class="flex gap-2 mt-3">
@@ -310,12 +313,18 @@
                                 <input type="number" name="weights[]" step="0.001" min="0.001" inputmode="decimal" placeholder="0.000"
                                        x-model="weights[i-1]" style="margin-top: 2px;"
                                        x-on:keydown="if ($event.key === ',') { $event.preventDefault(); document.execCommand('insertText', false, '.'); }">
-                                <div class="est">expected ~ {{ number_format($expWeight, 2) }} kg</div>
+                                @if ($expWeight)
+                                    <div class="est">expected ~ {{ number_format($expWeight, 2) }} kg</div>
+                                @endif
                             </div>
                             {{-- More than twice the expected weight is almost certainly a
                                  misplaced decimal point. The server refuses 3× outright. --}}
-                            <span class="mf-tag mf-tag-accent" x-show="parseFloat(weights[i-1]) > 0 && parseFloat(weights[i-1]) <= {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
-                            <span class="mf-tag mf-tag-warn" x-show="parseFloat(weights[i-1]) > {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>Check</span>
+                            @if ($expWeight)
+                                <span class="mf-tag mf-tag-accent" x-show="parseFloat(weights[i-1]) > 0 && parseFloat(weights[i-1]) <= {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                                <span class="mf-tag mf-tag-warn" x-show="parseFloat(weights[i-1]) > {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>Check</span>
+                            @else
+                                <span class="mf-tag mf-tag-accent" x-show="parseFloat(weights[i-1]) > 0"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                            @endif
                         </div>
                     </template>
                     <input type="hidden" name="actual_weight_kg" :value="total > 0 ? total.toFixed(3) : ''">
@@ -330,10 +339,16 @@
                             <input type="number" name="actual_weight_kg" step="0.001" min="0.001" inputmode="decimal" placeholder="0.000"
                                    x-model="bulkWeight" style="margin-top: 2px;"
                                    x-on:keydown="if ($event.key === ',') { $event.preventDefault(); document.execCommand('insertText', false, '.'); }">
-                            <div class="est">expected ~ <span x-text="(qty * {{ $expWeight }}).toFixed(2)"></span> kg</div>
+                            @if ($expWeight)
+                                <div class="est">expected ~ <span x-text="(qty * {{ $expWeight }}).toFixed(2)"></span> kg</div>
+                            @endif
                         </div>
-                        <span class="mf-tag mf-tag-accent" x-show="parseFloat(bulkWeight) > 0 && parseFloat(bulkWeight) <= qty * {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
-                        <span class="mf-tag mf-tag-warn" x-show="parseFloat(bulkWeight) > qty * {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>Check</span>
+                        @if ($expWeight)
+                            <span class="mf-tag mf-tag-accent" x-show="parseFloat(bulkWeight) > 0 && parseFloat(bulkWeight) <= qty * {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                            <span class="mf-tag mf-tag-warn" x-show="parseFloat(bulkWeight) > qty * {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>Check</span>
+                        @else
+                            <span class="mf-tag mf-tag-accent" x-show="parseFloat(bulkWeight) > 0"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                        @endif
                     </div>
                 </div>
             @endif
@@ -341,7 +356,8 @@
             {{-- Partial short: the fridge has some, but not enough. Sits above
                  the fixed footer rather than in it — three thumb-sized actions
                  side by side is one too many, and this one is decisive. --}}
-            <div class="mob-section" style="margin-top: 22px;">
+            {{-- Bottom margin: the fixed footer must never cover this (F-31). --}}
+            <div class="mob-section" style="margin-top: 22px; margin-bottom: 24px;">
                 <button type="submit" class="mf-btn-secondary w-full justify-center"
                         style="padding: 11px; border-radius: 10px; color: var(--warn-ink); font-size: 13px;"
                         form="short-line-form" data-confirm="Can't finish this line? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won't be supplied or billed." data-confirm-label="Mark short" data-confirm-danger>

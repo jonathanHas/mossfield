@@ -100,4 +100,30 @@ class InvoiceVoidTest extends InvoicingTestCase
         $this->actingAs($office)->get(route('invoicing.invoices.index', ['status' => 'void']))
             ->assertOk()->assertSee($invoice->number);
     }
+
+    public function test_the_page_names_what_blocks_a_void(): void
+    {
+        $invoice = $this->issue($this->deliveredOrder());
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->get(route('invoicing.invoices.show', $invoice))
+            ->assertOk()
+            ->assertDontSee('data-void-blocker', false);
+
+        app(PaymentService::class)->record($this->shop, [
+            'amount' => 5.00, 'received_at' => today()->toDateString(), 'method' => 'bank_transfer',
+        ], [$invoice->id => 5.00]);
+
+        $this->actingAs($office)->get(route('invoicing.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee("Can't void — remove its payments (1) first.")
+            ->assertSee('disabled style="opacity: .45; cursor: default;"', false);
+
+        $note = app(\App\Services\CreditNoteService::class)->issue($invoice->fresh(), [
+            ['description' => 'Returned', 'quantity' => 1, 'amount' => 1.00, 'vat_rate' => 0],
+        ], 'Damaged');
+
+        $this->actingAs($office)->get(route('invoicing.invoices.show', $invoice))
+            ->assertSee("Can't void — remove its payments (1) and credit note ({$note->number}) first.");
+    }
 }

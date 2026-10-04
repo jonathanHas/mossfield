@@ -136,4 +136,22 @@ class OrderAllocationConcurrencyTest extends TestCase
             'unit_price' => $this->variant->base_price,
         ]);
     }
+
+    public function test_the_allocate_refusal_says_which_limit_was_hit(): void
+    {
+        $office = \App\Models\User::factory()->create();
+
+        // The line is already covered.
+        $full = $this->makeOrderItem(quantityOrdered: 2);
+        $full->allocateFromBatchItem($this->batchItem, 2);
+        $this->actingAs($office)->post(route('order-allocations.allocate', $full), [
+            'batch_item_id' => $this->batchItem->id, 'quantity' => 1,
+        ])->assertSessionHasErrors(['quantity' => 'This line is already fully allocated (2 of 2).']);
+
+        // The batch hasn't that many free (10 − 2 reserved = 8).
+        $big = $this->makeOrderItem(quantityOrdered: 20);
+        $this->actingAs($office)->post(route('order-allocations.allocate', $big), [
+            'batch_item_id' => $this->batchItem->id, 'quantity' => 9,
+        ])->assertSessionHasErrors(['quantity' => 'Only 8 units are available in this batch right now.']);
+    }
 }

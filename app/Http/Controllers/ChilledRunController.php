@@ -124,8 +124,8 @@ class ChilledRunController extends Controller
             'run' => $request->input('run', $order->customer?->delivery_run_id),
             'date' => $request->input('date'),
         ]))->with('success', $order->loaded_at
-            ? "{$order->customer->name} marked loaded."
-            : "{$order->customer->name} unmarked — back on the to-load list.");
+            ? "{$order->customer->name} · {$order->order_number} marked loaded."
+            : "{$order->customer->name} · {$order->order_number} unmarked — back on the to-load list.");
     }
 
     /**
@@ -207,7 +207,7 @@ class ChilledRunController extends Controller
             }
         }
 
-        [$key, $message] = $this->dispatchFlash($results, $unloaded, $notReady);
+        [$key, $message] = $this->dispatchFlash($results, $notReady->concat($unloaded)->sortBy('order_number')->values());
 
         return redirect()->route('chilled-runs.index', array_filter([
             'run' => $run->id,
@@ -222,22 +222,22 @@ class ChilledRunController extends Controller
      * @param  array<int, DispatchResult>  $results
      * @return array{0: string, 1: string}
      */
-    private function dispatchFlash(array $results, Collection $unloaded, Collection $notReady): array
+    private function dispatchFlash(array $results, Collection $skippedOrders): array
     {
-        $names = fn (Collection $orders) => $orders->map(fn (Order $o) => $o->customer?->name ?? $o->order_number)
-            ->unique()->implode(', ');
+        // Name each skipped ORDER with every reason it was held back (F-32):
+        // "ORD-… Shop B (not picked, not loaded)".
+        $skippedList = $skippedOrders->map(function (Order $o) {
+            $reasons = array_filter([
+                $o->status !== 'ready' ? 'not picked' : null,
+                $o->loaded_at === null ? 'not loaded' : null,
+            ]);
+
+            return trim($o->order_number.' '.($o->customer?->name ?? '')).' ('.implode(', ', $reasons).')';
+        })->implode('; ');
 
         if (! $results) {
-            $why = [];
-            if ($unloaded->isNotEmpty()) {
-                $why[] = $names($unloaded).' not loaded';
-            }
-            if ($notReady->isNotEmpty()) {
-                $why[] = $names($notReady).' not ready';
-            }
-
             return ['error', 'Nothing to dispatch — tick loaded on ready stops first.'
-                .($why ? ' ('.implode('; ', $why).')' : '')];
+                .($skippedList !== '' ? ' (skipped: '.$skippedList.')' : '')];
         }
 
         $dispatched = count($results);
@@ -245,20 +245,13 @@ class ChilledRunController extends Controller
         $queued = count(array_filter($results, fn (DispatchResult $r) => $r->emailRow !== null));
 
         $parts = [
-            $dispatched.' '.str('stop')->plural($dispatched).' dispatched',
+            $dispatched.' '.str('order')->plural($dispatched).' dispatched',
             $issued.' '.str('invoice')->plural($issued).' issued',
             $queued.' '.str('confirmation')->plural($queued).' queued',
         ];
 
-        $skipped = [];
-        if ($unloaded->isNotEmpty()) {
-            $skipped[] = $names($unloaded).' (not loaded)';
-        }
-        if ($notReady->isNotEmpty()) {
-            $skipped[] = $names($notReady).' (not ready)';
-        }
-        if ($skipped) {
-            $parts[] = 'skipped: '.implode('; ', $skipped);
+        if ($skippedList !== '') {
+            $parts[] = 'skipped: '.$skippedList;
         }
 
         $invoiceFailed = collect($results)->filter(fn (DispatchResult $r) => $r->invoiceError !== null);
@@ -441,6 +434,7 @@ class ChilledRunController extends Controller
             'qty' => 'array',
             'qty.*' => 'nullable|integer|min:0|max:65000',
             'customer_reference' => 'nullable|string|max:255',
+            'notes' => 'nullable|string|max:2000',
         ]);
 
         $run = DeliveryRun::findOrFail($validated['run']);
@@ -452,10 +446,11 @@ class ChilledRunController extends Controller
         abort_if($orders->count() > 1, 409, 'Multiple orders for this stop — edit them on the order pages.');
         $order = $orders->first();
 
+        // Back to the row that was saved, not the top of the sheet (F-16).
         $backToSheet = fn () => redirect()->route('chilled-runs.index', array_filter([
             'run' => $run->id,
             'date' => $request->input('date'),
-        ]));
+        ]))->withFragment('stop-'.$customer->id);
 
         if ($order && ! in_array($order->status, self::OPEN_STATUSES, true)) {
             return $backToSheet()->with('error', "This order is {$order->status} and can't be edited here.");
@@ -480,7 +475,12 @@ class ChilledRunController extends Controller
             return $backToSheet()->with('success', 'Nothing to save — no quantities entered.');
         }
 
-        DB::transaction(function () use (&$order, $customer, $runDate, $posted, $postedPositive, $reference) {
+        // Notes (F-28): only touched when the editor posted the field; a
+        // blank textarea clears them.
+        $notesPosted = array_key_exists('notes', $validated);
+        $notes = $notesPosted && trim((string) $validated['notes']) !== '' ? trim($validated['notes']) : null;
+
+        DB::transaction(function () use (&$order, $customer, $runDate, $posted, $postedPositive, $reference, $notesPosted, $notes) {
             // The edit zeroes everything and no lines exist outside the posted
             // set: an order can't go empty, so cancel it (keeping the lines as
             // history, returning all committed stock).
@@ -506,6 +506,9 @@ class ChilledRunController extends Controller
             // Persist the (possibly cleared) customer reference. calculateTotals()
             // below saves the model, so this dirty attribute rides along.
             $order->customer_reference = $reference;
+            if ($notesPosted) {
+                $order->notes = $notes;
+            }
 
             $existingByVariant = $order->orderItems()->get()->groupBy('product_variant_id');
 
@@ -783,6 +786,7 @@ class ChilledRunController extends Controller
             'editCustomerId' => $editRow ? $editCustomerId : 0,
             'editQuantities' => $editRow ? ($qtyMap[$editCustomerId] ?? []) : [],
             'editCustomerReference' => $editRow ? ($references[$editCustomerId] ?? null) : null,
+            'editNotes' => $editRow ? $editRow['orders']->first()?->notes : null,
             'history' => $editRow ? $this->historyFor($editRow['customer'], $editRow['orders']->first()) : [],
             'addLineVariants' => $editRow ? $this->addLineVariants($fixedCols, $cheeseCols) : collect(),
         ];

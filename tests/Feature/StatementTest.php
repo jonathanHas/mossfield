@@ -180,4 +180,26 @@ class StatementTest extends InvoicingTestCase
 
         $this->assertStringStartsWith('%PDF', $pdf->output());
     }
+
+    public function test_the_preview_defaults_to_this_month_to_date(): void
+    {
+        $this->actingAs(User::factory()->create())
+            ->get(route('invoicing.statements.preview', $this->shop))
+            ->assertOk()
+            ->assertViewHas('from', fn ($from) => $from->toDateString() === today()->startOfMonth()->toDateString())
+            ->assertViewHas('to', fn ($to) => $to->toDateString() === today()->toDateString());
+    }
+
+    public function test_a_customer_in_credit_reads_in_credit_not_minus(): void
+    {
+        $invoice = $this->issue($this->deliveredOrder(10)); // €15
+        app(PaymentService::class)->record($this->shop, [
+            'amount' => 40.00, 'received_at' => today()->toDateString(), 'method' => 'bank_transfer',
+        ], [$invoice->id => 15.00]);
+
+        $this->actingAs(User::factory()->create())->get(route('customers.show', $this->shop))
+            ->assertOk()
+            ->assertSee('€25.00 in credit')
+            ->assertDontSee('€-25.00');
+    }
 }

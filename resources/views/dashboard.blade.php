@@ -127,6 +127,18 @@
                 </div>
             @endif
 
+            {{-- Expired stock: active batches past expiry that still hold units.
+                 Unsellable but uncounted anywhere else, so it gets its own tile. --}}
+            @if (($expiredCount ?? 0) > 0)
+                <div class="grid gap-3 mb-4 grid-cols-1 sm:grid-cols-3">
+                    <a href="{{ route('batches.index', ['status' => 'expired']) }}">
+                        <x-dash-kpi label="Expired stock" :value="$expiredCount"
+                            :sub="number_format($expiredUnits).' units · write off or close'"
+                            tone="danger" />
+                    </a>
+                </div>
+            @endif
+
             {{-- KPI row --}}
             <div class="grid gap-3 mb-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
                 @if ($user->hasRole('admin', 'office'))

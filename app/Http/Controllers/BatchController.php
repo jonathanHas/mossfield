@@ -37,7 +37,17 @@ class BatchController extends Controller
 
         // Filter by status
         if ($request->filled('status')) {
-            $query->where('status', $request->status);
+            if ($request->status === 'expired') {
+                // "Expired" means unsellable: closed as expired, or still
+                // marked active with its expiry passed (strict, as
+                // Batch::isExpired()) — the dashboard tile links here.
+                $query->where(function ($q) {
+                    $q->where('status', 'expired')
+                        ->orWhere(fn ($q) => $q->where('status', 'active')->where('expiry_date', '<=', today()));
+                });
+            } else {
+                $query->where('status', $request->status);
+            }
         }
 
         // Filter by maturation status for cheese

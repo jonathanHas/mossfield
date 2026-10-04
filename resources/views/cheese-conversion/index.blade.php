@@ -73,15 +73,27 @@
                             <x-mature.meta label="Raw milk" :value="number_format($batch->raw_milk_litres, 1).'L'" />
                         </div>
                         @if($canConvert && $eligible && $maturing > 0)
-                            {{-- Submits the sibling release form (form= attribute), which
-                                 carries the SAVED hold — not this allocator's live, possibly
-                                 unsaved, Maturing-zone count. --}}
-                            <button type="submit" form="release-form-{{ $item->id }}"
-                                    class="mc-btn mc-btn-mature" style="margin-left: 8px;"
-                                    data-confirm="Release {{ $maturing }} held wheel(s) into mature cheese?" data-confirm-label="Release">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg>
-                                Release {{ $maturing }} to mature
-                            </button>
+                            {{-- Release part or all of the SAVED hold (F-13). The count
+                                 input and button belong to the sibling release form via
+                                 form=; release() validates 1 ≤ quantity ≤ saved hold, so
+                                 while the Maturing zone has unsaved moves the button is
+                                 off — save first. --}}
+                            <div class="flex items-center gap-1.5 text-[12.5px]" style="margin-left: 8px;">
+                                <label for="release-qty-{{ $item->id }}">Release</label>
+                                <input type="number" id="release-qty-{{ $item->id }}" name="quantity" form="release-form-{{ $item->id }}"
+                                       min="1" max="{{ $maturing }}" value="{{ $maturing }}" required
+                                       class="mf-input font-mono" style="width: 64px; padding: 4px 6px;"
+                                       x-on:input="$refs.releaseBtn.dataset.confirm = `Release ${$event.target.value} held wheel(s) into mature cheese?`">
+                                <span>of {{ $maturing }} to mature</span>
+                                <button type="submit" form="release-form-{{ $item->id }}" x-ref="releaseBtn"
+                                        class="mc-btn mc-btn-mature"
+                                        :disabled="mature.length !== {{ $maturing }}"
+                                        data-confirm="Release {{ $maturing }} held wheel(s) into mature cheese?" data-confirm-label="Release">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg>
+                                    Release
+                                </button>
+                                <span x-show="mature.length !== {{ $maturing }}" x-cloak style="color: var(--warn-ink);">Save maturing first</span>
+                            </div>
                         @endif
                         <a href="{{ route('batches.show', $batch) }}" class="mc-btn mc-btn-secondary" style="margin-left: 8px;">View batch</a>
                     </div>
@@ -255,10 +267,9 @@
                 </form>
                 @if($canConvert && $eligible && $maturing > 0)
                     {{-- Release form (sibling — a form can't nest in the hold form).
-                         Posts the saved hold; release() validates 1 ≤ quantity ≤ hold. --}}
+                         Its quantity input sits in the card header (form= attribute). --}}
                     <form id="release-form-{{ $item->id }}" method="POST" action="{{ route('cheese-conversion.release', $item) }}" hidden>
                         @csrf
-                        <input type="hidden" name="quantity" value="{{ $maturing }}">
                     </form>
                 @endif
             @empty

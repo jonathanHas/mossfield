@@ -311,14 +311,40 @@ class CheeseConversionTest extends TestCase
 
         $html = $this->actingAs($office)->get(route('cheese-conversion.index'))->assertOk()->getContent();
 
-        // A dedicated release form carrying the saved hold — not the allocator's
-        // live (possibly unsaved) Maturing-zone count.
+        // A dedicated release form whose quantity defaults to the saved hold —
+        // not the allocator's live (possibly unsaved) Maturing-zone count.
+        // Since cycle 4 (F-13) the count is an editable input in the card
+        // header, tied to that form by form=, and the button is off while the
+        // Maturing zone differs from the saved hold.
         $releaseUrl = preg_quote(route('cheese-conversion.release', $wheel), '/');
+        $this->assertMatchesRegularExpression('/<form id="release-form-'.$wheel->id.'"[^>]*action="'.$releaseUrl.'"/', $html);
         $this->assertMatchesRegularExpression(
-            '/<form[^>]*action="'.$releaseUrl.'"[^>]*>(?:(?!<\/form>).)*name="quantity"[^>]*value="3"/s',
+            '/<input type="number"[^>]*name="quantity" form="release-form-'.$wheel->id.'"[^>]*max="3" value="3"/s',
             $html,
         );
-        $this->assertStringContainsString('Release 3 to mature', $html);
+        $this->assertStringContainsString(':disabled="mature.length !== 3"', $html);
+        $this->assertStringContainsString('of 3 to mature', $html);
+        $this->assertStringContainsString('Save maturing first', $html);
+    }
+
+    public function test_part_of_a_hold_can_be_released_from_the_page(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 2);
+
+        $this->actingAs($office)->get(route('cheese-conversion.index'))
+            ->assertOk()
+            ->assertSee('min="1" max="2" value="2"', false);
+
+        $this->actingAs($office)
+            ->post(route('cheese-conversion.release', $wheel), ['quantity' => 1])
+            ->assertRedirect(route('cheese-conversion.index'))
+            ->assertSessionHasNoErrors();
+
+        $wheel->refresh();
+        $this->assertSame(1, $wheel->quantity_maturing, 'one wheel still held');
+        $this->assertSame(1, (int) CheeseConversionLog::first()->wheels_converted);
     }
 
     public function test_undo_release_returns_wheels_to_the_hold(): void

@@ -274,4 +274,23 @@ class PaymentAllocationTest extends InvoicingTestCase
         $this->assertSame(15.0, $this->shop->fresh()->outstanding_balance);
         $this->assertSame('15.00', $invoice->balance);
     }
+
+    public function test_a_refused_submit_keeps_the_manual_split(): void
+    {
+        $invoice = $this->issue($this->deliveredOrder(10)); // €15
+        $office = User::factory()->create();
+        $create = route('invoicing.payments.create', ['customer_id' => $this->shop->id]);
+
+        $this->actingAs($office)->from($create)->post(route('invoicing.payments.store'), [
+            'customer_id' => $this->shop->id,
+            'amount' => '',
+            'received_at' => today()->toDateString(),
+            'method' => 'bank_transfer',
+            'allocations' => [$invoice->id => '7.25'],
+        ])->assertRedirect($create)->assertSessionHasErrors('amount');
+
+        $html = $this->actingAs($office)->get($create)->assertOk()->getContent();
+        $this->assertStringContainsString('7.25', $html, 'the operator\'s Apply figure comes back');
+        $this->assertSame(0, Payment::count());
+    }
 }

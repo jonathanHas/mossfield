@@ -43,11 +43,30 @@ Route::get('/dashboard', function () {
         $data['maturingCount'] = \App\Models\Batch::where('status', 'active')
             ->where('ready_date', '>', now())
             ->count();
+        // Ready now = sellable now: matured, not expired (strict, as
+        // BatchItem::allocatable()) and still holding stock.
         $data['readyNowCount'] = \App\Models\Batch::where('status', 'active')
             ->where(function ($q) {
                 $q->whereNull('ready_date')->orWhere('ready_date', '<=', now());
             })
+            ->where(function ($q) {
+                $q->whereNull('expiry_date')->orWhere('expiry_date', '>', today());
+            })
+            ->whereHas('batchItems', fn ($q) => $q->where('quantity_remaining', '>', 0))
             ->count();
+
+        // Expired stock: still marked active, past expiry, units left on the
+        // shelf. Nothing can sell it, so it must be seen. (A proper write-off
+        // route is OPEN_QUESTIONS #1; until then the batch is closed by hand.)
+        $expired = \App\Models\BatchItem::query()
+            ->join('batches', 'batches.id', '=', 'batch_items.batch_id')
+            ->where('batches.status', 'active')
+            ->where('batches.expiry_date', '<=', today())
+            ->where('batch_items.quantity_remaining', '>', 0)
+            ->selectRaw('COUNT(DISTINCT batches.id) as batches, COALESCE(SUM(batch_items.quantity_remaining), 0) as units')
+            ->first();
+        $data['expiredCount'] = (int) $expired->batches;
+        $data['expiredUnits'] = (int) $expired->units;
 
         // Side-rail: next few batches closest to maturation.
         $data['maturingSoon'] = \App\Models\Batch::with('product')

@@ -35,7 +35,7 @@
 
         <div class="grid gap-4 lg:grid-cols-2">
             @foreach ($runs as $run)
-                <div class="mf-panel">
+                <div class="mf-panel scroll-mt-20" id="run-{{ $run->id }}">
                     <div class="mf-panel-header">
                         <span class="text-[13px] font-semibold">{{ $run->day_label }} &middot; {{ $run->name }}</span>
                         @unless ($run->is_active)
@@ -65,46 +65,49 @@
                         @if ($stops->isEmpty())
                             <div class="text-[13px]" style="color: var(--muted);">No stops yet.</div>
                         @else
+                            {{-- Position boxes post to the run's one reorder form (form=),
+                                 since each row already holds its own small forms. --}}
+                            <form id="reorder-{{ $run->id }}" method="POST" action="{{ route('delivery-runs.reorder', $run) }}">
+                                @csrf
+                            </form>
                             <ol class="space-y-1">
                                 @foreach ($stops as $index => $stop)
-                                    <li class="flex items-center gap-2 text-[13px] rounded px-2 py-1.5" style="background: var(--bg);">
-                                        <span class="font-mono text-[11px] w-5 text-right" style="color: var(--faint);">{{ $index + 1 }}</span>
+                                    <li id="stop-{{ $stop->id }}" class="flex items-center gap-2 text-[13px] rounded px-2 py-1.5 scroll-mt-20" style="background: var(--bg);">
+                                        <input type="number" name="positions[{{ $stop->id }}]" form="reorder-{{ $run->id }}"
+                                               value="{{ $index + 1 }}" min="1" max="{{ $stops->count() }}" required
+                                               aria-label="Position of {{ $stop->name }}"
+                                               class="mf-input font-mono text-[11px] text-right" style="width: 46px; padding: 2px 4px;">
                                         <span class="font-medium flex-1">{{ $stop->name }}</span>
 
-                                        {{-- Delivery-charge toggle — hidden until "Show charge settings" --}}
-                                        <form method="POST" action="{{ route('delivery-runs.toggle-charge', $stop) }}" x-show="showCharges" x-cloak>
-                                            @csrf
-                                            <button type="submit" class="mf-btn-ghost text-[11px]" style="padding: 2px 6px;"
-                                                    title="Toggle the run's delivery charge for this stop">
-                                                <span style="color: {{ $stop->apply_delivery_charge ? 'var(--accent)' : 'var(--muted)' }};">
-                                                    € charge: {{ $stop->apply_delivery_charge ? 'on' : 'off' }}
-                                                </span>
-                                            </button>
-                                        </form>
-
-                                        {{-- Move up: swap with previous stop --}}
-                                        @if ($index > 0)
-                                            <form method="POST" action="{{ route('delivery-runs.reorder', $run) }}">
+                                        {{-- Delivery charge — hidden until "Show charge settings". A
+                                             percentage customer's charge comes from their own rate,
+                                             not the run's, so there's nothing to toggle (F-18). --}}
+                                        @if ($stop->delivery_charge_percent !== null)
+                                            <span class="mf-tag mf-tag-neutral text-[11px]" x-show="showCharges" x-cloak
+                                                  title="Set on the customer's page">{{ rtrim(rtrim(number_format((float) $stop->delivery_charge_percent, 2), '0'), '.') }} % of order value</span>
+                                        @else
+                                            <form method="POST" action="{{ route('delivery-runs.toggle-charge', $stop) }}" x-show="showCharges" x-cloak>
                                                 @csrf
-                                                @foreach ($stops as $j => $other)
-                                                    <input type="hidden" name="positions[]"
-                                                           value="{{ $j === $index ? $stops[$index - 1]->id : ($j === $index - 1 ? $stop->id : $other->id) }}">
-                                                @endforeach
-                                                <button type="submit" class="mf-btn-ghost" style="padding: 2px 6px;" title="Move up">&uarr;</button>
+                                                <button type="submit" class="mf-btn-ghost text-[11px]" style="padding: 2px 6px;"
+                                                        title="Toggle the run's delivery charge for this stop">
+                                                    <span style="color: {{ $stop->apply_delivery_charge ? 'var(--accent)' : 'var(--muted)' }};">
+                                                        € charge: {{ $stop->apply_delivery_charge ? 'on' : 'off' }}
+                                                    </span>
+                                                </button>
                                             </form>
                                         @endif
 
-                                        {{-- Move down: swap with next stop --}}
-                                        @if ($index < $stops->count() - 1)
-                                            <form method="POST" action="{{ route('delivery-runs.reorder', $run) }}">
-                                                @csrf
-                                                @foreach ($stops as $j => $other)
-                                                    <input type="hidden" name="positions[]"
-                                                           value="{{ $j === $index ? $stops[$index + 1]->id : ($j === $index + 1 ? $stop->id : $other->id) }}">
-                                                @endforeach
-                                                <button type="submit" class="mf-btn-ghost" style="padding: 2px 6px;" title="Move down">&darr;</button>
-                                            </form>
-                                        @endif
+                                        {{-- ↑ / ↓: swap with the neighbour --}}
+                                        @foreach (['up' => ['&uarr;', 'Move up', $index > 0], 'down' => ['&darr;', 'Move down', $index < $stops->count() - 1]] as $direction => [$arrow, $title, $show])
+                                            @if ($show)
+                                                <form method="POST" action="{{ route('delivery-runs.reorder', $run) }}">
+                                                    @csrf
+                                                    <input type="hidden" name="move[customer_id]" value="{{ $stop->id }}">
+                                                    <input type="hidden" name="move[direction]" value="{{ $direction }}">
+                                                    <button type="submit" class="mf-btn-ghost" style="padding: 2px 6px;" title="{{ $title }}">{!! $arrow !!}</button>
+                                                </form>
+                                            @endif
+                                        @endforeach
 
                                         <form method="POST" action="{{ route('delivery-runs.unassign', $stop) }}"
                                               data-confirm="Remove {{ $stop->name }} from this run?" data-confirm-label="Remove" data-confirm-danger>
@@ -114,6 +117,11 @@
                                     </li>
                                 @endforeach
                             </ol>
+                            @if ($stops->count() > 1)
+                                <div class="flex justify-end mt-2">
+                                    <button type="submit" form="reorder-{{ $run->id }}" class="mf-btn-secondary text-[12px]">Save order</button>
+                                </div>
+                            @endif
                         @endif
 
                         @if ($unassignedCustomers->isNotEmpty())

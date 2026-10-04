@@ -22,7 +22,8 @@
         $isOnlyLine = $order->orderItems->count() <= 1;
     @endphp
 
-    <x-order.item-row :item="$orderItem" :order="$order" x-data="{ open: {{ $settled ? 'false' : 'true' }} }">
+    {{-- id: line actions redirect back to #line-{id} (cycle 4). --}}
+    <x-order.item-row :item="$orderItem" :order="$order" id="line-{{ $orderItem->id }}" class="scroll-mt-20" x-data="{ open: {{ $settled ? 'false' : 'true' }} }">
         <x-slot:summary>
             <div class="flex items-center gap-3.5 mt-2.5 text-[12.5px] flex-wrap" style="color: var(--muted);">
                 @if($fulfilled)
@@ -100,6 +101,11 @@
                             </thead>
                             <tbody>
                                 @foreach($orderItem->orderAllocations as $allocation)
+                                    @php
+                                        // Fulfil asks first (F-21): Enter in the wrong box used to record a pick.
+                                        $pickConfirm = 'Record a pick of {n} × '.$orderItem->productVariant->picker_label.' from batch '.$allocation->batchItem->batch->batch_code.'?';
+                                        $pickOnInput = "const b = this.form.querySelector('[data-confirm-template]'); b.dataset.confirm = b.dataset.confirmTemplate.replace('{n}', this.value);";
+                                    @endphp
                                     <tr style="border-top: 1px solid var(--line-2);">
                                         <td class="mf-td font-mono" style="color: var(--ink-2);">{{ $allocation->batchItem->batch->batch_code }}</td>
                                         <td class="mf-td font-mono" style="color: var(--muted);">{{ $allocation->batchItem->batch->production_date->format('d/m/Y') }}</td>
@@ -122,20 +128,26 @@
                                                             @php
                                                                 $remainingQty = $allocation->quantity_remaining;
                                                                 $expWeight = $allocation->batchItem->unit_weight_kg ?? $orderItem->productVariant->weight_kg ?? 1;
+                                                                // The amber threshold follows the server's bound: nominal
+                                                                // weight_kg when positive, else no threshold.
+                                                                $nominalWeight = (float) $orderItem->productVariant->weight_kg > 0 ? (float) $orderItem->productVariant->weight_kg : null;
                                                             @endphp
                                                             <form method="POST" action="{{ route('order-allocations.fulfill', $allocation) }}">
                                                                 @csrf
                                                                 <div class="space-y-2">
                                                                     <div class="flex items-center gap-2">
-                                                                        <label class="text-[11.5px]" style="color: var(--muted);">Qty:</label>
-                                                                        <select name="quantity" id="qty_{{ $allocation->id }}"
+                                                                        <label for="qty_{{ $allocation->id }}" class="text-[11.5px]" style="color: var(--muted);">Pick</label>
+                                                                        <select name="quantity" id="qty_{{ $allocation->id }}" aria-label="Units to pick now"
                                                                             class="mf-select w-16 px-1 py-0.5 text-[12px]"
-                                                                            onchange="updateWeightInputs({{ $allocation->id }}, this.value, {{ $remainingQty }})">
+                                                                            onchange="updateWeightInputs({{ $allocation->id }}, this.value, {{ $remainingQty }}); {{ $pickOnInput }}">
                                                                             @for($i = 1; $i <= $remainingQty; $i++)
                                                                                 <option value="{{ $i }}" {{ $i == $remainingQty ? 'selected' : '' }}>{{ $i }}</option>
                                                                             @endfor
                                                                         </select>
-                                                                        <button type="submit" class="mf-link" style="color: var(--accent-ink);">Fulfil</button>
+                                                                        <button type="submit" class="mf-link" style="color: var(--accent-ink);"
+                                                                        data-confirm-template="{{ $pickConfirm }}"
+                                                                        data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
+                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
                                                                     </div>
                                                                     <div class="space-y-1" id="weights_{{ $allocation->id }}">
                                                                         @for($i = 1; $i <= $remainingQty; $i++)
@@ -145,7 +157,7 @@
                                                                                 <input type="number" name="weights[]"
                                                                                     step="0.001" min="0.001"
                                                                                     placeholder="{{ number_format($expWeight, 3) }}"
-                                                                                    data-expected="{{ $expWeight }}"
+                                                                                    @if ($nominalWeight) data-expected="{{ $nominalWeight }}" @endif
                                                                                     class="mf-input w-24 px-2 py-0.5 text-[12px] weight-input"
                                                                                     onkeydown="if (event.key === ',') { event.preventDefault(); document.execCommand('insertText', false, '.'); }"
                                                                                     oninput="updateTotal({{ $allocation->id }})"
@@ -166,10 +178,11 @@
                                                                 @csrf
                                                                 <div class="space-y-2">
                                                                     <div class="flex items-center gap-2">
-                                                                        <label class="text-[11.5px] w-20" style="color: var(--muted);">Qty:</label>
-                                                                        <input type="number" name="quantity"
+                                                                        <label for="pick_{{ $allocation->id }}" class="text-[11.5px] w-20" style="color: var(--muted);">Pick</label>
+                                                                        <input type="number" name="quantity" id="pick_{{ $allocation->id }}" aria-label="Units to pick now"
                                                                             min="1" max="{{ $allocation->quantity_remaining }}"
                                                                             value="{{ $allocation->quantity_remaining }}"
+                                                                            oninput="{{ $pickOnInput }}"
                                                                             class="mf-input w-16 px-2 py-0.5 text-[12px]">
                                                                     </div>
                                                                     <div class="flex items-center gap-1">
@@ -180,18 +193,26 @@
                                                                             class="mf-input w-24 px-2 py-0.5 text-[12px]" required>
                                                                         <span class="text-[11.5px]" style="color: var(--muted);">kg</span>
                                                                     </div>
-                                                                    <button type="submit" class="mf-link" style="color: var(--accent-ink);">Fulfil</button>
+                                                                    <button type="submit" class="mf-link" style="color: var(--accent-ink);"
+                                                                        data-confirm-template="{{ $pickConfirm }}"
+                                                                        data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
+                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
                                                                 </div>
                                                             </form>
                                                         @else
                                                             <form method="POST" action="{{ route('order-allocations.fulfill', $allocation) }}" class="inline">
                                                                 @csrf
                                                                 <div class="flex items-center gap-1">
-                                                                    <input type="number" name="quantity"
+                                                                    <label for="pick_{{ $allocation->id }}" class="text-[11.5px]" style="color: var(--muted);">Pick</label>
+                                                                    <input type="number" name="quantity" id="pick_{{ $allocation->id }}" aria-label="Units to pick now"
                                                                         min="1" max="{{ $allocation->quantity_remaining }}"
                                                                         value="{{ $allocation->quantity_remaining }}"
+                                                                        oninput="{{ $pickOnInput }}"
                                                                         class="mf-input w-16 px-2 py-0.5 text-[12px]">
-                                                                    <button type="submit" class="mf-link" style="color: var(--accent-ink);">Fulfil</button>
+                                                                    <button type="submit" class="mf-link" style="color: var(--accent-ink);"
+                                                                        data-confirm-template="{{ $pickConfirm }}"
+                                                                        data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
+                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
                                                                 </div>
                                                             </form>
                                                         @endif
@@ -286,8 +307,8 @@
                     <div class="flex items-center gap-3 mt-3 pt-3 flex-wrap" style="border-top: 1px solid var(--line-2);">
                         <form method="POST" action="{{ route('orders.items.update', [$order, $orderItem]) }}" class="flex items-center gap-1.5">
                             @csrf @method('PATCH')
-                            <label class="text-[11.5px]" style="color: var(--muted);">Qty:</label>
-                            <input type="number" name="quantity" min="1" value="{{ $orderItem->quantity_ordered }}"
+                            <label for="ordered_{{ $orderItem->id }}" class="text-[11.5px]" style="color: var(--muted);">Ordered:</label>
+                            <input type="number" name="quantity" id="ordered_{{ $orderItem->id }}" aria-label="Quantity ordered" min="1" value="{{ $orderItem->quantity_ordered }}"
                                 class="mf-input w-16 px-2 py-0.5 text-[12px]">
                             <button type="submit" class="mf-link" style="color: var(--accent-ink);">Update</button>
                         </form>

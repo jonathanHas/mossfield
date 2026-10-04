@@ -31,16 +31,35 @@ class PickingController extends Controller
      * Today's queue — every order awaiting or in picking, plus freshly
      * readied ones, sorted by delivery date (undated last).
      */
-    public function index(): View
+    public function index(Request $request): View
     {
         $this->authorize('viewAny', Order::class);
 
-        $orders = Order::with(['customer', 'orderItems'])
+        $queue = Order::with(['customer', 'orderItems'])
             ->whereIn('status', self::QUEUE_STATUSES)
             ->orderByRaw('delivery_date is null')
             ->orderBy('delivery_date')
             ->orderBy('created_at')
             ->get();
+
+        // A ready order from an earlier day is the office's to dispatch, not
+        // the floor's to pick — it goes in a collapsed bucket rather than
+        // dragging the day picker back to July (F-30). confirmed/preparing
+        // orders with past dates stay: they still need picking.
+        $today = today();
+        [$stale, $active] = $queue->partition(
+            fn ($order) => $order->status === 'ready' && $order->delivery_date && $order->delivery_date->lt($today)
+        );
+
+        // One day at a time; undated orders are a trailing "none" bucket.
+        $byDay = $active->groupBy(fn ($order) => self::dayKey($order));
+        $days = $byDay->keys()->values();
+        $selected = $this->selectDay($days, $request->query('date'));
+        $orders = $selected !== null ? $byDay->get($selected, collect())->values() : collect();
+
+        $index = $selected !== null ? $days->search($selected) : false;
+        $prevDay = $index !== false && $index > 0 ? $days[$index - 1] : null;
+        $nextDay = $index !== false && $index < $days->count() - 1 ? $days[$index + 1] : null;
 
         $pickedUnits = (int) $orders->sum(fn ($order) => $order->orderItems->sum('quantity_fulfilled'));
         // Short-closed units leave the denominator — they're never going to be
@@ -49,13 +68,36 @@ class PickingController extends Controller
             fn ($order) => $order->orderItems->sum(fn ($item) => $item->quantity_ordered - $item->quantity_short)
         );
 
-        return view('picking.index', compact('orders', 'pickedUnits', 'totalUnits'));
+        return view('picking.index', compact(
+            'orders', 'pickedUnits', 'totalUnits', 'selected', 'prevDay', 'nextDay', 'stale'
+        ));
+    }
+
+    /** The queue's day bucket for an order: its delivery date, or "none". */
+    public static function dayKey(Order $order): string
+    {
+        return $order->delivery_date?->toDateString() ?? 'none';
     }
 
     /**
-     * Order overview — line-by-line picking state. Renders the "order ready"
-     * celebration variant once every line is settled (picked, or closed short).
+     * ?date= when it names a day with work; else today; else the nearest
+     * future day; else the latest past day; else the undated bucket.
      */
+    private function selectDay(Collection $days, ?string $requested): ?string
+    {
+        if ($requested !== null && $days->contains($requested)) {
+            return $requested;
+        }
+
+        $today = today()->toDateString();
+        $dated = $days->reject(fn ($day) => $day === 'none');
+
+        return $dated->first(fn ($day) => $day === $today)
+            ?? $dated->first(fn ($day) => $day > $today)
+            ?? $dated->last(fn ($day) => $day < $today)
+            ?? $days->first();
+    }
+
     public function show(Order $order): View|RedirectResponse
     {
         $this->authorize('fulfill', $order);
@@ -80,15 +122,18 @@ class PickingController extends Controller
             : null;
 
         // The order after this one in the queue, for the ready screen's "next up" card.
+        // Same delivery day first, then the queue order as before.
         $nextOrder = null;
         if ($order->isPickingComplete()) {
-            $nextOrder = Order::with('orderItems')
+            $candidates = Order::with('orderItems')
                 ->whereIn('status', ['confirmed', 'preparing'])
                 ->whereKeyNot($order->id)
                 ->orderByRaw('delivery_date is null')
                 ->orderBy('delivery_date')
                 ->orderBy('created_at')
-                ->first();
+                ->get();
+            $nextOrder = $candidates->first(fn ($candidate) => self::dayKey($candidate) === self::dayKey($order))
+                ?? $candidates->first();
         }
 
         return view('picking.show', compact('order', 'nextItem', 'suggestedBatch', 'nextOrder'));
@@ -113,8 +158,11 @@ class PickingController extends Controller
         $batchOptions = $this->batchOptionsFor($orderItem);
 
         $position = $order->orderItems->search(fn ($item) => $item->id === $orderItem->id) + 1;
-        $skipTo = $order->orderItems
-            ->first(fn ($item) => ! $item->isSettled() && $item->id !== $orderItem->id);
+        // Skip walks forward and wraps: the next unsettled line after this
+        // one, else the first before it (F-31 — it used to bounce to line 1).
+        $lines = $order->orderItems->values();
+        $skipTo = $lines->slice($position)->concat($lines->take($position - 1))
+            ->first(fn ($item) => ! $item->isSettled());
 
         return view('picking.item', compact('order', 'orderItem', 'batchOptions', 'position', 'skipTo'));
     }

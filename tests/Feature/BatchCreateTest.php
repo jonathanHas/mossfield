@@ -228,4 +228,25 @@ class BatchCreateTest extends TestCase
         $this->assertMatchesRegularExpression('/<input[^>]*id="expiry_date"[^>]*value="'.$badExpiry.'"/s', $page);
         $this->assertStringContainsString('if (initialising && expiryDateInput.value)', $page);
     }
+
+    public function test_a_batch_without_expiry_says_it_stays_sellable(): void
+    {
+        $yoghurt = Product::create(['name' => 'Test Yoghurt', 'type' => 'yoghurt', 'is_active' => true]);
+        $batch = Batch::create([
+            'product_id' => $yoghurt->id, 'production_date' => now()->subDay(),
+            'expiry_date' => null, 'raw_milk_litres' => 50, 'status' => 'active',
+        ]);
+
+        $this->actingAs(User::factory()->admin()->create())->get(route('batches.show', $batch))
+            ->assertOk()
+            ->assertSee('None — stays sellable until sold');
+    }
+
+    public function test_the_create_form_carries_the_no_shelf_life_warning(): void
+    {
+        $this->actingAs(User::factory()->admin()->create())->get(route('batches.create'))
+            ->assertOk()
+            ->assertSee('has no shelf life set', false)
+            ->assertSee('data-default-text=', false);
+    }
 }

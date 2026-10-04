@@ -11,6 +11,7 @@ use App\Models\OrderAllocation;
 use App\Models\OrderItem;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class OrderAllocationController extends Controller
@@ -68,21 +69,41 @@ class OrderAllocationController extends Controller
 
         // Verify the batch item is for the correct product variant
         if ($batchItem->product_variant_id !== $orderItem->product_variant_id) {
-            return redirect()->route('orders.show', $order)
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
                 ->withErrors(['batch_item_id' => 'Selected batch item does not match the order item product.']);
         }
 
         $allocation = $orderItem->allocateFromBatchItem($batchItem, $validated['quantity']);
 
         if (! $allocation) {
-            return redirect()->route('orders.show', $order)
-                ->withErrors(['quantity' => 'Cannot allocate this quantity. Check available stock and order limits.']);
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
+                ->withErrors(['quantity' => $this->allocationRefusal($orderItem, $batchItem, $validated['quantity'])]);
         }
 
         $this->markPickingStarted($order);
 
-        return redirect()->route('orders.show', $order)
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
             ->with('success', "Allocated {$validated['quantity']} units from batch {$batchItem->batch->batch_code}.");
+    }
+
+    /**
+     * Say which limit refused the allocation (F-41): the line is already
+     * covered, or the batch hasn't that many free. Re-read after the failed
+     * attempt; the old generic text stays as the fallback.
+     */
+    private function allocationRefusal(OrderItem $orderItem, BatchItem $batchItem, int $quantity): string
+    {
+        $allocated = (int) $orderItem->orderAllocations()->sum('quantity_allocated');
+        if ($allocated >= $orderItem->quantity_ordered) {
+            return "This line is already fully allocated ({$allocated} of {$orderItem->quantity_ordered}).";
+        }
+
+        $available = $batchItem->fresh()->available_quantity;
+        if ($available < $quantity) {
+            return 'Only '.$available.' '.Str::plural('unit', $available).' '.($available === 1 ? 'is' : 'are').' available in this batch right now.';
+        }
+
+        return 'Cannot allocate this quantity. Check available stock and order limits.';
     }
 
     public function deallocate(OrderAllocation $allocation): RedirectResponse
@@ -91,7 +112,7 @@ class OrderAllocationController extends Controller
         $order = $orderItem->order;
 
         if ($allocation->quantity_fulfilled > 0) {
-            return redirect()->route('orders.show', $order)
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
                 ->withErrors(['allocation' => 'Cannot deallocate - some items have already been fulfilled.']);
         }
 
@@ -104,7 +125,7 @@ class OrderAllocationController extends Controller
         // Undoing a pick can drop a "ready" order back to "preparing".
         $order->reconcilePickingStatus();
 
-        return redirect()->route('orders.show', $order)
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
             ->with('success', 'Allocation removed successfully.');
     }
 
@@ -129,7 +150,7 @@ class OrderAllocationController extends Controller
         );
 
         if (! $success) {
-            return redirect()->route('orders.show', $order)
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
                 ->withErrors(['quantity' => 'Could not fulfill this quantity.']);
         }
 
@@ -144,7 +165,7 @@ class OrderAllocationController extends Controller
 
         $this->markPickingComplete($order);
 
-        return redirect()->route('orders.show', $order)->with('success', $message);
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)->with('success', $message);
     }
 
     public function unfulfill(Request $request, OrderAllocation $allocation): RedirectResponse
@@ -161,7 +182,7 @@ class OrderAllocationController extends Controller
         );
 
         if (! $success) {
-            return redirect()->route('orders.show', $order)
+            return redirect()->route('orders.show', $order)->withFragment('line-'.$allocation->orderItem->id)
                 ->withErrors(['quantity' => 'Could not undo fulfillment for this quantity.']);
         }
 
@@ -171,7 +192,7 @@ class OrderAllocationController extends Controller
         // A no-longer-fully-picked order drops from "ready" back to "preparing".
         $order->reconcilePickingStatus();
 
-        return redirect()->route('orders.show', $order)
+        return redirect()->route('orders.show', $order)->withFragment('line-'.$allocation->orderItem->id)
             ->with('success', "Undid fulfillment of {$validated['quantity']} units. Stock has been restored.");
     }
 
