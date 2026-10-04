@@ -1,471 +1,512 @@
-# Money and state: the S1/S2 findings from the end-to-end run
+# Friction: the S3 findings from the end-to-end run
 
-Status: ACCEPTED
+Status: READY
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
 
 ## Goal
 
-Close the eight findings from the 2026-10-04 end-to-end browser run that can
-write wrong money or wrong state with no warning
-(`archive/2026-10-04-e2e-browser-run/implemented.md`, F-39, F-29, F-19,
-F-12, F-08, F-20, F-35, F-36/F-40). After this cycle: a double-clicked form
-records once; a wheel weight typed with a comma can't bill €83 360; the order
-edit form can't teleport an order to *dispatched*; a refused cut or batch form
-hands back what was typed; the order form previews the price the customer will
-actually pay; the invoice carries the customer's PO reference; and a recorded
-payment is applied to the open invoice unless the office says otherwise.
+The end-to-end run (`archive/2026-10-04-e2e-browser-run/implemented.md`) found
+the arithmetic sound and the surfaces tiring. This cycle takes the S3 findings
+— places where the screen misleads or costs the operator real effort — plus
+the four follow-ons from cycle 3. After it: expired stock is visible instead of
+vanishing; the picker's "Today" is today; a partial mature release is one
+action; the order page stops offering two unlabelled number boxes per line;
+every save lands back where the operator was working; reordering a run is one
+form; the dispatch flash names orders and reasons; Finance defaults to the
+period the office actually wants; error pages lead home. Pure copy and
+cosmetic items (S4) wait for a short cycle 5.
 
 ## Context
 
-HEAD `5f62755` + the staged archive of cycle 2. Suite **536 passed, 0 failed**;
-any failure is real. `pint --test app tests database routes` clean. Nothing
-pushed or deployed. Dev DB holds the E2E data (see `RESUME.md`); nothing here
-needs it.
+HEAD `7c86326` + the staged archive of cycle 3. Suite **557 passed, 0
+failed**; any failure is real. `pint --test app tests database routes` clean.
+Nothing pushed or deployed. Dev DB holds the E2E data (`RESUME.md`): expired
+milk batches 16/19/21/22 and yoghurt 18, July `ready` orders that were never
+dispatched, order 14 `preparing` — all useful for the browser checks here.
 
-Each step below cites the finding; read it in the archived `implemented.md`
-first — it has the exact steps, evidence and the Implementer's suggested fix.
-This plan decides which fix.
+Each step cites its finding(s); read them in the archived `implemented.md`
+first. Laravel 12: `redirect()->route(...)->withFragment('id')` exists and is
+how "land back on the thing you edited" is done below.
 
-**Patterns to copy.**
-- JS lives in `resources/js/*.js`, imported from `app.js` (cycle 1 added
-  `confirm.js`: capture-phase `document` listeners, `requestSubmit(submitter)`,
-  a per-form flag cleared by `setTimeout(0)`). Read it before writing
-  `submit-once.js` — the two must cooperate (see step 1).
-- Server-side form rules live in FormRequests or inline `$request->validate`;
-  weight rules are centralised in
-  `app/Http/Controllers/Concerns/ValidatesFulfilmentWeights.php` (shared by
-  `OrderAllocationController::fulfill()` and `PickingController::pick()`).
-- Tests extend `Tests\TestCase` with `RefreshDatabase`; invoicing tests extend
-  `tests/Feature/InvoicingTestCase.php` (shop, bottle, wheel, `deliveredOrder()`,
-  `issue()`). `User::factory()` → office; `->admin()`, `->factoryWorker()`.
-- Blade forms keep typed values with `old()`; two of them then let a
-  `DOMContentLoaded` script overwrite the field (steps 4–5).
-- Confirm dialogs are `data-confirm` attributes (cycle 1).
+**Facts the steps rely on**
 
-**Facts the steps rely on.**
-- `OrderController::update()` (`app/Http/Controllers/OrderController.php:302`)
-  validates `status` as `required|in:` all seven values and writes it. The
-  show page's **Confirm order** and **Cancel order** quick-actions POST to the
-  same route with `status=confirmed` / `status=cancelled` plus the
-  `$statusFields` replay (`orders/show.blade.php:19`). `orders/edit.blade.php:44`
-  renders a free `<select name="status">`. Legitimate transitions already have
-  their own routes: `orders.dispatch` (→ `DispatchService`), `orders.deliver`,
-  picking/allocation (`markPickingStarted()`, `reconcilePickingStatus()`).
-- `ValidatesFulfilmentWeights::fulfilmentWeightRules()` — per-unit
-  `weights.*` → `required|numeric|min:0.001`; bulk `actual_weight_kg` →
-  `required|numeric|min:0.001`. Nominal weight is
-  `$orderItem->productVariant->weight_kg` (nullable; cheese variants have it).
-  Inputs: `picking/item.blade.php:308` (`type="number" step="0.001"
-  inputmode="decimal"`, `x-model="weights[i-1]"`) and `:324` (bulk);
-  `orders/partials/allocation-items.blade.php:144` (desktop per-unit,
-  `oninput="updateTotal(id)"`). Chrome drops a typed comma in a `number`
-  input, so "5,210" becomes 5210.
-- `PaymentController::store()` validates and calls
-  `PaymentService::record($customer, $data, $allocations, $by)` inside one
-  transaction; `payments` has no uniqueness beyond the id. The form is the
-  Alpine component `paymentForm(invoices, initialAmount)` in
-  `invoicing/payments/create.blade.php` (`x-model.number="amount"`,
-  `allocations` blank until **Auto-fill oldest first**).
-- `cheese-cutting/create.blade.php`: `total_weight_kg` input has
-  `:value="old('total_weight_kg')"`, but the script's `updateTotalWeight()`
-  (packs × nominal) runs on load and on pack/variant change and overwrites it.
-- `batches/create.blade.php`: variant quantity rows are built by JS
-  (`batch_items[${index}][quantity_produced]`) from the product's variants;
-  nothing seeds them from `old('batch_items')`. `updateExpiryDate()` sets
-  `expiry_date` from shelf life on product/production-date change **and on
-  load**, over `old('expiry_date')`.
-- `orders/create.blade.php`: every variant `<option>` carries
-  `data-price="{{ $variant->estimated_unit_price }}"` (base price × nominal
-  weight for €/kg variants); the JS sums `price × qty` into `#orderTotal`.
-  `OrderController::create()` (`:197`) passes `$customers` (active) and
-  `$productVariants` (grouped). The saved price is
-  `Customer::unitPriceFor($variant)` (special price if any, else base — both in
-  €/unit or €/kg), and the saved delivery charge is
-  `Customer::currentDeliveryCharge()` (gross) or `deliveryChargePercent()`.
-- `invoicing/invoices/pdf.blade.php`: `$grouped = $invoice->isConsolidated()`;
-  the "Invoice details" block (`:59–68`) prints date / period / terms / due;
-  per-order headings with `Order … · ref …` render only inside the lines loop
-  when `$grouped` (`:85–95`). `$orderLookup` (id → order) is already passed to
-  the view — find where it's built (grep `orderLookup` in `app/`) and reuse it.
-  `Invoice::orders()` is the orders whose `invoice_id` is this invoice.
+- Dashboard (`routes/web.php:43–50`): `readyNowCount` = `status='active'`
+  with `ready_date` null-or-past — no expiry, no stock check. `/stock`
+  (`StockOverviewService::build()`) returns per-type cards with
+  `active_batches`/`variants`; the card view prints "No active milk batches."
+  (`stock/overview.blade.php:39,74,106`). `/batches` already tags expired
+  batches (`batch-card.blade.php:45`). Strict expiry everywhere =
+  `expiry_date > today` (`BatchItem::allocatable()`).
+- Batch create: the expiry hint is `#expiry-note` (`batches/create.blade.php:53`),
+  products carry `data-shelf-life-days`; the batch page only renders an Expiry
+  row when set (`batches/show.blade.php:107`).
+- Picking queue (`PickingController::index()`): all `confirmed|preparing|ready`
+  orders, no date filter; the view groups by delivery date and the strip is
+  `pickedUnits/totalUnits` over everything. `PickingController::item()` sets
+  `$skipTo` = **first** unsettled line other than the current, so Skip from
+  line 2 goes back to line 1 (F-31). Stepper `+` is `qty = Math.min(maxQty, qty+1)`
+  with no disabled state (`picking/item.blade.php:263`). `.mob-shell` has
+  `padding-bottom: 110px` for the fixed `.mob-footer`; the "Can't finish"
+  button sits in a `.mob-section` above the footer at `:348`. The OK/Check
+  tags compare to `{{ 2 * $expWeight }}` where `$expWeight = (float)
+  ($variant->weight_kg ?? 1)` (`:12`) — a stored `0` gets through.
+- Mature conversion (`cheese-conversion/index.blade.php`): the header button
+  submits a hidden sibling `release-form-{id}` whose `quantity` is fixed to
+  the **saved** hold (`:259–261`); the hold form's `quantity` is Alpine
+  `mature.length` (`:56`). `CheeseConversionController::release()` already
+  validates `quantity` as `integer|min:1|max:{held}` — a partial release is
+  legal server-side.
+- Order page (`orders/partials/allocation-items.blade.php`): per allocation a
+  **Fulfil** form with a `quantity` number input (max = remaining) and no
+  `data-confirm` (`~:120–160`), and per line a **Qty / Update** form
+  (`:286–290`) — two unlabelled boxes showing the same number (F-21). Add
+  item's quantity is `value="{{ old('quantity', 1) }}"` (`orders/show.blade.php:427`).
+  `OrderController::store()` creates one line per posted item (`:249+`);
+  `storeItem()` merges by variant. Sibling list age uses `order_date`
+  (`orders/show.blade.php:68`) and the summary is
+  `quantity_ordered.'× '.$i->productVariant->product->name` (`:58`). The
+  create form's option label is `picker_label (price_label)` — standard
+  price even when the line uses the customer's special (cycle 3 note).
+  `update()`'s success flash is "Order updated successfully." even for
+  Confirm (`:394`). 32 `redirect()->route('orders.show', $order)` calls in
+  `OrderController` + `OrderAllocationController` land at the top of the page.
+- Customers: `CustomerController::store()` redirects to `customers.index`
+  (`:92`); `destroy()` to `customers.index` without the search (`:216,222`);
+  `CustomerSpecialPriceController` → `customers.show` with no fragment; the
+  Special prices panel is at `customers/show.blade.php:338` (no `id`).
+- Delivery runs (`DeliveryRunController`): every action redirects to
+  `delivery-runs.index` top; `reorder()` takes the whole `positions[]` array
+  (`:115–134`); the view posts one such form per ↑/↓ (`delivery-runs/index.blade.php:85–105`).
+  The charge reveal prints `€ charge: on/off` from `apply_delivery_charge`
+  only (`:80`); a `delivery_charge_percent` customer shows "off" (F-18).
+- Chilled runs: `saveStop()` validates `qty.*` + `customer_reference` only —
+  no `notes` (F-28); redirects to `chilled-runs.index` with run/date, no
+  fragment; rows are `id="stop-{customer_id}"`. `dispatchFlash()`
+  (`ChilledRunController:~225–283`) says "N stops dispatched" (it counts
+  orders), names skipped **customers** (`$names()`), and gives one reason
+  per bucket. `toggleLoaded()` flash names the customer, not the order.
+- Orders show: `Edit` link always rendered (`orders/show.blade.php:130`);
+  `update()` refuses invoiced orders only on submit (`blockedByInvoice`).
+- Finance: Void button is `@can('void', $invoice)` → absent when
+  `Invoice::isVoidable()` is false (payments allocated or an issued credit
+  note). Consolidated shortcuts: Last month / This month / Last week
+  (`consolidated/create.blade.php:27–29`, `ConsolidatedInvoiceController:~105–114`);
+  statement preview defaults to **last** month (`StatementController::133`).
+  Customer page "Net owed" prints a negative euro when in credit
+  (`customers/show.blade.php:157`). `OrderAllocationController::allocate()`
+  has one generic refusal (`:79`). The payments component starts
+  `allocations: {}` even after a validation redirect. No
+  `resources/views/errors/` — Laravel's bare pages.
+- Tests to extend: `StockOverviewTest`, `PickingTest`, `CheeseConversionTest`,
+  `OrderAddItemTest`, `OrderItemEditTest`, `OrderStoreOptionalFieldsTest`,
+  `CustomerSpecialPriceTest`, `ChilledRunTest` (also holds run CRUD/assign/
+  reorder), `DispatchRunTest`, `InvoiceVoidTest`, `StatementTest`,
+  `ConsolidatedInvoiceTest`, `PaymentAllocationTest`, `OrderTransitionsTest`.
+  New: `DashboardTest`, `ErrorPagesTest`.
 
 ## Constraints
 
-- Every message a customer or operator already sees stays unless a step
-  changes it. No route renames. No change to `DispatchService`, allocation
-  arithmetic or the free-stock expression (`TESTING_AND_FIXES.md` →
-  *Invariants worth keeping*).
-- Weight validation: **recompute from per-unit weights** server-side, as now;
-  the new bound is an extra rule, not a replacement.
-- The show-page Confirm / Cancel quick-actions must keep working unchanged.
-- `npm run build` after JS changes; `./vendor/bin/pint` on touched PHP.
-- **Do not commit.** The Planner commits on acceptance. Nothing is pushed or
-  deployed.
+- No change to stock/money arithmetic, `DispatchService`, allocation,
+  `isAllowedStatusChange()`, or the free-stock expression
+  (`TESTING_AND_FIXES.md` → *Invariants worth keeping*, all sections).
+- Every existing flash/message text stays unless a step changes it.
+- `data-confirm` for anything destructive; forms already submit once.
+- `npm run build` after JS/CSS changes; `./vendor/bin/pint` on touched PHP.
+- **Do not commit.** Planner commits on acceptance. Nothing pushed/deployed.
 
 ## Out of scope
 
-- Every S3/S4 finding (cycle 4) and every decision item (`OPEN_QUESTIONS.md`
-  #5) — including F-21 (two number boxes per line), F-22 (caret after the
-  pre-filled 1 on Add item), F-24 (second delivery charge), F-25 (credit
-  limit), F-33 (notes on customer documents).
-- Changing how allocations are applied in `PaymentService` beyond what step 3
-  says.
-- A general idempotency framework. Step 1's token is for payments only; the
-  JS guard covers the rest.
-- Restyling anything.
+- `OPEN_QUESTIONS.md` #1 and #5 (write-offs; F-06, F-09, F-10, F-24, F-25,
+  F-33, F-34's per-order-without-loaded, F-38's two policy items).
+- **Cycle 5 (copy & polish, S4):** F-03 Laravel logo, F-04 login focus, F-05
+  topbar divider, F-11 batch copy nits + naming the batch in its delete
+  dialog + hiding Delete when `deletionBlocker()` would refuse, F-14 "29
+  units", F-17 Mossorders id field, F-26's dialog button labels and
+  tab-order, F-27 second ref / loaded tick labels on a multi-order stop,
+  F-31's `/orders` at phone width, F-34's PDF size, F-38's "Partial" label
+  for a credit-only invoice and the weekly-terms warning.
+- Drag-and-drop for run stops (step 8 uses position inputs).
+- Any redesign of the picking screens beyond the three fixes in step 3.
 
 ## Steps
 
-### 1. Forms submit once (F-39)
+### 1. Expired stock is visible (F-01, F-02, F-07)
 
-Files: `resources/js/submit-once.js` (new), `resources/js/app.js`,
-`database/migrations/2026_10_04_120000_add_form_token_to_payments_table.php` (new),
-`app/Models/Payment.php`, `app/Http/Controllers/Invoicing/PaymentController.php`,
-`resources/views/invoicing/payments/create.blade.php`,
-`tests/Feature/PaymentAllocationTest.php`
+Files: `routes/web.php`, `app/Services/StockOverviewService.php`,
+`resources/views/stock/overview.blade.php`, `resources/views/dashboard.blade.php`,
+`resources/views/batches/create.blade.php`, `resources/views/batches/show.blade.php`,
+`tests/Feature/DashboardTest.php` (new), `tests/Feature/StockOverviewTest.php`,
+`tests/Feature/BatchCreateTest.php`
 
 What:
-- **Client, every form.** `submit-once.js`: one bubble-phase `submit`
-  listener on `document`. When a form's submit is not default-prevented
-  (`!e.defaultPrevented` — i.e. `confirm.js` has already let it through, or
-  the form has no confirm), mark it `data-submitting` and, in a
-  `setTimeout(…, 0)`, disable every `button[type=submit]` **owned by** the
-  form (`form.elements` plus `document.querySelectorAll('button[form="'+id+'"]')`)
-  and add `aria-busy="true"`. Disabling must happen after the current tick so
-  the submitter's `name`/`value` is still in the form data. On `pageshow`
-  (bfcache back) re-enable everything and clear the flag. Alpine forms that
-  bind `:disabled` keep working — we only add `disabled`, never remove theirs
-  while the page lives. Import it from `app.js` after `./confirm`.
-- **Server, payments.** Migration: nullable `string('form_token', 36)` with a
-  **unique** index on `payments`. `Payment::$fillable` += `form_token`.
-  `PaymentController::create()` passes `'formToken' => (string) Str::uuid()`
-  and the form posts it as a hidden `form_token` (keep it in `old()` on a
-  validation redirect — `old('form_token', $formToken)`). `store()` validates
-  `form_token` as `nullable|uuid`; before `record()`, if a payment with that
-  token exists, redirect to it with the flash
-  `Payment already recorded — this was a repeat submission.`; pass the token
-  into `record()`'s `$data` so it's inserted; catch
-  `Illuminate\Database\UniqueConstraintViolationException` around `record()`
-  and do the same redirect (two near-simultaneous posts: the second insert
-  fails on the index). `PaymentService::record()` stores
-  `'form_token' => $data['form_token'] ?? null`.
-- Tests (`PaymentAllocationTest`): (a) posting the same valid payload with the
-  same `form_token` twice creates **one** payment and the second response
-  redirects to it with the "repeat submission" flash; (b) two posts with
-  different tokens create two payments (the token is not a per-customer
-  lock); (c) a post without a token still works.
+- **Dashboard** `readyNowCount`: active, ready-date null-or-past, **not
+  expired** (`whereNull('expiry_date')->orWhere('expiry_date', '>', today())`,
+  the same strict rule) **and with stock** (`whereHas('batchItems', qty_remaining > 0)`).
+  Add `expiredCount` / `expiredUnits`: active batches with `expiry_date <=
+  today` and `SUM(quantity_remaining) > 0`. Render a tile **"Expired stock"**
+  (value = batches, sub = "N units · write off or close") linking to
+  `/batches?status=expired`, only when `expiredCount > 0`, for admin/office/
+  factory. Note in a comment that the write-off route is OPEN_QUESTIONS #1.
+- **`/stock`**: `StockOverviewService::build()` also returns, per type,
+  `expired` = `['batches' => n, 'units' => u]` from the same query (one
+  grouped query for all three types, not per card). The card's empty state
+  becomes: *"No sellable milk."* + when `expired.batches > 0`: *"N expired
+  batches still hold U units — see Batches."* (link with `?status=expired`).
+  When the card has stock **and** expired batches exist, show the same line
+  as a small muted note under the card header.
+- **Batch create**: when the chosen product has no `shelf_life_days`, the
+  `#expiry-note` reads *"This product has no shelf life set — the batch will
+  have **no expiry** and stays sellable until sold. Enter one if it should
+  expire."* (JS on product change; keep the current text when a shelf life
+  exists).
+- **Batch page**: always render the Expiry row; when null print *"None — stays
+  sellable until sold"*.
+- Tests: `DashboardTest` (new): with one sellable, one expired-with-stock and
+  one expired-empty batch, office sees "ready now" = 1 and the Expired tile
+  says 1 batch; factory sees the tile too; the tile is absent when nothing is
+  expired. `StockOverviewTest`: an expired milk batch with stock → card shows
+  "1 expired batch" and the sellable count excludes it. `BatchCreateTest`: a
+  yoghurt batch page shows "None — stays sellable".
 
-Check: `php artisan migrate` clean; `php artisan test --filter=PaymentAllocationTest`
-pass; `npm run build` ok; in the browser (`php artisan serve`, as office,
-`/invoicing/payments/create`) double-click **Record payment** → one payment;
-on the order page double-click **Confirm order** → confirmed once, and the
-button is visibly disabled for the instant before navigation.
+Check: `php artisan test --filter="DashboardTest|StockOverviewTest|BatchCreateTest"`
+pass. Browser as office: dashboard shows the Expired tile (dev DB has 5),
+`/stock` milk card names the expired batches instead of "No active milk
+batches".
 
-### 2. A weight that can't be a wheel is refused (F-29)
+### 2. The picking queue shows one day (F-30)
 
-Files: `app/Http/Controllers/Concerns/ValidatesFulfilmentWeights.php`,
-`resources/views/picking/item.blade.php`,
+Files: `app/Http/Controllers/PickingController.php`,
+`resources/views/picking/index.blade.php`, `tests/Feature/PickingTest.php`
+
+What:
+- `index()`: collect the queue as now, then derive `$days` = the distinct
+  delivery dates present (nulls as a trailing "No date" bucket). `$selected`
+  = `?date=` if it is one of them; else **today** if present; else the
+  **nearest future** date; else the **latest past** date. The page shows only
+  the selected day's orders; the strip (`pickedUnits/totalUnits`) counts only
+  them. Header: `◀ Tue 6 Oct ▶` switching between `$days` (links with
+  `?date=`), with "Today"/"Tomorrow" labels as the view already derives.
+- **Stale bucket**: `ready` orders whose delivery date is **before today**
+  are *not* in `$days`; they go in a collapsed `<details>` at the bottom:
+  *"Ready, awaiting dispatch — N orders from earlier days"* listing
+  `order_number · customer · date`, each linking to the order overview. They
+  are the office's to dispatch, not the floor's to pick. (`confirmed`/
+  `preparing` orders with past dates **do** stay in `$days` — they still need
+  picking.)
+- `show()`'s `$nextOrder` prefers the same day, then the queue order as now.
+- Tests: with a July `ready` order and two orders for Tuesday, GET `/picking`
+  as factory defaults to Tuesday, strip counts Tuesday only, the July order is
+  under "awaiting dispatch"; `?date=` switches; a past `preparing` order is a
+  selectable day.
+
+Check: `php artisan test --filter=PickingTest` pass. Browser as factory at
+500 px: `/picking` opens on the nearest day with work, not July; the stale
+bucket lists the July orders.
+
+### 3. Picking ergonomics (F-31 + cycle-3 follow-on)
+
+Files: `app/Http/Controllers/PickingController.php`,
+`resources/views/picking/item.blade.php`, `resources/css/app.css`,
+`tests/Feature/PickingTest.php`
+
+What:
+- `item()`: `$skipTo` = the first unsettled line **after** the current one in
+  order-item order, wrapping to the start — so Skip walks the lines in a
+  cycle rather than bouncing to line 1.
+- Stepper: `+` gets `:disabled="qty >= maxQty"` and `−` gets
+  `:disabled="qty <= 1"`, with a disabled style on `.mob-step-btn[disabled]`
+  (opacity .4, default cursor).
+- The "Can't finish this line — mark short" section must clear the fixed
+  footer on a 659 px-tall viewport: raise `.mob-shell`'s `padding-bottom` to
+  the footer's real height on the pick screen (measure it; the footer has two
+  rows there) or give that section its own bottom margin. Verify by scrolling
+  to the bottom at 500 × 659 — nothing hidden.
+- OK/Check thresholds: compute `$expWeight` as the server does — `weight_kg`
+  when `> 0`, else **no thresholds** (both tags fall back to the old
+  behaviour: OK when > 0). Same guard on the desktop row's `data-expected`.
+- Test: Skip from line 2 of a three-line order goes to line 3; from line 3 to
+  line 1.
+
+Check: `php artisan test --filter=PickingTest` pass. Browser at 500 × 659:
+Skip cycles; `+` greys out at the cap; the short button is reachable above
+the footer.
+
+### 4. Release part of a hold (F-13)
+
+Files: `resources/views/cheese-conversion/index.blade.php`,
+`tests/Feature/CheeseConversionTest.php`
+
+What:
+- The release control becomes a small `<input type="number" min="1"
+  max="{{ $maturing }}" value="{{ $maturing }}">` (the hidden field's value)
+  beside the button, label "Release" + input + "of {{ $maturing }} to mature".
+  The `data-confirm` text reads the input's value at click time — give the
+  button `x-data`-free JS: `onclick` is gone (cycle 1); instead set
+  `data-confirm` dynamically on the input's `input` event
+  (`btn.dataset.confirm = \`Release ${n} held wheel(s) into mature cheese?\``),
+  or render the message as "Release the entered number of held wheel(s)…".
+- While the Maturing zone is **dirty** (Alpine `mature.length !== held`),
+  disable the Release button and show *"Save maturing first"* — the
+  released count must be the saved hold the server validates against.
+- Test: POST release with `quantity=1` on a hold of 2 → one wheel released,
+  hold 1 (already legal server-side; the test pins the page renders the input
+  with `max="2"`).
+
+Check: `php artisan test --filter=CheeseConversionTest` pass. Browser: hold 2
+on G010426 (it has 1 held now — hold one more, Save), set the input to 1,
+Release → 1 released, 1 still held; move a wheel without saving → Release
+disabled with the hint.
+
+### 5. Order line controls (F-21, F-22, F-23)
+
+Files: `resources/views/orders/partials/allocation-items.blade.php`,
+`resources/views/orders/show.blade.php`, `app/Http/Controllers/OrderController.php`,
+`tests/Feature/OrderAddItemTest.php`, `tests/Feature/OrderStoreOptionalFieldsTest.php`
+
+What:
+- **F-21**: label the two boxes. The allocation row's input gets a visible
+  `Pick` label (`<label>` text "Pick" before the box, `aria-label="Units to
+  pick now"`), the line's Qty form keeps "Qty:" but its label becomes
+  **"Ordered:"**. Add `data-confirm="Record a pick of N × {variant} from
+  batch {code}?"` on the Fulfil button (N read live from the input via a
+  tiny `oninput` that updates `dataset.confirm`, or word it without N),
+  `data-confirm-label="Record pick"`. This makes Enter-in-the-wrong-box
+  harmless.
+- **F-22**: Add item quantity → `value="{{ old('quantity') }}"
+  placeholder="1"`; server default: if blank, treat as 1 (`storeItem()`
+  validates `quantity` as `required` — make it `nullable` and default 1).
+- **F-23**: `store()` merges posted items by `product_variant_id`, summing
+  quantities, before creating lines (same rule as `storeItem()`).
+- Tests: Add item page has no `value="1"` on `#add_quantity` and a blank
+  quantity creates a line of 1; `store()` with the same variant twice creates
+  **one** line with the summed quantity.
+
+Check: `php artisan test --filter="OrderAddItemTest|OrderStoreOptionalFieldsTest|OrderItemEditTest"`
+pass. Browser: Fulfil now asks; Add item with an empty box → 1.
+
+### 6. The order page and form behave like one tool (F-26 functional bits, F-20 follow-on)
+
+Files: `app/Http/Controllers/OrderController.php`, `app/Http/Controllers/OrderAllocationController.php`,
+`resources/views/orders/create.blade.php`, `resources/views/orders/show.blade.php`,
 `resources/views/orders/partials/allocation-items.blade.php`,
-`tests/Feature/FulfilmentUnitWeightsTest.php` (or `PickingTest.php` — put the
-cases where that suite's fixtures already give a weighed wheel line)
+`tests/Feature/OrderItemEditTest.php`, `tests/Feature/OrderTransitionsTest.php`
 
 What:
-- **Normalise commas server-side** before validation: in the two callers (or
-  a small `normaliseWeightInput(Request)` helper on the trait, called first),
-  replace `,` with `.` in `weights.*` and `actual_weight_kg` via
-  `$request->merge([...])`. So "5,210" posted from any client validates as
-  5.210.
-- **Plausibility bound.** In `fulfilmentWeightRules()`, when
-  `$orderItem->productVariant->weight_kg` is set (> 0): per-unit `weights.*`
-  gets `max:` **3 × nominal** (rounded to 3 dp); bulk `actual_weight_kg` gets
-  `max:` 3 × nominal × `request('quantity')`. Messages
-  (`fulfilmentWeightMessages()`): `weights.*.max` → `Each unit must weigh no
-  more than :max kg — a wheel is usually about {nominal} kg. Check the decimal
-  point.`; `actual_weight_kg.max` similarly for the line total. When nominal
-  is null, no bound (as now).
-- **Client.** Picking (`item.blade.php:308`, `:324`) and desktop (`:144`):
-  keep `type="number"` (step/min still useful) but add a `keydown` handler
-  that turns a typed `,` into `.` — in Alpine: `x-on:keydown.prevent="…"` only
-  for the comma key (`$event.key === ','`), then insert `.` into the model
-  (the picking inputs are `x-model`-bound, so set the model string; the
-  desktop input is plain JS — set `value += '.'` and call `updateTotal`).
-  Also an amber "check this" state: on the picking per-piece rows the
-  existing `● OK` indicator (next to "expected ~ N kg") should read
-  **`Check`** in the warn colour when a weight exceeds 2 × nominal, and the
-  submit stays enabled (the server bound is the hard stop). Desktop: the row
-  gets `style="color: var(--warn-ink)"` under the same rule.
-- Tests: per-unit post `weights=[5210, 4.980]` for a 5 kg nominal wheel →
-  422/redirect with the `max` message and **nothing picked**; `weights=['5,210',
-  '4.980']` → accepted, stored as `[5.210, 4.980]`, total 10.190; bulk
-  `actual_weight_kg=60` for 18 × 0.250 kg packs → refused; a variant with no
-  nominal weight accepts 50 kg (no bound).
+- **Land on the line you touched.** Every line/allocation action redirect
+  (`storeItem`, `updateItem`, `destroyItem`, `shortCloseItem`, `reopenItem`,
+  `allocate`, `deallocate`, `fulfill`, `unfulfill`) appends
+  `->withFragment('line-'.$orderItem->id)`; the partial gives each line
+  block `id="line-{{ $orderItem->id }}"` (and the read-only table rows the
+  same). `autoAllocate` and status changes keep landing at the top.
+- **Delivery date default** on `/orders/create`: pass
+  `customerRunDates` = `[customer_id => next run date]` where the customer is
+  on a run (`DeliveryRun::dateFor(now())` if `>= today`, else
+  `dateFor(now()->addWeek())`; whole-week runs → week start). JS fills
+  `#delivery_date` on customer change **only if the field is empty or still
+  holds the previous auto-fill**.
+- `Line total` input: `tabindex="-1"` (it's read-only).
+- Flash: `update()` says **"Order confirmed."** when the status moved
+  `pending → confirmed`; "Order updated successfully." otherwise.
+- Sibling list: age from `created_at` (`diffForHumans`), and the summary uses
+  `productVariant->picker_label` (e.g. `24× Organic Milk · 1L Bottle`).
+- Option labels on the create form show the **customer's** price when a
+  special exists: on customer change, JS rewrites each option's text to
+  `picker_label (€x.xx)` from `customerPrices`, falling back to the server
+  label; mark special ones with `· special`.
+- Tests: `updateItem` redirect is `route('orders.show', $order).'#line-'.$item->id`;
+  the create page embeds `customerRunDates` for a customer on a Tuesday run
+  with next Tuesday's date; Confirm flash text.
 
-Check: `php artisan test --filter="FulfilmentUnitWeightsTest|PickingTest|OrderFulfillmentWeightTest"`
-pass. Browser as factory at `/picking/{order}/items/{wheel line}`: type
-`5,210` → field shows `5.210`; type `52.10` → amber **Check**; submitting
-`5210` (paste it) → server refusal with the message, nothing picked.
+Check: `php artisan test --filter="OrderItemEditTest|OrderTransitionsTest|OrderStoreOptionalFieldsTest"`
+pass. Browser: change a line qty → the page reloads scrolled to that line;
+pick E2E Corner Shop on the create form → delivery date = next Tuesday; the
+1L option reads "(€1.25 · special)".
 
-### 3. The order edit form can't skip the workflow (F-19)
+### 7. Office forms land where the work is (F-16, F-28)
 
-Files: `app/Http/Controllers/OrderController.php`,
-`resources/views/orders/edit.blade.php`, `tests/Feature/OrderTransitionsTest.php`
+Files: `app/Http/Controllers/CustomerController.php`,
+`app/Http/Controllers/CustomerSpecialPriceController.php`,
+`app/Http/Controllers/DeliveryRunController.php`, `app/Http/Controllers/ChilledRunController.php`,
+`resources/views/customers/show.blade.php`, `resources/views/chilled-runs/partials/_run-table.blade.php`,
+`tests/Feature/CustomerSpecialPriceTest.php`, `tests/Feature/ChilledRunTest.php`
 
 What:
-- `update()`: `status` becomes `sometimes|in:…`; when absent, use
-  `$order->status`. Then **validate the transition** before the transaction:
-  allowed are (a) unchanged, (b) `pending → confirmed`, (c) `→ cancelled`
-  when `$order->canBeCancelled()`. Anything else → `redirect()->route('orders.show',
-  $order)->with('error', 'Order status moves through the workflow — use
-  Confirm, picking, Mark dispatched or Mark delivered.')` with nothing written.
-  The existing `$isCancelling` logic is unchanged.
-- `orders/edit.blade.php:41–50`: replace the `<select name="status">` with a
-  read-only status badge (reuse whatever the show page uses for the status
-  pill) and the one-line hint `Status changes from the order page.` No
-  `status` input is posted from this form any more.
-- Keep the show page's Confirm (`status=confirmed`) and Cancel
-  (`status=cancelled`) forms exactly as they are — they are the allowed
-  transitions.
-- Tests (`OrderTransitionsTest`): office PATCH `status=dispatched` on a
-  pending order → redirect with the error, status unchanged, `dispatched_at`
-  null, no invoice; `status=ready` on a confirmed order with nothing picked →
-  refused; `status=pending` on a cancelled order → refused; `status=confirmed`
-  on pending → allowed (existing behaviour); `status=cancelled` on a ready
-  order → allowed and stock returned (existing test covers the stock);
-  PATCH without `status` (the edit form) → other fields saved, status
-  unchanged; the edit page no longer contains `name="status"`.
+- `CustomerController::store()` → `customers.show` for the new customer.
+  `destroy()` → `customers.index` **with the incoming `search`/`is_active`
+  query** (pass them through from the request).
+- Special prices: all three redirects `->withFragment('special-prices')`;
+  the panel gets `id="special-prices"`; the add `<select>` **omits variants
+  that already have a special price** for this customer.
+- Delivery runs: `assign`, `unassign`, `toggleCharge`, `reorder` redirect
+  `->withFragment('stop-'.$customer->id)` (the moved/toggled stop; for
+  `reorder` the moved id is posted — see step 8); the stop rows get
+  `id="stop-{{ $stop->id }}"`.
+- Chilled runs: `saveStop()` redirects `->withFragment('stop-'.$customer->id)`;
+  the row editor gains a **Notes** textarea (`name="notes"`, 2 rows, in the
+  Notes cell under the added-lines UI, `form="stop-form-{id}"`), validated
+  `nullable|string|max:2000`, saved to the order (created or existing; the
+  dirty-tracking `$watch` includes it). Display mode already shows notes.
+- Tests: `store` redirects to `customers.show`; special-price redirect has the
+  fragment and the select omits a priced variant; `saveStop` with `notes`
+  persists and redirects with `#stop-{id}`.
 
-Check: `php artisan test --filter="OrderTransitionsTest|OrderCustomerReferenceTest|DeliveryChargeTest"`
-pass (the latter two use the edit form/PATCH). Browser: `/orders/{id}/edit`
-shows the badge, saving still works; show page Confirm and Cancel still work.
+Check: `php artisan test --filter="CustomerSpecialPriceTest|ChilledRunTest"`
+pass. Browser: create a customer → its page; add a special price → page
+reloads at the panel; save a sheet row → reloads at that row.
 
-### 4. A refused cut keeps the weighed total (F-12)
+### 8. Reordering a run is one form (F-15, F-18)
 
-Files: `resources/views/cheese-cutting/create.blade.php`,
-`tests/Feature/CheeseCutWeightTest.php`
+Files: `app/Http/Controllers/DeliveryRunController.php`,
+`resources/views/delivery-runs/index.blade.php`, `tests/Feature/ChilledRunTest.php`
 
 What:
-- In the script: do **not** call `updateTotalWeight()` on load when the input
-  already has a value (`old('total_weight_kg')` rendered it). Only recompute
-  on `change`/`input` of the pack count or the pack variant, and even then
-  only if the operator hasn't typed a total themselves — track a
-  `totalTouched` flag set by the total input's own `input` event and cleared
-  when the pack count changes. On load, call `updateAverageWeight()` and
-  `updateWaste()` so the calculator reflects the restored values.
-- Test: POST a cut with `total_weight_kg=4.680` and a `cut_date` before
-  production → redirect back; follow it and assert the page contains
-  `value="4.680"` on `#total_weight_kg` (the `old()` is rendered). The JS
-  change is checked in the browser (below) and by the browser session.
+- Each stop row gets a `Position` number input (`positions[{customer_id}]`,
+  value = current position, `min=1`) and the run panel gets one **Save
+  order** button posting them all to `reorder` — the array now maps
+  customer id ⇒ wanted position; `reorder()` sorts by wanted position (ties
+  by current), renumbers 1…n, validates every id belongs to the run, and
+  redirects with the fragment of the first stop whose position changed.
+  Keep the ↑/↓ buttons but have them post `move: {customer_id, direction}`
+  to the same endpoint (swap with the neighbour) and redirect to
+  `#stop-{id}` — no more losing your place. Both shapes go through one
+  method: `positions` xor `move`.
+- Charge reveal: a stop with `delivery_charge_percent` shows
+  **`{{ pct }} % of order value`** (tag, no toggle) instead of "€ charge:
+  off"; the toggle stays for the others.
+- Tests: posting `positions` as id ⇒ position renumbers correctly; `move`
+  down swaps two stops; a customer not on the run is refused; the percent
+  customer's row shows "5 % of order value".
 
-Check: `php artisan test --filter=CheeseCutWeightTest` pass. Browser: on a
-cut form type wheel 5.120, packs 18, total **4.680**, cut date before
-production → refusal; the total still reads **4.680**; now change packs to 19
-→ total recomputes (4.750); type 4.700 then change packs → recomputes again
-(touched flag cleared on pack change).
+Check: `php artisan test --filter=ChilledRunTest` pass. Browser: set E2E
+Weekly Deli's position to 17 and Save → it's last, page scrolled to it; ↑
+once → page lands on the row.
 
-### 5. A refused batch form keeps the quantities and the bad date (F-08)
+### 9. Dispatch and loaded flashes name orders and reasons (F-32, F-34 Edit)
 
-Files: `resources/views/batches/create.blade.php`, `tests/Feature/BatchCreateTest.php`
-
-What:
-- Pass `@json(old('batch_items', []))` into the script as `oldItems`. When
-  rows are built for the selected product (on load with `old('product_id')`
-  present), seed each `quantity_produced` from the matching `variant_id` in
-  `oldItems`.
-- `updateExpiryDate()`: on load, skip when `expiry_date` already has a value
-  (it's `old()`); keep auto-filling on product / production-date **change**.
-- Test (`BatchCreateTest`): POST milk with `expiry_date` before
-  `production_date` and `batch_items[0][quantity_produced]=10` → redirect;
-  follow and assert the page embeds the old items JSON containing `"10"` and
-  the expiry input's `value` is the refused date, not blank.
-
-Check: `php artisan test --filter=BatchCreateTest` pass. Browser: refuse a
-batch with a bad expiry → quantities and the bad expiry are back on screen
-beside the error.
-
-### 6. The order form previews what the customer will pay (F-20)
-
-Files: `app/Http/Controllers/OrderController.php` (`create()`),
-`resources/views/orders/create.blade.php`, `tests/Feature/CustomerSpecialPriceTest.php`
+Files: `app/Http/Controllers/ChilledRunController.php`,
+`resources/views/orders/show.blade.php`, `tests/Feature/DispatchRunTest.php`,
+`tests/Feature/OrderTransitionsTest.php`
 
 What:
-- `create()` builds two maps and passes them: `customerPrices` =
-  `[customer_id => [variant_id => estimated unit price for that customer]]`
-  for every active customer × active variant where the customer has a special
-  price (`Customer::specialPrices` eager-loaded — only overrides, the JS falls
-  back to `data-price`); the estimate is `special_price × (weight_kg if
-  is_priced_by_weight else 1)`, rounded to 2 dp. `customerCharges` =
-  `[customer_id => ['charge' => currentDeliveryCharge(), 'percent' =>
-  deliveryChargePercent()]]`.
-- View: embed both with `@json`. `updateLineTotal()` uses
-  `customerPrices[customerId]?.[variantId] ?? data-price`. Below "Order
-  total" add two lines: `Delivery (incl. VAT) €X` — `charge`, or
-  `round(subtotal × percent / 100, 2)` when `percent` is set — and
-  `Total €Y`; recompute on customer change and on every line change. Label
-  the first figure **Items** so the three read Items / Delivery / Total.
-- Test: as office, GET `/orders/create` with a customer who has a special
-  price → the page embeds that price under the customer id and variant id;
-  and the delivery map carries the run charge for a flagged customer.
+- `dispatchFlash()`: "N **orders** dispatched"; skipped entries per **order**:
+  `ORD-… {customer} ({reasons})` where reasons are any of *not picked*
+  (status ≠ ready), *not loaded*; e.g. `skipped: ORD-20261004-003 E2E Corner
+  Shop (not picked, not loaded); ORD-20261004-005 An Tairseach (not picked,
+  not loaded)`. Keep the invoice-failed / no-email parts.
+- `toggleLoaded()` flash: `"{customer} · {order_number} marked loaded."`.
+- `orders/show`: when `$order->invoice_id` is set, don't render **Edit**;
+  render a muted line *"On invoice {number} — void it to edit."* (the
+  billing line already links to Finance).
+- Tests: `DispatchRunTest` flash contains the order number and both reasons;
+  loaded flash contains the order number; an invoiced order's page has no
+  `orders.edit` link.
 
-Check: `php artisan test --filter="CustomerSpecialPriceTest|OrderStoreOptionalFieldsTest"`
-pass. Browser: choose E2E Corner Shop, add 1L × 24 → line €30.00, Delivery
-€6.15, Total matches what the saved order then shows (to the cent).
+Check: `php artisan test --filter="DispatchRunTest|OrderTransitionsTest|DispatchConfirmationTest"` pass.
 
-### 7. The invoice names the order and the customer's reference (F-35)
+### 10. Finance defaults and messages (F-37, F-38 defaults, F-41 message, cycle-3 follow-on)
 
-Files: `resources/views/invoicing/invoices/pdf.blade.php`,
-`tests/Feature/InvoiceIssueTest.php`
-
-What:
-- In the "Invoice details" block, when `! $grouped`, after the invoice date
-  print one line per order in `$orderLookup` (there is exactly one on a
-  per-order invoice): `Order ORD-… ` and, when filled, `· Your ref: PO-…`.
-  Consolidated invoices keep their per-order group headings as now (they
-  already show the ref) — don't duplicate.
-- Also show the same line on the HTML invoice page if it has its own header
-  (check `invoicing/invoices/show.blade.php`; if it renders the PDF partial,
-  nothing to do).
-- Test: issue an invoice for a delivered order with `customer_reference =
-  'PO-123'`; the invoice show page and the PDF HTML contain `ORD-` and
-  `PO-123`; a consolidated invoice still shows them once per order.
-
-Check: `php artisan test --filter="InvoiceIssueTest|ConsolidatedInvoiceTest"` pass.
-
-### 8. A payment is applied unless the office says otherwise; a minus sign is refused (F-36, F-40)
-
-Files: `resources/views/invoicing/payments/create.blade.php`,
-`tests/Feature/PaymentAllocationTest.php`
+Files: `resources/views/invoicing/invoices/show.blade.php`,
+`app/Http/Controllers/Invoicing/ConsolidatedInvoiceController.php`,
+`resources/views/invoicing/consolidated/create.blade.php`,
+`app/Http/Controllers/Invoicing/StatementController.php`,
+`resources/views/customers/show.blade.php`, `app/Http/Controllers/OrderAllocationController.php`,
+`resources/views/invoicing/payments/create.blade.php`,
+`tests/Feature/InvoiceVoidTest.php`, `tests/Feature/StatementTest.php`,
+`tests/Feature/ConsolidatedInvoiceTest.php`, `tests/Feature/PaymentAllocationTest.php`,
+`tests/Feature/OrderAllocationConcurrencyTest.php`
 
 What:
-- Component: `amount` starts as `''` (not 0) — `old('amount', '')`; bind with
-  `x-model="amount"` (string) and parse where it's used (`parseFloat`). The
-  `min="0.01"` then refuses a negative at submit; also disable **Record
-  payment** while `parseFloat(amount) <= 0`.
-- Auto-apply by default: when `amount` changes and the operator has **not**
-  edited any Apply box (`allocationsTouched` flag set by `input` on those
-  boxes, cleared by **Auto-fill oldest first**), call `autoFill()`. The
-  "Left on account" figure then reads 0 for a payment that covers open
-  invoices, and the operator can still override per invoice.
-- Server (defence): `amount` already `min:0.01`; add a clear message
-  `A payment must be more than zero. Record refunds as credit notes.`
-- Test: server refuses `amount=-5` with that message (the JS part is a
-  browser check).
+- Invoice page: when issued but not voidable, render a disabled **Void**
+  button with `title` and a muted line: *"Can't void — remove its payments
+  (N) / credit note (CN-…) first."* (name what blocks it).
+- Consolidated: add a **This week** shortcut (`period=this_week`, Mon–Sun of
+  today); default stays last month.
+- Statement preview default: **this month** (`today()->startOfMonth()`,
+  `today()`), not last month.
+- Customer page: when `outstanding_balance < 0` print **"€X in credit"** (and
+  the green tone the page uses for credit), never a minus sign.
+- `allocate()` refusal: distinguish *"This line is already fully allocated
+  (N of N)."* from *"Only N units are available in this batch right now."*
+  from the existing generic text (keep it as the final fallback).
+- Payments form: seed `allocations` from `old('allocations', [])` so a
+  refused submit keeps a manual split; set `allocationsTouched = true` when
+  any were restored.
+- Tests: void hint text on an invoice with a payment; `this_week` period
+  bounds; statement default `from` = first of this month; "in credit" text;
+  the two allocate messages; old allocations rendered.
 
-Check: `php artisan test --filter=PaymentAllocationTest` pass. Browser: open
-Record payment for a customer with one open invoice, type the amount → the
-Apply box fills and "Left on account €0.00"; type `-5` → browser refuses on
-submit; edit an Apply box, change the amount → your edit is kept.
+Check: `php artisan test --filter="InvoiceVoidTest|StatementTest|ConsolidatedInvoiceTest|PaymentAllocationTest|OrderAllocationConcurrencyTest"` pass.
 
-### 9. Docs
+### 11. Error pages lead home (F-41)
+
+Files: `resources/views/errors/404.blade.php` (new), `resources/views/errors/403.blade.php` (new),
+`resources/views/errors/layout.blade.php` (new), `tests/Feature/ErrorPagesTest.php` (new)
+
+What:
+- A minimal standalone layout (own `<!DOCTYPE>`, `@vite` CSS, the app's
+  background/ink vars, centred card) — not `x-app-layout` (errors happen for
+  guests too). 404: *"That page doesn't exist."* 403: *"You don't have access
+  to that page."* Both offer **one** link: signed-in factory → `/picking`
+  ("Back to picking"); any other signed-in user → dashboard; guest → login.
+  Include the request path in muted mono so the office can report it.
+- Tests: guest 404 links to login; factory 403 on `/customers` links to
+  `/picking`; office 404 links to the dashboard; no stack trace text.
+
+Check: `php artisan test --filter=ErrorPagesTest` pass. Browser:
+`/orders/999999` as factory shows the page with "Back to picking".
+
+### 12. Docs
 
 Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`
 
 What:
-- `CLAUDE.md` → **Order Structure**: add a bullet *Status transitions*: the
-  only statuses `OrderController::update()` accepts are unchanged, `pending →
-  confirmed`, and `→ cancelled` via `canBeCancelled()`; everything else goes
-  through `orders.dispatch`/`orders.deliver`/picking. The edit form no longer
-  posts `status`.
-- **Variable Weight Fulfillment** → *Server-side weights*: commas are
-  normalised to dots; per-unit weights are bounded at 3 × nominal
-  `weight_kg` (bulk: × quantity) when a nominal exists.
-- **Frontend Development**: a *Forms* bullet — `resources/js/submit-once.js`
-  disables a form's submit buttons after submission (re-enabled on `pageshow`);
-  payments carry a `form_token` (unique) so a repeat POST is a redirect, not a
-  second payment.
-- **Mature Conversion** → *Undo release*: correct "drops the mature item" to
-  "leaves the Mature batch and item in place at 0 produced / 0 remaining and
-  reuses them on the next release" (observed in the E2E run).
-- `WORK_IN_PROGRESS.md`: a *Recently Completed: Money and state fixes
-  (2026-10-04)* entry at the top listing the eight findings closed.
+- `CLAUDE.md`: Stock Overview → the `expired` per-type summary and the
+  dashboard tile; Mobile Picking → one-day queue + stale bucket + cyclic
+  Skip; Chilled Run Sheet → row editor has Notes; Delivery runs → `reorder()`
+  accepts `positions` (id ⇒ position) or `move`; a one-line **Redirect
+  convention**: line/stop/panel actions redirect `->withFragment(...)` to the
+  element edited, status-level actions to the top; `errors/` views exist.
+- `WORK_IN_PROGRESS.md`: *Recently Completed: Friction fixes (2026-10-04)*
+  entry listing the findings closed.
 
-Check: `grep -n "Status transitions\|submit-once\|3 × nominal\|form_token" CLAUDE.md`
-→ four hits.
+Check: `grep -n "withFragment\|stale bucket\|positions\b.*move\|errors/" CLAUDE.md` → hits.
 
 ## Verification
 
-1. `php artisan test` → **0 failed**; record the passing count (536 + the new
-   cases).
+1. `php artisan test` → **0 failed**; record the passing count.
 2. `./vendor/bin/pint --test app tests database routes` → clean.
-3. `npm run build` → ok; `grep -l "data-submitting" public/build/assets/*.js`
-   finds the bundle.
-4. `php artisan migrate:status | tail -3` shows the payments migration ran.
-5. `git status --short` → only files this plan names (+ the staged archive).
-6. The browser checks in steps 1, 2, 3, 4, 5, 6, 8 (real input; `php artisan
-   serve` on 127.0.0.1 is fine). Console clean on each page.
+3. `npm run build` → ok.
+4. `git status --short` → only files this plan names (+ the staged archive).
+5. Browser checks from steps 1–9 and 11 with real input (`php artisan serve`
+   on 127.0.0.1 is fine; 500 × 659 for the picking steps). Console clean.
+6. Dev-DB probe: nothing in this cycle moves stock or money; confirm
+   `orders`, `payments`, `invoices` counts are unchanged except any order the
+   browser checks create (tag them `E2E-20261004 cycle4` and cancel them).
 
 ## Risks
 
-- **`submit-once` vs `confirm.js`.** `confirm.js` prevents the first submit
-  and re-submits via `requestSubmit`; `submit-once` must act only on submits
-  that go through (`!e.defaultPrevented`), or it will disable the button
-  while the dialog is open and the confirmed re-submit finds a disabled
-  submitter. Test both orders of listener registration by double-clicking a
-  dialog-gated button and a plain one.
-- **Disabling the submitter too early** drops its `name`/`value` (the
-  statements preview button). Hence `setTimeout(0)`.
-- **Alpine `:disabled`** on the picking FAB and the payment button: adding
-  `disabled` is fine; never *remove* a disabled attribute Alpine owns.
-- **3 × nominal** could refuse a genuine outlier (a 15 kg wheel on a 5 kg
-  nominal). Farmhouse wheels run 4.5–5.5 kg; the bound is generous. If the
-  Implementer finds a variant whose nominal is far below reality, note it
-  rather than loosening the rule.
-- **Removing the status select** may break any test that posts `status` from
-  the edit form expecting it to be required — run the whole suite, not just
-  the named filters.
-- **`$orderLookup`** may be built only for consolidated invoices; if so,
-  build it for all and keep the per-order heading logic unchanged.
+- **Fragments and flashes.** `withFragment` keeps the session flash; the
+  layout's feedback region renders at the top, so a user scrolled to a line
+  may not see the flash. Acceptable here (the line itself changes), but say
+  so in the report; cycle 5 can anchor the flash near the fragment.
+- **Picking default day** must never hide a `confirmed`/`preparing` order:
+  only `ready` orders go to the stale bucket.
+- **Reorder semantics**: validate that every posted id belongs to the run and
+  that `positions` and `move` are mutually exclusive; the old per-row forms
+  posted the whole array and must not remain anywhere (grep the view).
+- **Merging duplicate variants in `store()`** changes the line count a
+  customer sees; the summed quantity is what they ordered, so it's right —
+  but check `OrderStoreOptionalFieldsTest` and `DeliveryChargeTest` still
+  pass (they create orders via `store()`).
+- **Error views**: Laravel renders `errors/404.blade.php` automatically when
+  present; make sure the layout has no dependency on a signed-in user
+  (`auth()->user()` may be null) and that the view doesn't itself 500 for an
+  API-shaped request (JSON requests still get JSON — don't change that).
+- **Session length.** Twelve steps; update `implemented.md` after each; a
+  `BLOCKED — resume from N+1` is a fine outcome.
 
 ## Review
 
-Reviewed 2026-10-04 against `implemented.md` (Status: DONE, read to the end)
-and the full working-tree diff. Planner reran: `php artisan test` → **557
-passed, 0 failed**; `pint --test app tests database routes` → PASS 262 files;
-`npm run build` ok and `data-submitting` in the bundle; the payments migration
-`[5] Ran`; dev DB holds one tokened payment (the real €1.00 double-click
-check) and the two throwaway orders are cancelled.
-
-### Criteria
-
-| Step | Result |
-| --- | --- |
-| 1 Submit once | **Pass.** `submit-once.js` acts only on non-prevented POST submits, disables own + `form="id"` buttons after a tick, drops a re-entrant submit, releases on `pageshow`; unique `form_token` on `payments`, `repeatSubmission()` both before `record()` and in the `UniqueConstraintViolationException` catch. Browser: dialog double-click → one PATCH; payment double-click → one POST. 4 tests. |
-| 2 Weights | **Pass.** `normaliseWeightInput()` before `validate()` in both callers; `max:` 3 × nominal (bulk × quantity) only when a nominal exists; messages quote the nominal. Client comma → `.` via `execCommand('insertText')` (right call — writing `"5."` to a number input blanks it); amber Check above 2×. Browser: `5,210` → 5.210; `5210` refused, nothing picked. 4 tests, red-checked. |
-| 3 Status bypass | **Pass.** `sometimes` + `??= $order->status` + `isAllowedStatusChange()` (unchanged / pending→confirmed / →cancelled via `canBeCancelled()`), refused before the transaction; edit form posts no status, shows a tag. Show-page Confirm/Cancel untouched. 6 tests; whole suite run as the Risks asked. |
-| 4 Cut form | **Pass.** `totalTouched` flag; restored total kept on load; pack change recomputes; variant change only when untouched. Browser-verified in all three directions. |
-| 5 Batch form | **Pass.** `oldQuantities` keyed by variant id, integer-coerced (good XSS instinct); `initialising` flag protects the refused expiry. Browser-verified. |
-| 6 Price preview | **Pass.** `customerPrices` (special × nominal when €/kg) + `customerCharges`; Items / Delivery / Total; re-prices on customer change. Browser: preview = saved order to the cent (€36.15). |
-| 7 Invoice ref | **Pass.** `$orderLookup` for every invoice (the Risks case was real); detail line on PDF and on the HTML header; consolidated headings unchanged. 2 tests. |
-| 8 Payments | **Pass.** String-bound amount, `min` now refuses `-5`; auto-apply via `$watch` unless an Apply box was touched; `autoFill()` clears the flag. Browser-verified including the override case. |
-| 9 Docs | **Pass.** Four CLAUDE.md edits present; WIP entry added. |
-
-### Deviations — all accepted
-
-1. GET forms skipped and a 10 s release — right; the plan's "every form"
-   would have frozen the CSV export and backup download buttons.
-2. `execCommand('insertText')` — right, for the reason given; deprecated but
-   universally supported, and the only way to insert into a number input's
-   edit buffer.
-3–6. Message written in step 1; two throwaway orders + one real €1 payment
-   (recorded in `RESUME.md`); integer coercion; inline tone `match` (no shared
-   status-pill component exists — a cycle-4 extraction candidate).
-
-### Notes for Planner — decisions
-
-- Option labels still show the standard price → **cycle 4** (F-20 follow-on).
-- Payment form loses a manual split on a refused submit → **cycle 4**
-  (restore `allocations` from `old()`).
-- 3× bound vs Mature wheels: fine, nothing to do.
-- `submit-once` on the chilled-run `form="…"` Save → **browser session**
-  (`handoff/REPORT.md`).
-- Planner's own observation: the picking `x-show` thresholds use
-  `2 * $expWeight`, which is `weight_kg ?? 1` — a variant stored with
-  `weight_kg = 0` (allowed by `min:0`) would show amber Check for every
-  weight. Server side already treats 0 as "no nominal". **Cycle 4**: guard the
-  client the same way (`$expWeight > 0`).
-- Cleanup: keep the data. Payment 8 (€1.00) is a real payment on INV-000006;
-  harmless and tagged.
-
-Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-money-and-state`
-and move `plan.md` + `implemented.md` there.
+(Planner fills this in after reading implemented.md and the diff.)
