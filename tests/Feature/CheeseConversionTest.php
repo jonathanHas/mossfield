@@ -429,6 +429,32 @@ class CheeseConversionTest extends TestCase
         $this->assertSame(2, $wheel->fresh()->quantity_remaining); // unchanged
     }
 
+    public function test_the_allocator_never_gates_the_reservation_on_fulfilled_at(): void
+    {
+        // 5 wheels; an order reserved 3 and 1 has been picked (remaining 4).
+        // The pick stamped fulfilled_at, but 2 wheels are still owed.
+        $wheel = $this->farmhouseBatch(6, 5);
+        [, $orderItem] = $this->orderFor($this->farmhouseWheel, 3);
+        \App\Models\OrderAllocation::create([
+            'order_item_id' => $orderItem->id, 'batch_item_id' => $wheel->id,
+            'quantity_allocated' => 3, 'quantity_fulfilled' => 1,
+            'allocated_at' => now(), 'fulfilled_at' => now(),
+        ]);
+        $wheel->update(['quantity_remaining' => 4]);
+        $office = $this->office();
+
+        // holdable = 4 remaining − 2 still owed = 2 (it showed 4 while gated).
+        $this->actingAs($office)->get(route('cheese-conversion.index'))
+            ->assertOk()
+            ->assertSee('matureCard(2, 0)', false)
+            ->assertDontSee('matureCard(4, 0)', false);
+
+        // The server-side cap agrees with the page.
+        $this->assertSame(2, $wheel->fresh()->holdable_quantity);
+        $this->hold($office, $wheel, 3)->assertSessionHasErrors('quantity');
+        $this->assertSame(0, (int) $wheel->fresh()->quantity_maturing);
+    }
+
     /** Build an order with one unallocated line for the given variant. */
     private function orderFor(ProductVariant $variant, int $qty): array
     {

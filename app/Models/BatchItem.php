@@ -108,13 +108,22 @@ class BatchItem extends Model
      */
     public function wheelStates(): array
     {
+        // "Was it eager-loaded?" is array_key_exists, not ??: withSum yields
+        // NULL for an empty set, and a ?? fallback re-queried every item with
+        // no conversions or no allocations — the /batches N+1. A loaded null
+        // is 0.
+        $loaded = fn (string $key) => array_key_exists($key, $this->getAttributes());
+
         $produced = (int) $this->quantity_produced;
-        $cut = (int) ($this->getAttribute('source_cutting_logs_count')
-            ?? ($this->relationLoaded('sourceCuttingLogs') ? $this->sourceCuttingLogs->count() : $this->sourceCuttingLogs()->count()));
-        $converted = (int) ($this->getAttribute('converted_wheels')
-            ?? ($this->relationLoaded('sourceConversionLogs') ? $this->sourceConversionLogs->sum('wheels_converted') : $this->sourceConversionLogs()->sum('wheels_converted')));
-        $reserved = (int) ($this->getAttribute('quantity_currently_allocated')
-            ?? $this->orderAllocations()->sum(DB::raw('quantity_allocated - quantity_fulfilled')));
+        $cut = (int) ($loaded('source_cutting_logs_count')
+            ? $this->getAttribute('source_cutting_logs_count')
+            : ($this->relationLoaded('sourceCuttingLogs') ? $this->sourceCuttingLogs->count() : $this->sourceCuttingLogs()->count()));
+        $converted = (int) ($loaded('converted_wheels')
+            ? $this->getAttribute('converted_wheels')
+            : ($this->relationLoaded('sourceConversionLogs') ? $this->sourceConversionLogs->sum('wheels_converted') : $this->sourceConversionLogs()->sum('wheels_converted')));
+        $reserved = (int) ($loaded('quantity_currently_allocated')
+            ? $this->getAttribute('quantity_currently_allocated')
+            : $this->orderAllocations()->sum(DB::raw('quantity_allocated - quantity_fulfilled')));
 
         // Sold whole = whatever left the shelf that wasn't cut or converted.
         $sold = max(0, $produced - (int) $this->quantity_remaining - $cut - $converted);

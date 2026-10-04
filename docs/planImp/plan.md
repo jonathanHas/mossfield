@@ -1,6 +1,6 @@
 # Loose ends: an allocate crash, a gated reservation sum, an N+1, and three small things
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
@@ -277,4 +277,55 @@ Check: `grep -n "extendAllocation\|array_key_exists\|lg:overflow-visible" CLAUDE
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-04 against `implemented.md` (Status: DONE, 351 lines, read to
+the end) and the full diff. Planner reran: `php artisan test` → **617 passed,
+0 failed** (+5); `pint --test … config` → PASS 277 files; `npm run build` ok;
+`grep "whereNull('fulfilled_at')" app` → docblock only; no `application-logo`
+reference; dev DB: orders 24 (probe 25 cancelled, 0 allocation rows),
+allocations 33, payments 4, invoices 7.
+
+### Criteria — all seven pass
+
+1 `allocateFromBatchItem()` locks the batch item, looks up the existing pair
+under `lockForUpdate`, delegates to `extendAllocation()` and returns the
+fresh row; five test cases including fully-picked-then-widened (stamp
+cleared); browser: 6 + 4 from the same batch → one row of 10, where it was a
+500. 2 The gate is gone; the test pins `matureCard(2, 0)` and the server's
+refusal of a hold of 3; red-checked. 3 `array_key_exists` for all three
+sums; `/batches` 12→18 became **6→6**, `/cheese-cutting` 10→16 became
+**4→4**, `/cheese-conversion` flat at 5 — nothing else grows. 4 Sticky
+`<thead>` at `xl+` in display mode (deviations 2–6, all right: the sheet
+overflowed at `lg`; `.mf-panel` clips; edit mode is ~35 px wider; Chrome
+mis-paints a stuck collapsed header; and the header must sit **under** the
+flash that is always showing right after a save — `--mf-feedback-h`,
+measured as the page parses, zeroed on dismiss). Browser: row lands at 150
+under a header at 70–144; dismiss → header flush at 0. 5 Two nowraps.
+6 Deleted, grep empty. 7 Docs.
+
+### Deviations — all accepted
+
+1 baseline; 2 `xl:` (the Risks allowed it); 3 lifting `.mf-panel`'s clip;
+4 scroll wrapper kept while editing; 5 `<thead>` sticky + `border-collapse:
+separate` (diagnosed, not guessed); 6 `--mf-feedback-h` touching the
+feedback partial — necessary to meet the step's own goal; **7 corrects the
+plan's Context**: `fulfillAllocation()` stamps `fulfilled_at` only on a
+*full* pick (`quantity_fulfilled >= quantity_allocated`), not on a partial
+one. The gating bug's practical reach is therefore narrower than the plan
+said — a stamped row owes units only after it is widened (which
+`extendAllocation()` now un-stamps) or via legacy data — but the invariant
+is consistency across all sites and the fix stands. Recorded in
+`TESTING_AND_FIXES.md`. 8 tinker probe, cancelled.
+
+### Notes for Planner — decisions
+
+- **The `xl` fit is tight** (983 px in 985 with 11 columns): a third cheese
+  column would overflow display mode at 1280. → **Follow-up** (next polish
+  batch): compute `$stickyHead` from `$qtyColCount` (sticky only when the
+  sheet fits, e.g. ≤ 9 quantity columns) rather than from the breakpoint
+  alone. Logged in `TESTING_AND_FIXES.md`.
+- `.scroll-mt-20` → `calc(var(--mf-feedback-h) + 1rem)` for the order-page
+  lines → same follow-up batch.
+- Context correction → recorded (above).
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-loose-ends`
+and move `plan.md` + `implemented.md` there.

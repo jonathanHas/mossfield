@@ -32,10 +32,15 @@ class CheeseConversionController extends Controller
         // to actually become the Mature product.
         $readyBatches = Batch::with([
             'product',
+            // The reservation is the units still owed (quantity_allocated −
+            // quantity_fulfilled) over ALL allocations — never gated on
+            // fulfilled_at (see BatchItem::getHoldableQuantityAttribute). This
+            // was the last site still filtering on it, until 2026-10-04.
             'batchItems' => fn ($q) => $q->with('productVariant')
-                ->withSum([
-                    'orderAllocations as quantity_currently_allocated' => fn ($qa) => $qa->whereNull('fulfilled_at'),
-                ], DB::raw('quantity_allocated - quantity_fulfilled')),
+                ->withSum(
+                    'orderAllocations as quantity_currently_allocated',
+                    DB::raw('quantity_allocated - quantity_fulfilled')
+                ),
         ])
             ->whereHas('product', fn ($q) => $q->where('type', 'cheese'))
             ->when($matureProductId, fn ($q) => $q->where('product_id', '!=', $matureProductId))

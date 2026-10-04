@@ -122,6 +122,17 @@ class OrderItem extends Model
                 return null;
             }
 
+            // order_allocations is unique per (order_item, batch_item): a second
+            // allocation from the same batch is a top-up of the existing row,
+            // under the same guards (it used to insert and 500).
+            $existing = $this->orderAllocations()
+                ->where('batch_item_id', $lockedBatchItem->id)
+                ->lockForUpdate()
+                ->first();
+            if ($existing) {
+                return $this->extendAllocation($existing, $lockedBatchItem, $quantity) ? $existing->fresh() : null;
+            }
+
             // Recompute current allocations under the lock so we never approve
             // a quantity that another transaction has already claimed.
             if ($lockedBatchItem->available_quantity < $quantity) {

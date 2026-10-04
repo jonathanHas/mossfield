@@ -112,7 +112,7 @@
                                     @endif
                                 </td>
                                 @can('see-financials')
-                                    <td class="mf-td">
+                                    <td class="mf-td whitespace-nowrap">
                                         <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span>
                                         @if($order->invoice_id)
                                             <a href="{{ route('invoicing.invoices.show', $order->invoice_id) }}" class="mf-link ml-1 text-[11.5px]" title="Open the invoice in Finance">inv</a>
@@ -120,7 +120,7 @@
                                     </td>
                                     <td class="mf-td font-mono font-medium">€{{ number_format($order->total_amount, 2) }}</td>
                                 @endcan
-                                <td class="mf-td text-right">
+                                <td class="mf-td text-right whitespace-nowrap">
                                     <a href="{{ route('orders.show', array_merge($rowFilters, ['order' => $order->id])) }}" class="mf-link">View</a>
                                     @can('update', $order)
                                         <span style="color: var(--faint);"> · </span>

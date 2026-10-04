@@ -166,17 +166,63 @@ class OrderAllocationConcurrencyTest extends TestCase
             'batch_item_id' => $this->batchItem->id, 'quantity' => 5,
         ])->assertSessionHasErrors(['quantity' => 'This line only needs 4 more — allocate at most that many.']);
         $this->assertSame(6, (int) $line->fresh()->quantity_allocated);
+        $this->assertSame(6, (int) $line->orderAllocations()->sole()->quantity_allocated);
 
-        // Exactly what it needs allocates. (A second batch: topping up the
-        // same batch's reservation through allocate() hits the unique
-        // (order_item, batch_item) index — a separate, pre-existing gap.)
-        $second = BatchItem::create([
-            'batch_id' => $this->batch->id, 'product_variant_id' => $this->variant->id,
-            'quantity_produced' => 50, 'quantity_remaining' => 50, 'unit_weight_kg' => 1.030,
-        ]);
+        // Exactly what it needs allocates — from the SAME batch, as a top-up
+        // of the existing row (cycle 6; it used to 500 on the unique index).
         $this->actingAs($office)->post(route('order-allocations.allocate', $line), [
-            'batch_item_id' => $second->id, 'quantity' => 4,
-        ])->assertSessionHasNoErrors();
+            'batch_item_id' => $this->batchItem->id, 'quantity' => 4,
+        ])->assertRedirect()->assertSessionHasNoErrors()
+            ->assertSessionHas('success', 'Allocated 4 units from batch '.$this->batch->batch_code.'.');
+        $this->assertSame(10, (int) $line->fresh()->quantity_allocated);
+        $this->assertSame(10, (int) $line->orderAllocations()->sole()->quantity_allocated);
+    }
+
+    public function test_topping_up_a_fully_picked_row_clears_its_fulfilled_stamp(): void
+    {
+        $this->batchItem->update(['quantity_produced' => 50, 'quantity_remaining' => 50]);
+        $line = $this->makeOrderItem(quantityOrdered: 10);
+        $allocation = $line->allocateFromBatchItem($this->batchItem, 6);
+        $this->assertTrue($line->fulfillAllocation($allocation, 6));
+        $this->assertNotNull($allocation->fresh()->fulfilled_at, 'a fully picked row is stamped');
+
+        $this->assertNotNull($line->fresh()->allocateFromBatchItem($this->batchItem->fresh(), 4));
+
+        $row = $line->orderAllocations()->sole();
+        $this->assertSame(10, (int) $row->quantity_allocated);
+        $this->assertSame(6, (int) $row->quantity_fulfilled);
+        $this->assertNull($row->fulfilled_at, 'units are owed again');
+    }
+
+    public function test_a_top_up_beyond_the_batch_free_stock_is_refused_on_the_same_row(): void
+    {
+        $office = \App\Models\User::factory()->create();
+        $line = $this->makeOrderItem(quantityOrdered: 20);
+        $line->allocateFromBatchItem($this->batchItem, 6); // batch holds 10 → 4 free
+
+        $this->actingAs($office)->post(route('order-allocations.allocate', $line), [
+            'batch_item_id' => $this->batchItem->id, 'quantity' => 5,
+        ])->assertSessionHasErrors(['quantity' => 'Only 4 units are available in this batch right now.']);
+
+        $this->assertSame(6, (int) $line->orderAllocations()->sole()->quantity_allocated);
+        $this->assertSame(6, (int) $line->fresh()->quantity_allocated);
+    }
+
+    public function test_topping_up_a_partly_picked_row_keeps_the_picks_and_reopens_it(): void
+    {
+        $this->batchItem->update(['quantity_produced' => 50, 'quantity_remaining' => 50]);
+        $line = $this->makeOrderItem(quantityOrdered: 10);
+        $allocation = $line->allocateFromBatchItem($this->batchItem, 6);
+        $this->assertTrue($line->fulfillAllocation($allocation, 2));
+
+        $topped = $line->fresh()->allocateFromBatchItem($this->batchItem->fresh(), 4);
+
+        $this->assertNotNull($topped);
+        $this->assertSame($allocation->id, $topped->id);
+        $row = $line->orderAllocations()->sole();
+        $this->assertSame(10, (int) $row->quantity_allocated);
+        $this->assertSame(2, (int) $row->quantity_fulfilled);
+        $this->assertNull($row->fulfilled_at);
         $this->assertSame(10, (int) $line->fresh()->quantity_allocated);
     }
 }

@@ -320,7 +320,7 @@ class BatchCreateTest extends TestCase
 
         // The deletion counts ride the one batch_items eager-load however many
         // cards there are — no per-card count query, no per-card stock SUM.
-        // (wheelStates() still runs its own per-item sums; that predates this.)
+        // (Total counts: see test_the_batch_screens_cost_the_same_queries_at_any_size.)
         $queries = function () use ($admin) {
             \Illuminate\Support\Facades\DB::flushQueryLog();
             \Illuminate\Support\Facades\DB::enableQueryLog();
@@ -341,6 +341,38 @@ class BatchCreateTest extends TestCase
         $this->assertSame(1, $countQueries($before));
         $this->assertSame(1, $countQueries($after));
         $this->assertSame(0, $stockSums($after));
+    }
+
+    /**
+     * The three wheel screens cost the same number of queries at 2 and at 4
+     * batches. wheelStates() used to fall back to a live SUM whenever an
+     * eager-loaded sum was NULL (no conversions / no allocations) — an N+1.
+     */
+    public function test_the_batch_screens_cost_the_same_queries_at_any_size(): void
+    {
+        [$cheese, $wheel, $pack] = $this->cheese(0);
+        $admin = User::factory()->admin()->create();
+        // One plain batch (no allocations, no conversions: the NULL case) and one reserved.
+        $this->cheeseBatch($cheese, [[$wheel, 5, 5], [$pack, 10, 10]], ['production_date' => today()->subDays(3)]);
+        $this->allocateOne($this->cheeseBatch($cheese, [[$wheel, 5, 5]], ['production_date' => today()->subDays(4)]));
+
+        $count = function (string $url) use ($admin): int {
+            \Illuminate\Support\Facades\DB::flushQueryLog();
+            \Illuminate\Support\Facades\DB::enableQueryLog();
+            $this->actingAs($admin)->get($url)->assertOk();
+            $n = count(\Illuminate\Support\Facades\DB::getQueryLog());
+            \Illuminate\Support\Facades\DB::disableQueryLog();
+
+            return $n;
+        };
+        $urls = [route('batches.index'), route('cheese-cutting.index'), route('cheese-conversion.index')];
+        $before = array_map($count, $urls);
+
+        $this->cheeseBatch($cheese, [[$wheel, 5, 5], [$pack, 10, 10]], ['production_date' => today()->subDays(5)]);
+        $this->allocateOne($this->cheeseBatch($cheese, [[$wheel, 5, 5]], ['production_date' => today()->subDays(6)]));
+        $after = array_map($count, $urls);
+
+        $this->assertSame($before, $after, '/batches, /cheese-cutting, /cheese-conversion');
     }
 
     private function allocateOne(Batch $batch): void

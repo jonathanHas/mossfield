@@ -69,12 +69,19 @@ worth returning to.
   hint. Suite **612 passed, 0 failed**. Write-up in `TESTING_AND_FIXES.md` →
   2026-10-04 Copy and polish. Jon archives `plan.md` + `implemented.md` to
   `archive/2026-10-04-copy-and-polish/`.
-- **Next:** **cycle 6 — loose ends** (short): the **allocate top-up 500**
-  (`allocateFromBatchItem()` must widen an existing row like
-  `extendAllocation()` — a real S2), the `/batches` `wheelStates()` N+1,
-  sticky run-sheet `<thead>`, two `/orders` nowrap cells, delete the unused
-  `application-logo` component. Then `OPEN_QUESTIONS.md` #1 (write-offs) and
-  #5 (E2E decisions) once Jon answers; `FULFILMENT_PLAN.md` Phase 4.
+- **Cycle 6 "Loose ends" — ACCEPTED 2026-10-04:** same-batch allocation
+  top-up fixed (was a 500); the conversion allocator's reservation sum
+  ungated (the last of the eight sites); `/batches` N+1 fixed (`??` on a
+  loaded null → `array_key_exists`; 12→18 queries became 6→6); sticky
+  run-sheet header at `xl+`; `/orders` nowrap; Breeze logo deleted. Suite
+  **617 passed, 0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-04
+  Loose ends. Jon archives `plan.md` + `implemented.md` to
+  `archive/2026-10-04-loose-ends/`.
+- **The Planner's own backlog is now empty.** What's left needs Jon:
+  `OPEN_QUESTIONS.md` #1 (write-offs — the biggest functional gap) and #5
+  (eight policy calls from the E2E run); each answer becomes a one-step
+  plan. Also `FULFILMENT_PLAN.md` Phase 4 (driver route + POD) when wanted,
+  and two tiny follow-ups logged under the cycle-6 section.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -120,9 +127,9 @@ way. Cycle 3's browser checks added orders 19–20 (cancelled) and payment 8
 (€1.00 on INV-000006, the double-click check — the one row with a
 `form_token`). Cycle 4's added orders 21–22 (cancelled) and **released one
 more G010426 wheel to Mature** (item 46 now `remaining 7 · held 1`; G010426-1
-has 2) — reversible from the Mature batch page. Cycle 5 added orders 23–24
-(cancelled). Counts now 23 orders, 4 payments, 7 invoices, 13 batches, 18
-customers; no customer is linked to Mossorders. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+has 2) — reversible from the Mature batch page. Cycles 5–6 added orders
+23–25 (cancelled). Counts now 24 orders, 33 allocations, 4 payments, 7
+invoices, 13 batches, 18 customers; no customer is linked to Mossorders. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.

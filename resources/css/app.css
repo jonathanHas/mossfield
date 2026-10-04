@@ -509,8 +509,19 @@
 .mf-daytab.is-active .m { color: oklch(0.82 0.01 150); }
 
 /* Run-sheet table */
-.mf-run { width: 100%; border-collapse: collapse; font-size: 13px; }
+/* separate + 0 spacing, not collapse: with a sticky <thead>, Chrome let the
+   body rows paint through the stuck header cells of a collapsed table. Cells
+   only draw top/bottom borders, so it looks the same. */
+.mf-run { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .mf-run thead th { background: var(--bg); }
+/* Sticky column headers (xl+, where no ancestor clips or scrolls — see
+   _run-table). Two header rows: the group row at 0, the column row under it.
+   Under the sticky flash region (z-index 30). */
+/* --mf-feedback-h is the sticky flash region's height (set by
+   layouts/partials/feedback, 0 once dismissed), so the header sits under it. */
+.mf-run thead { position: sticky; top: var(--mf-feedback-h, 0px); z-index: 2; }
+/* A row a redirect lands on (#stop-…) clears the flash and both header rows. */
+.mf-run tbody tr[id^="stop-"] { scroll-margin-top: calc(var(--mf-feedback-h, 0px) + 80px); /* 28 + 46 px header, measured, + a little */ }
 .mf-run .grp-th {
     padding: 7px 10px 5px; text-align: center;
     font-size: 10px; font-weight: 600; letter-spacing: 0.7px; text-transform: uppercase;

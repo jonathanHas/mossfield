@@ -12,7 +12,9 @@ Suite **598 passed, 0 failed** — any failure is real. Nothing pushed or deploy
 
 **Cycle 5 — Copy and polish** (the S4 findings): the flash is now sticky with a dismiss × so a fragment landing still shows its message, and the landed element flashes the accent tint; unmatched URLs 404 inside the app (signed-in users get their home link); login shows the Mossfield mark and focuses the password after a failed attempt; batch cards read "7 wheels · 18 packs", "12 loose — less than a case of 16", "in 60 days", and **hide Delete when the server would refuse it**; the cancel-order dialog reads Keep order / Cancel order; multi-order stops show every ref and label each loaded tick; **PDFs dropped from ~1.7 MB to ~40 KB** (font subsetting — check an emailed attachment opens and reads normally); a credit-only invoice reads "Credited".
 
-All three are written up in `TESTING_AND_FIXES.md` (2026-10-04 sections); cycle files in `docs/planImp/archive/`. **One new bug found while testing cycle 5** (queued for cycle 6): allocating a second time from the *same* batch on the order page — e.g. 6 reserved from M041026, then "Allocate 4 more" from M041026 — crashes with a 500. Avoid that exact action on the dev data until cycle 6 lands; the picking screen's one-tap pick is unaffected.
+**Cycle 6 — Loose ends**: allocating a second time from the *same* batch on the order page (6 from M041026, then 4 more from M041026) now **tops up the existing reservation** instead of crashing; the mature-conversion allocator counts reserved wheels the same way every other screen does; `/batches` and `/cheese-cutting` cost a flat number of queries; the run sheet's column headers **stay visible while you scroll** at desktop width (≥ 1280 px) and a saved row lands just under them.
+
+All four are written up in `TESTING_AND_FIXES.md` (2026-10-04 sections); cycle files in `docs/planImp/archive/`.
 
 ## What to verify in the browser
 
@@ -20,7 +22,8 @@ The Implementer drove every change with real input at 1408 px and 500 × 659, bu
 
 1. **Dispatch run** (`/chilled-runs?date=…` with a loaded ready order and an unloaded one): the flash should read *"1 order dispatched · … · skipped: ORD-… Shop (not picked, not loaded)"*. Not pressed by the Implementer because it issues real invoices; `DispatchRunTest` pins the text. Pick a date you don't mind billing.
 2. **Real phone (≤ 390 px) on `/picking`**: the day header with ◀ ▶, the stale bucket, a per-piece wheel line (type `5,210` → `5.210`; `52.10` → amber **Check**), a **bulk-weighed vacuum-pack line** (still never exercised on a phone), Skip cycling, `+` greyed at the cap, the short button clear of the footer.
-3. **Fragment landings**: change a line qty on `/orders/{id}` → the page reloads scrolled to that line **with the green flash pinned at the top of the viewport** and the line tinted briefly; × dismisses it. Save a sheet row → `#stop-N` lands just under the flash (the column headers scroll off — known, cycle 6 makes the header sticky); add a special price → the panel.
+3. **Fragment landings**: change a line qty on `/orders/{id}` → the page reloads scrolled to that line **with the green flash pinned at the top of the viewport** and the line tinted briefly; × dismisses it. Save a sheet row at desktop width → `#stop-N` lands under the flash **and** under the column headers, which stay put while you scroll; dismiss the flash and the headers sit flush at the top. Add a special price → the panel.
+3a. **Same-batch top-up** (cycle 6): on a confirmed order, allocate part of a line from a batch, then the rest from the **same** batch → "Allocated N units", one row in the allocations table, no error.
 4. **Run reorder**: set a stop's Position box to the last number and Save order → it's last and in view; ↑ once → back on that row. Try a number above the stop count (clamped to last).
 5. **Partial release** on `/cheese-conversion`: with 2 held, release 1; move a wheel without saving → Release disabled with "Save maturing first".
 6. **Expired stock**: dashboard tile count equals `/batches?status=expired`; `/stock` milk card note names 4 batches / 4,437 units.
@@ -41,8 +44,8 @@ None with a brief. The cycle-4 plan's reorder semantics and landing fragment wer
 
 ## Test results
 
-612 passed, 0 failed (536 → 557 → 598 → 612 across cycles 3–5). New suites: `DashboardTest`, `ErrorPagesTest`.
+617 passed, 0 failed (536 → 557 → 598 → 612 → 617 across cycles 3–6). New suites: `DashboardTest`, `ErrorPagesTest`.
 
 ## Dev database state
 
-See `RESUME.md` → *Dev database*. Orders 23 (19–24 are cancelled cycle probes), payments 4, invoices 7, run #1 positions 1…17 with the E2E customers at 1–2. **Mail is the `log` driver — do not point dev at SMTP.**
+See `RESUME.md` → *Dev database*. Orders 24 (19–25 are cancelled cycle probes), payments 4, invoices 7, run #1 positions 1…17 with the E2E customers at 1–2. **Mail is the `log` driver — do not point dev at SMTP.**

@@ -8,6 +8,19 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Loose ends (2026-10-04)
+
+Plan/Implement cycle 6: topping up a reservation from the same batch on the
+order page widens the existing allocation instead of crashing on the unique
+index; the mature-conversion allocator no longer gates the reservation sum
+on `fulfilled_at` (the last site that did); `wheelStates()` trusts an
+eager-loaded NULL, so `/batches` and `/cheese-cutting` cost a flat number of
+queries (12→18 became 6→6); the run sheet's header is sticky at `xl+` and a
+saved row lands under it; the last two `/orders` cells don't wrap; the
+unused Breeze logo is gone.
+
+---
+
 ## Recently Completed: Copy & polish (2026-10-04)
 
 Plan/Implement cycle 5: the S4 findings plus cycle 4's follow-ons. The flash

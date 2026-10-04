@@ -29,8 +29,13 @@
     )) ?: $variant->product->name;
 @endphp
 
-{{-- Run sheet table --}}
-<div class="mf-panel">
+{{-- Run sheet table. At xl+ in display mode neither the panel (mf-panel
+     clips with overflow: hidden) nor the wrapper is a scroll/clip container,
+     so the sticky <thead> works. Below xl — and while a row is being edited,
+     whose inputs need ~35 px more than the sheet's columns — the wrapper
+     scrolls sideways as before and the header just scrolls away. --}}
+@php $stickyHead = ! $editId ? 'xl:overflow-visible' : ''; @endphp
+<div class="mf-panel {{ $stickyHead }}">
     <div class="mf-panel-header">
         <span class="text-[13px] font-semibold">{{ $activeRun->day_label }} &middot; {{ $activeRun->name }} run</span>
         <span class="mf-eyebrow">{{ $activeRun->driver ? 'Driver: '.$activeRun->driver : '' }}</span>
@@ -45,7 +50,7 @@
             @endcan
         </div>
     @else
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto {{ $stickyHead }}">
             <table class="mf-run">
                 <colgroup>
                     <col style="width: 44px;">

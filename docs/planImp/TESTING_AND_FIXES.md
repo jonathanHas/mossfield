@@ -90,6 +90,80 @@ baseline.
 
 ---
 
+## 2026-10-04 — Loose ends (Plan/Implement cycle 6)
+
+**Scope:** the cycle-5 finding, two defects the Planner found reading for the
+plan, and three leftovers. Suite afterwards: **617 passed, 0 failed** (+5).
+
+### Finding 1 — topping up a reservation from the same batch was a 500
+
+`OrderItem::allocateFromBatchItem()` always inserted; `order_allocations` is
+unique per `(order_item, batch_item)`, so "allocate 6 from M041026, then 4
+more from M041026" on the order page crashed. It now looks the pair up under
+the batch-item lock and widens it through `extendAllocation()` (the path
+`pickFromBatchItem()` already used), under the same availability and
+line-ceiling guards; a widened row loses its `fulfilled_at` stamp. Pinned by
+five cases in `OrderAllocationConcurrencyTest` (same-batch top-up, over the
+line, over the batch, partly picked, fully picked then widened); the cycle-5
+test that had to dodge the bug now uses the same batch.
+
+### Finding 2 — the conversion allocator was the one free-stock site still gated on `fulfilled_at`
+
+`CheeseConversionController::index()` summed `quantity_allocated −
+quantity_fulfilled` only `whereNull('fulfilled_at')`; the other seven sites
+(and the server-side `holdable_quantity` the hold endpoint enforces) sum over
+all allocations. The screen and its own server could disagree about how
+many wheels were holdable. Gate removed; `CheeseConversionTest` pins
+`matureCard(2, 0)` for a 5-wheel item owing 2, and that a hold of 3 is
+refused. **Correction to the cycle-6 plan's reasoning:**
+`fulfillAllocation()` stamps `fulfilled_at` only when a row is *fully*
+picked, so a stamped row owes units only after being widened (which now
+un-stamps it) or via older data — the practical reach was narrow. The
+invariant is still the point: `grep -rn "whereNull('fulfilled_at')" app`
+must return only the `BatchItem` docblock, and does.
+
+### Finding 3 — the `/batches` N+1 was a `??` on a loaded null
+
+`BatchItem::wheelStates()` read the eager-loaded sums with `??`, but
+`withSum` returns **NULL** for an item with no allocations or no conversions,
+so every such item re-ran the SUM. `array_key_exists` on the attributes now
+decides "loaded"; a loaded null is 0. Measured in `BatchCreateTest`
+(2 → 4 batches): `/batches` 12→18 queries became **6→6**, `/cheese-cutting`
+10→16 became **4→4**, `/cheese-conversion` flat at 5. The test asserts the
+totals stay flat.
+
+### Also
+
+- The run sheet's column headers are **sticky at `xl+` in display mode**:
+  `.mf-panel`'s clip and the scroll wrapper are lifted there (`xl:overflow-visible`),
+  `<thead>` sticks under the flash via a `--mf-feedback-h` custom property
+  the feedback partial measures as the page parses (zeroed on dismiss), and
+  `border-collapse: separate; border-spacing: 0` because Chrome mis-painted a
+  stuck collapsed header. Below `xl`, and while a row is being edited (it
+  needs ~35 px more), the wrapper scrolls as before. Rows land at
+  `calc(var(--mf-feedback-h) + 80px)`.
+- `/orders` Payment and actions cells don't wrap; the unused Breeze
+  `application-logo` component is gone.
+
+### Follow-ups (next polish batch, not urgent)
+
+- The `xl` fit is tight (983 px in 985 with 11 columns): make `$stickyHead`
+  depend on the column count, not only the breakpoint.
+- Order-page lines use a fixed `scroll-mt-20`; `calc(var(--mf-feedback-h) +
+  1rem)` would clear a two-line flash exactly.
+
+### Invariants worth keeping
+
+- **A second allocation from the same batch is a top-up.** Any new
+  reservation path goes through `allocateFromBatchItem()` /
+  `extendAllocation()`, never a raw insert.
+- **Eager-loaded aggregates are tested with `array_key_exists`**, never `??`
+  — `withSum` is null on an empty set.
+- **The sticky header relies on no clipping ancestor at `xl+`.** A new
+  wrapper around `.mf-run` with `overflow` set will silently break it.
+
+---
+
 ## 2026-10-04 — Copy and polish (Plan/Implement cycle 5)
 
 **Scope:** the S4 findings from the end-to-end run and the four follow-ons
