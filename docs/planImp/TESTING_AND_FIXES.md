@@ -90,6 +90,106 @@ baseline.
 
 ---
 
+## 2026-10-04 — Money and state (Plan/Implement cycle 3)
+
+**Scope:** the eight end-to-end findings that could write wrong money or wrong
+state with no warning (F-39, F-29, F-19, F-12, F-08, F-20, F-35, F-36/F-40 —
+details one section down). Opus implemented from the Fable plan; every step
+has a test and was also driven in the browser with real input. Suite
+afterwards: **557 passed, 0 failed** (+21 cases).
+
+### Finding 1 — a double-clicked form posted twice (F-39)
+
+No form had a submit-once guard; *Record payment* recorded the money twice.
+**`resources/js/submit-once.js`** (imported after `confirm.js`): on a POST
+submit that actually goes through (`!defaultPrevented` — so the submit
+`confirm.js` parks behind its dialog is ignored), mark the form
+`data-submitting`/`aria-busy`, disable its submit buttons — including
+`form="id"` ones — after a tick (so the submitter's `name`/`value` is already
+in the form data), drop any re-entrant submit, release on `pageshow` and after
+10 s (download forms never navigate). GET forms are skipped. **Payments are
+idempotent per rendered form**: a `form_token` (uuid, unique index, migration
+`2026_10_04_120000`) travels with the form; a repeat POST — checked before
+`record()` and again in a `UniqueConstraintViolationException` catch for the
+simultaneous case — redirects to the payment already recorded. Pinned by four
+cases in `PaymentAllocationTest`.
+
+### Finding 2 — "5,210" was 5 210 kg and nothing stopped it (F-29)
+
+`ValidatesFulfilmentWeights::normaliseWeightInput()` turns decimal commas into
+dots before validation in both callers (`PickingController::pick()`,
+`OrderAllocationController::fulfill()`), and when the variant has a nominal
+`weight_kg` each per-unit weight is bounded at **3 × nominal** (bulk lines:
+× quantity) with a message that quotes the usual weight and says "check the
+decimal point". Client: a typed comma becomes a dot via
+`execCommand('insertText')` (writing to a number input's value blanks a
+half-typed `"5."`), and above 2 × nominal the picking row's **OK** tag turns
+amber **Check** (desktop row turns the warn colour). Four cases in
+`FulfilmentUnitWeightsTest`, red-checked.
+
+### Finding 3 — the order edit form could set any status (F-19)
+
+`OrderController::update()` accepted all seven statuses; the edit form's
+dropdown could mark an order `dispatched` with no invoice, no timestamp and
+nothing picked. Now `status` is `sometimes` (defaults to the current status)
+and `isAllowedStatusChange()` permits only unchanged, `pending → confirmed`
+and `→ cancelled` via `canBeCancelled()` — refused with a flash before
+anything is written. The edit form shows a read-only status tag; the show
+page's Confirm/Cancel quick-actions are the two allowed moves and are
+unchanged. Six cases in `OrderTransitionsTest`.
+
+### Finding 4 — refused forms threw the typed figures away (F-12, F-08)
+
+The cut form's on-load script recomputed `total_weight_kg` as packs × nominal
+over `old()`, so a resubmit after fixing a date recorded the nominal, not the
+weighed figure; the batch form rebuilt its quantity rows from JS with no
+`old()` seed and let the shelf-life auto-fill overwrite the refused expiry.
+Both scripts now keep restored values on load (`totalTouched` /
+`initialising` flags) and only recompute on a real change. Tests pin the
+`old()` rendering; the script behaviour was verified in the browser.
+
+### Finding 5 — the order form previewed the wrong money (F-20)
+
+`OrderController::create()` now passes `customerPrices` (special price ×
+nominal weight for €/kg variants) and `customerCharges` (fixed charge or
+percentage); the form prices each line at the selected customer's rate,
+shows **Items / Delivery (incl. VAT) / Total**, and re-prices when the
+customer changes. Browser: preview equals the saved order to the cent.
+
+### Finding 6 — the invoice didn't name the PO (F-35)
+
+`invoices/pdf.blade.php` builds `$orderLookup` for every invoice (it was
+consolidated-only) and prints `Order ORD-… · Your ref: …` in the details
+block for per-order invoices; the HTML show page gets the same line with the
+order linked. Consolidated invoices keep the per-order headings they already
+had. Two tests.
+
+### Finding 7 — payments landed as credit by default; "-5" became 5 (F-36, F-40)
+
+The Apply boxes start blank, so a typed amount with no further action was
+recorded as unallocated credit while the invoice stayed unpaid; and
+`x-model.number` turned a lone `-` into NaN and dropped the sign. The amount
+is now a string model (`min="0.01"` refuses negatives; server message "A
+payment must be more than zero. Record refunds as credit notes."), and the
+amount is auto-applied oldest-first as it's typed unless the operator has
+edited an Apply box.
+
+### Invariants worth keeping
+
+- **Every POST form submits once.** New forms get it for free; a form that
+  must stay clickable after a POST (a download) relies on the 10 s release.
+- **Payments carry a `form_token`.** Any new payment entry point should mint
+  one; the unique index is the backstop.
+- **Weights are normalised and bounded in the trait**, never per controller.
+  A new fulfilment surface calls `normaliseWeightInput()` then merges
+  `fulfilmentWeightRules()`.
+- **Status changes outside Confirm/Cancel go through their own routes.** Don't
+  widen `isAllowedStatusChange()`; add a route.
+- **A refused form hands back what was typed.** Scripts that auto-fill a
+  field must check for a restored `old()` value on load.
+
+---
+
 ## 2026-10-04 — End-to-end browser run (Plan/Implement cycle 2)
 
 **Scope:** a full working day driven through Chrome with real input by an

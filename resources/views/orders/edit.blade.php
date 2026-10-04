@@ -39,14 +39,21 @@
                 <input type="hidden" name="order_date" value="{{ $order->order_date->format('Y-m-d') }}">
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+                    {{-- Read-only: status moves through the workflow buttons on the
+                         order page (Confirm, picking, Mark dispatched / delivered,
+                         Cancel), never from this form (E2E F-19). --}}
                     <div>
-                        <x-input-label for="status" :value="__('Order status')" />
-                        <select id="status" name="status" class="mf-select" required>
-                            @foreach (['pending','confirmed','preparing','ready','dispatched','delivered','cancelled'] as $s)
-                                <option value="{{ $s }}" {{ $order->status == $s ? 'selected' : '' }}>{{ ucfirst($s) }}</option>
-                            @endforeach
-                        </select>
-                        <x-input-error :messages="$errors->get('status')" class="mt-1" />
+                        <x-input-label :value="__('Order status')" />
+                        <div class="mt-1 text-[13px] flex items-center gap-2 flex-wrap">
+                            <span class="mf-tag mf-tag-{{ match($order->status) {
+                                'pending' => 'warn',
+                                'confirmed', 'preparing' => 'info',
+                                'ready', 'dispatched', 'delivered' => 'accent',
+                                'cancelled' => 'danger',
+                                default => 'neutral',
+                            } }}">{{ ucfirst($order->status) }}</span>
+                            <span style="color: var(--muted);">Status changes from the order page.</span>
+                        </div>
                     </div>
 
                     {{-- Payment status is derived from the invoice ledger, not typed:

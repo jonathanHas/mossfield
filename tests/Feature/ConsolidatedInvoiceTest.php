@@ -165,4 +165,19 @@ class ConsolidatedInvoiceTest extends InvoicingTestCase
         $this->assertStringContainsString($a->order_number, $html);
         $this->assertStringContainsString($b->order_number, $html);
     }
+
+    public function test_a_consolidated_pdf_shows_each_reference_once_per_order(): void
+    {
+        $a = $this->deliveredOrder(4, customer: $this->weekly, deliveryDate: today()->toDateString());
+        $b = $this->deliveredOrder(6, customer: $this->weekly, deliveryDate: today()->toDateString());
+        $a->update(['customer_reference' => 'PO-AAA']);
+        $b->update(['customer_reference' => 'PO-BBB']);
+        $invoice = $this->issueWeek();
+
+        $html = view('invoicing.invoices.pdf', ['invoice' => $invoice->fresh('lines'), 'pdf' => true])->render();
+
+        $this->assertSame(1, substr_count($html, 'PO-AAA'), 'in its order heading only, not repeated in the header');
+        $this->assertSame(1, substr_count($html, 'PO-BBB'));
+        $this->assertStringNotContainsString('Your ref:', $html, 'the per-order header line is for per-order invoices');
+    }
 }

@@ -6,6 +6,7 @@ use App\Models\Payment;
 use App\Models\User;
 use App\Services\InvoicingException;
 use App\Services\PaymentService;
+use Illuminate\Support\Str;
 
 /**
  * Recording money and applying it to invoices. A payment belongs to the
@@ -150,6 +151,106 @@ class PaymentAllocationTest extends InvoicingTestCase
         $this->assertSame('0.00', $invoice->fresh()->balance);
         $this->assertSame($office->id, Payment::sole()->recorded_by);
         $this->assertSame('cheque', Payment::sole()->method->value);
+    }
+
+    /** @return array<string, mixed> a valid form post paying $invoiceId in full */
+    private function formPayload(int $invoiceId, ?string $token): array
+    {
+        return array_filter([
+            'customer_id' => $this->shop->id,
+            'amount' => '15.00',
+            'received_at' => today()->toDateString(),
+            'method' => 'bank_transfer',
+            'reference' => 'TRF-9',
+            'allocations' => [$invoiceId => '15.00'],
+            'form_token' => $token,
+        ], fn ($v) => $v !== null);
+    }
+
+    public function test_a_repeated_form_submission_records_one_payment(): void
+    {
+        // F-39: a double-clicked Record payment posted twice and recorded the
+        // money twice. The same form token now resolves to the first payment.
+        $invoice = $this->issue($this->deliveredOrder(10));
+        $office = User::factory()->create();
+        $payload = $this->formPayload($invoice->id, (string) Str::uuid());
+
+        $this->actingAs($office)->post(route('invoicing.payments.store'), $payload)
+            ->assertRedirect();
+
+        $first = Payment::sole();
+
+        $this->actingAs($office)->post(route('invoicing.payments.store'), $payload)
+            ->assertRedirect(route('invoicing.payments.show', $first))
+            ->assertSessionHas('success', 'Payment already recorded — this was a repeat submission.');
+
+        $this->assertSame(1, Payment::count());
+        $this->assertSame('15.00', $invoice->fresh()->amount_paid);
+    }
+
+    public function test_different_form_tokens_record_separate_payments(): void
+    {
+        // The token identifies one rendered form, not a customer or an amount:
+        // two genuine payments of the same sum both go through.
+        $first = $this->issue($this->deliveredOrder(10));
+        $second = $this->issue($this->deliveredOrder(10));
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->post(route('invoicing.payments.store'), $this->formPayload($first->id, (string) Str::uuid()));
+        $this->actingAs($office)->post(route('invoicing.payments.store'), $this->formPayload($second->id, (string) Str::uuid()));
+
+        $this->assertSame(2, Payment::count());
+    }
+
+    public function test_a_post_without_a_form_token_still_records(): void
+    {
+        $invoice = $this->issue($this->deliveredOrder(10));
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('invoicing.payments.store'), $this->formPayload($invoice->id, null))
+            ->assertRedirect()
+            ->assertSessionHas('success');
+
+        $this->assertNull(Payment::sole()->form_token);
+    }
+
+    public function test_the_create_form_carries_a_form_token(): void
+    {
+        $this->issue($this->deliveredOrder(10));
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('invoicing.payments.create', ['customer_id' => $this->shop->id]))
+            ->assertOk()
+            ->assertSee('name="form_token"', false);
+    }
+
+    public function test_a_negative_payment_is_refused_with_a_clear_message(): void
+    {
+        // E2E F-40: "-5" lost its sign in the browser and recorded +€5.00.
+        // The form now keeps the sign; the server says what to do instead.
+        $invoice = $this->issue($this->deliveredOrder(10));
+
+        $this->actingAs(User::factory()->create())
+            ->from(route('invoicing.payments.create', ['customer_id' => $this->shop->id]))
+            ->post(route('invoicing.payments.store'), array_merge($this->formPayload($invoice->id, null), ['amount' => '-5']))
+            ->assertSessionHasErrors(['amount' => 'A payment must be more than zero. Record refunds as credit notes.']);
+
+        $this->assertSame(0, Payment::count());
+    }
+
+    public function test_the_create_form_auto_applies_unless_an_apply_box_is_edited(): void
+    {
+        // E2E F-36: the Apply boxes started blank, so recording the amount
+        // alone left the invoice unpaid and the money as credit. The script
+        // carries the auto-apply watcher and the opt-out flag.
+        $this->issue($this->deliveredOrder(10));
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('invoicing.payments.create', ['customer_id' => $this->shop->id]))
+            ->assertOk()
+            ->assertSee("this.\$watch('amount'", false)
+            ->assertSee('x-on:input="allocationsTouched = true"', false)
+            ->assertDontSee('x-model.number="amount"', false);
     }
 
     public function test_the_create_form_lists_the_customers_open_invoices(): void

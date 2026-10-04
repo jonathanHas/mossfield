@@ -17,7 +17,7 @@ class Payment extends Model
 {
     protected $fillable = [
         'customer_id', 'amount', 'received_at', 'method',
-        'reference', 'notes', 'recorded_by',
+        'reference', 'notes', 'recorded_by', 'form_token',
     ];
 
     protected $casts = [

@@ -8,6 +8,21 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Money and state fixes (2026-10-04)
+
+Plan/Implement cycle 3: the eight findings from the end-to-end browser run
+that could write wrong money or wrong state with no warning
+(`archive/2026-10-04-e2e-browser-run/`). F-39 forms submit once
+(`submit-once.js`) and payments are idempotent per form (`form_token`);
+F-29 wheel weights: commas read as decimal points, 3 × nominal bound; F-19
+the order edit form can't change status outside Confirm/Cancel; F-12 a refused
+cut keeps the weighed total; F-08 a refused batch keeps its quantities and
+expiry; F-20 the order form previews the customer's price and delivery; F-35
+per-order invoices show the order number and PO reference; F-36/F-40 payments
+auto-apply oldest-first and keep a minus sign (refused).
+
+---
+
 ## Recently Completed: Housekeeping batch (2026-10-04)
 
 Planned in `docs/planImp/plan.md` under the Plan/Implement protocol

@@ -281,4 +281,96 @@ class OrderTransitionsTest extends TestCase
         $this->assertSame(100, (int) $batchItem->fresh()->quantity_remaining);
         $this->assertSame(0, (int) $orderItem->fresh()->quantity_fulfilled);
     }
+
+    // ------------------------------------------------ edit-form status (F-19)
+
+    private function patchStatus(Order $order, ?string $status, array $extra = [])
+    {
+        $payload = array_merge([
+            'order_date' => $order->order_date->toDateString(),
+            'delivery_date' => null,
+            'notes' => 'edited',
+        ], $extra);
+        if ($status !== null) {
+            $payload['status'] = $status;
+        }
+
+        return $this->actingAs(User::factory()->create())
+            ->patch(route('orders.update', $order), $payload);
+    }
+
+    public function test_the_edit_route_cannot_jump_an_order_to_dispatched(): void
+    {
+        // E2E F-19: a pending/cancelled order became "dispatched" with no
+        // invoice, no dispatch time and nothing picked.
+        $order = $this->makeOrder('pending');
+
+        $this->patchStatus($order, 'dispatched')
+            ->assertRedirect(route('orders.show', $order))
+            ->assertSessionHas('error', 'Order status moves through the workflow — use Confirm, picking, Mark dispatched or Mark delivered.');
+
+        $order->refresh();
+        $this->assertSame('pending', $order->status);
+        $this->assertNull($order->dispatched_at);
+        $this->assertNull($order->invoice_id);
+        $this->assertNull($order->notes, 'nothing is written when the move is refused');
+    }
+
+    public function test_the_edit_route_cannot_mark_an_unpicked_order_ready(): void
+    {
+        $order = $this->makeOrder('confirmed');
+
+        $this->patchStatus($order, 'ready')->assertSessionHas('error');
+
+        $this->assertSame('confirmed', $order->fresh()->status);
+    }
+
+    public function test_the_edit_route_cannot_revive_a_cancelled_order(): void
+    {
+        $order = $this->makeOrder('cancelled');
+
+        $this->patchStatus($order, 'pending')->assertSessionHas('error');
+
+        $this->assertSame('cancelled', $order->fresh()->status);
+    }
+
+    public function test_the_show_page_confirm_and_cancel_moves_still_work(): void
+    {
+        $pending = $this->makeOrder('pending');
+        $this->patchStatus($pending, 'confirmed')->assertSessionHas('success');
+        $this->assertSame('confirmed', $pending->fresh()->status);
+
+        $ready = $this->makeOrder('ready');
+        $this->patchStatus($ready, 'cancelled')->assertSessionHas('success');
+        $this->assertSame('cancelled', $ready->fresh()->status);
+
+        // Already shipped: cancelling is not a legal move.
+        $dispatched = $this->makeOrder('dispatched');
+        $this->patchStatus($dispatched, 'cancelled')->assertSessionHas('error');
+        $this->assertSame('dispatched', $dispatched->fresh()->status);
+    }
+
+    public function test_the_edit_form_saves_without_posting_a_status(): void
+    {
+        $order = $this->makeOrder('preparing');
+
+        $this->patchStatus($order, null, ['notes' => 'ring the bell'])
+            ->assertRedirect(route('orders.show', $order))
+            ->assertSessionHas('success');
+
+        $order->refresh();
+        $this->assertSame('preparing', $order->status);
+        $this->assertSame('ring the bell', $order->notes);
+    }
+
+    public function test_the_edit_page_has_no_status_input(): void
+    {
+        $order = $this->makeOrder('confirmed');
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('orders.edit', $order))
+            ->assertOk()
+            ->assertDontSee('name="status"', false)
+            ->assertSee('Status changes from the order page.');
+    }
 }

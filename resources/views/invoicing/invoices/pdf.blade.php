@@ -8,9 +8,9 @@
     // Consolidated invoices group their lines under a per-order heading; a
     // per-order invoice is one flat list with no headings.
     $grouped = $invoice->isConsolidated();
-    $orderLookup = $grouped
-        ? \App\Models\Order::whereIn('id', $lines->pluck('order_id')->filter()->unique())->get()->keyBy('id')
-        : collect();
+    // Both kinds need it: consolidated invoices for their per-order headings,
+    // per-order invoices for the "Order … · Your ref …" detail line (E2E F-35).
+    $orderLookup = \App\Models\Order::whereIn('id', $lines->pluck('order_id')->filter()->unique())->get()->keyBy('id');
 @endphp
 <!DOCTYPE html>
 <html lang="en">
@@ -60,6 +60,14 @@
                 <div class="block-label">Invoice details</div>
                 <div class="block-body">
                     Invoice date: {{ $invoice->issued_at?->format('d/m/Y') }}<br>
+                    @unless($grouped)
+                        {{-- The customer's PO reference is what their accounts team
+                             matches the invoice against. Consolidated invoices show
+                             it in each order heading instead. --}}
+                        @foreach($orderLookup as $ord)
+                            Order {{ $ord->order_number }}@if(filled($ord->customer_reference)) · Your ref: {{ $ord->customer_reference }}@endif<br>
+                        @endforeach
+                    @endunless
                     @if($invoice->isConsolidated() && $invoice->period_start)
                         Period: {{ $invoice->period_start->format('d/m/Y') }} – {{ $invoice->period_end->format('d/m/Y') }}<br>
                     @endif

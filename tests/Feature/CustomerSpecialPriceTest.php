@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Customer;
 use App\Models\CustomerSpecialPrice;
+use App\Models\DeliveryRun;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -260,5 +261,48 @@ class CustomerSpecialPriceTest extends TestCase
             ->assertForbidden();
 
         $this->assertSame(0, CustomerSpecialPrice::count());
+    }
+
+    public function test_the_order_form_previews_the_customers_price_and_delivery(): void
+    {
+        // E2E F-20: the create form previewed standard prices and no delivery
+        // charge, so its total wasn't what store() then saved.
+        CustomerSpecialPrice::create([
+            'customer_id' => $this->customer->id,
+            'product_variant_id' => $this->bottle->id,
+            'price' => 1.25,
+        ]);
+        CustomerSpecialPrice::create([
+            'customer_id' => $this->customer->id,
+            'product_variant_id' => $this->wheel->id,
+            'price' => 10.00, // €/kg → 4 kg nominal ⇒ €40.00 a wheel
+        ]);
+        $run = DeliveryRun::create(['name' => 'Dublin', 'day_of_week' => 2, 'is_active' => true, 'delivery_charge' => 6.15]);
+        $this->customer->update(['delivery_run_id' => $run->id, 'run_position' => 1, 'apply_delivery_charge' => true]);
+        $this->other->update(['delivery_charge_percent' => 5]);
+
+        $response = $this->actingAs(User::factory()->create())
+            ->get(route('orders.create'))
+            ->assertOk();
+
+        $page = $response->getContent();
+        $prices = json_decode($this->embedded($page, 'customerPrices'), true);
+        $charges = json_decode($this->embedded($page, 'customerCharges'), true);
+
+        $this->assertEquals(1.25, $prices[$this->customer->id][$this->bottle->id]);
+        $this->assertEquals(40.00, $prices[$this->customer->id][$this->wheel->id], 'weight-priced specials are a per-unit estimate, like data-price');
+        $this->assertArrayNotHasKey($this->other->id, $prices, 'no overrides → standard data-price');
+        $this->assertEquals(['charge' => 6.15, 'percent' => null], $charges[$this->customer->id]);
+        $this->assertEquals(['charge' => 0, 'percent' => 5], $charges[$this->other->id]);
+        $response->assertSee('Delivery (incl. VAT)');
+    }
+
+    /** The JSON assigned to `const $name = …;` in the page's script. */
+    private function embedded(string $page, string $name): string
+    {
+        $this->assertMatchesRegularExpression('/const '.$name.' = (.+?);\n/', $page);
+        preg_match('/const '.$name.' = (.+?);\n/', $page, $m);
+
+        return $m[1];
     }
 }

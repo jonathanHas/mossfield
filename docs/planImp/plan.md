@@ -1,6 +1,6 @@
 # Money and state: the S1/S2 findings from the end-to-end run
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
@@ -419,4 +419,53 @@ Check: `grep -n "Status transitions\|submit-once\|3 × nominal\|form_token" CLAU
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-04 against `implemented.md` (Status: DONE, read to the end)
+and the full working-tree diff. Planner reran: `php artisan test` → **557
+passed, 0 failed**; `pint --test app tests database routes` → PASS 262 files;
+`npm run build` ok and `data-submitting` in the bundle; the payments migration
+`[5] Ran`; dev DB holds one tokened payment (the real €1.00 double-click
+check) and the two throwaway orders are cancelled.
+
+### Criteria
+
+| Step | Result |
+| --- | --- |
+| 1 Submit once | **Pass.** `submit-once.js` acts only on non-prevented POST submits, disables own + `form="id"` buttons after a tick, drops a re-entrant submit, releases on `pageshow`; unique `form_token` on `payments`, `repeatSubmission()` both before `record()` and in the `UniqueConstraintViolationException` catch. Browser: dialog double-click → one PATCH; payment double-click → one POST. 4 tests. |
+| 2 Weights | **Pass.** `normaliseWeightInput()` before `validate()` in both callers; `max:` 3 × nominal (bulk × quantity) only when a nominal exists; messages quote the nominal. Client comma → `.` via `execCommand('insertText')` (right call — writing `"5."` to a number input blanks it); amber Check above 2×. Browser: `5,210` → 5.210; `5210` refused, nothing picked. 4 tests, red-checked. |
+| 3 Status bypass | **Pass.** `sometimes` + `??= $order->status` + `isAllowedStatusChange()` (unchanged / pending→confirmed / →cancelled via `canBeCancelled()`), refused before the transaction; edit form posts no status, shows a tag. Show-page Confirm/Cancel untouched. 6 tests; whole suite run as the Risks asked. |
+| 4 Cut form | **Pass.** `totalTouched` flag; restored total kept on load; pack change recomputes; variant change only when untouched. Browser-verified in all three directions. |
+| 5 Batch form | **Pass.** `oldQuantities` keyed by variant id, integer-coerced (good XSS instinct); `initialising` flag protects the refused expiry. Browser-verified. |
+| 6 Price preview | **Pass.** `customerPrices` (special × nominal when €/kg) + `customerCharges`; Items / Delivery / Total; re-prices on customer change. Browser: preview = saved order to the cent (€36.15). |
+| 7 Invoice ref | **Pass.** `$orderLookup` for every invoice (the Risks case was real); detail line on PDF and on the HTML header; consolidated headings unchanged. 2 tests. |
+| 8 Payments | **Pass.** String-bound amount, `min` now refuses `-5`; auto-apply via `$watch` unless an Apply box was touched; `autoFill()` clears the flag. Browser-verified including the override case. |
+| 9 Docs | **Pass.** Four CLAUDE.md edits present; WIP entry added. |
+
+### Deviations — all accepted
+
+1. GET forms skipped and a 10 s release — right; the plan's "every form"
+   would have frozen the CSV export and backup download buttons.
+2. `execCommand('insertText')` — right, for the reason given; deprecated but
+   universally supported, and the only way to insert into a number input's
+   edit buffer.
+3–6. Message written in step 1; two throwaway orders + one real €1 payment
+   (recorded in `RESUME.md`); integer coercion; inline tone `match` (no shared
+   status-pill component exists — a cycle-4 extraction candidate).
+
+### Notes for Planner — decisions
+
+- Option labels still show the standard price → **cycle 4** (F-20 follow-on).
+- Payment form loses a manual split on a refused submit → **cycle 4**
+  (restore `allocations` from `old()`).
+- 3× bound vs Mature wheels: fine, nothing to do.
+- `submit-once` on the chilled-run `form="…"` Save → **browser session**
+  (`handoff/REPORT.md`).
+- Planner's own observation: the picking `x-show` thresholds use
+  `2 * $expWeight`, which is `weight_kg ?? 1` — a variant stored with
+  `weight_kg = 0` (allowed by `min:0`) would show amber Check for every
+  weight. Server side already treats 0 as "no nominal". **Cycle 4**: guard the
+  client the same way (`$expWeight > 0`).
+- Cleanup: keep the data. Payment 8 (€1.00) is a real payment on INV-000006;
+  harmless and tagged.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-money-and-state`
+and move `plan.md` + `implemented.md` there.

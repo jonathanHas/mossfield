@@ -101,6 +101,17 @@
             const readyDateDisplay = document.getElementById('ready-date-display');
             const calculatedReadyDate = document.getElementById('calculated-ready-date');
 
+            // After a refusal, hand back what was typed (E2E F-08): the variant
+            // rows are rebuilt by script on load, so seed them from old(), and
+            // don't let the shelf-life auto-fill overwrite the refused expiry.
+            const oldQuantities = Object.fromEntries(
+                Object.values(@json(old('batch_items', [])))
+                    .filter((item) => item && item.variant_id)
+                    // Integers only: these go into an HTML string below.
+                    .map((item) => [String(item.variant_id), Number.isInteger(parseInt(item.quantity_produced, 10)) ? parseInt(item.quantity_produced, 10) : ''])
+            );
+            let initialising = false;
+
             productSelect.addEventListener('change', function() {
                 const selectedOption = this.options[this.selectedIndex];
                 const variants = selectedOption.dataset.variants ? JSON.parse(selectedOption.dataset.variants) : [];
@@ -152,6 +163,7 @@
                                     <label class="mf-label">Quantity produced</label>
                                     <input type="number" name="batch_items[${index}][quantity_produced]" min="0"
                                         class="mf-input" placeholder="0"
+                                        value="${initialising ? (oldQuantities[String(variant.id)] ?? '') : ''}"
                                         ${isCheese && isWheelVariant ? 'required' : ''}>
                                 </div>
                                 <div>
@@ -211,6 +223,11 @@
                 const expiryDateInput = document.getElementById('expiry_date');
                 const shelfLifeDays = parseInt(selectedOption.dataset.shelfLifeDays);
 
+                // On load the field may hold a refused old('expiry_date'): keep it.
+                if (initialising && expiryDateInput.value) {
+                    return;
+                }
+
                 if (shelfLifeDays && productionDateInput.value) {
                     const expiryDate = new Date(productionDateInput.value);
                     expiryDate.setDate(expiryDate.getDate() + shelfLifeDays);
@@ -236,7 +253,9 @@
             }
 
             if (productSelect.value) {
+                initialising = true;
                 productSelect.dispatchEvent(new Event('change'));
+                initialising = false;
             }
         });
     </script>

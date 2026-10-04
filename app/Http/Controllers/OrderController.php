@@ -197,10 +197,37 @@ class OrderController extends Controller
     public function create(): View
     {
         $this->authorize('create', Order::class);
-        $customers = Customer::where('is_active', true)->orderBy('name')->get();
+        $customers = Customer::where('is_active', true)
+            ->with(['specialPrices.productVariant', 'deliveryRun'])
+            ->orderBy('name')
+            ->get();
         $productVariants = $this->activeVariantsGrouped();
 
-        return view('orders.create', compact('customers', 'productVariants'));
+        // E2E F-20: the form previewed standard prices and no delivery, so the
+        // total it showed wasn't what got saved. Give the script what store()
+        // will use: special prices (as a per-unit estimate, like data-price)
+        // and the customer's delivery charge or percentage.
+        $customerPrices = $customers->mapWithKeys(fn (Customer $customer) => [
+            $customer->id => $customer->specialPrices
+                ->filter(fn ($special) => $special->productVariant?->is_active)
+                ->mapWithKeys(fn ($special) => [
+                    $special->product_variant_id => round(
+                        (float) $special->price * ($special->productVariant->is_priced_by_weight
+                            ? (float) ($special->productVariant->weight_kg ?? 0)
+                            : 1),
+                        2
+                    ),
+                ]),
+        ])->filter(fn ($prices) => $prices->isNotEmpty());
+
+        $customerCharges = $customers->mapWithKeys(fn (Customer $customer) => [
+            $customer->id => [
+                'charge' => $customer->currentDeliveryCharge(),
+                'percent' => $customer->deliveryChargePercent(),
+            ],
+        ]);
+
+        return view('orders.create', compact('customers', 'productVariants', 'customerPrices', 'customerCharges'));
     }
 
     /**
@@ -312,7 +339,9 @@ class OrderController extends Controller
 
         $validated = $request->validate([
             'delivery_date' => 'nullable|date|after_or_equal:order_date',
-            'status' => 'required|in:pending,confirmed,preparing,ready,dispatched,delivered,cancelled',
+            // Absent from the edit form; posted only by the show page's
+            // Confirm / Cancel quick-actions (the $statusFields replay).
+            'status' => 'sometimes|in:pending,confirmed,preparing,ready,dispatched,delivered,cancelled',
             'delivery_charge' => 'nullable|numeric|min:0|max:999999.99',
             'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
             'delivery_address' => 'nullable|string',
@@ -327,6 +356,17 @@ class OrderController extends Controller
         // recomputes delivery_charge from it. Blank clears it back to fixed.
         $percent = $validated['delivery_charge_percent'] ?? null;
         $validated['delivery_charge_percent'] = ($percent !== null && (float) $percent > 0) ? round((float) $percent, 2) : null;
+
+        $validated['status'] ??= $order->status;
+
+        // E2E F-19: a free status field let an order jump to "dispatched" with
+        // no invoice, no dispatch time and nothing picked. Only these moves are
+        // made here; everything else has its own route (picking/allocation,
+        // orders.dispatch → DispatchService, orders.deliver).
+        if (! $this->isAllowedStatusChange($order, $validated['status'])) {
+            return redirect()->route('orders.show', $order)
+                ->with('error', 'Order status moves through the workflow — use Confirm, picking, Mark dispatched or Mark delivered.');
+        }
 
         $isCancelling = $validated['status'] === 'cancelled' && $order->status !== 'cancelled';
         $releasedUnits = 0;
@@ -360,6 +400,14 @@ class OrderController extends Controller
 
         return redirect()->route('orders.show', $order)
             ->with('success', $message);
+    }
+
+    /** Unchanged, pending → confirmed, or → cancelled while the order can be. */
+    private function isAllowedStatusChange(Order $order, string $to): bool
+    {
+        return $to === $order->status
+            || ($order->status === 'pending' && $to === 'confirmed')
+            || ($to === 'cancelled' && $order->canBeCancelled());
     }
 
     /**

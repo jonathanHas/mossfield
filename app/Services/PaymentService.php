@@ -41,6 +41,7 @@ class PaymentService
                 'reference' => $data['reference'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'recorded_by' => $by?->id,
+                'form_token' => $data['form_token'] ?? null,
             ]);
 
             $this->applyAllocations($payment, $allocations);

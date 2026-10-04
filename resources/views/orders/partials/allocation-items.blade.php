@@ -141,10 +141,13 @@
                                                                         @for($i = 1; $i <= $remainingQty; $i++)
                                                                             <div class="flex items-center gap-1 weight-row" data-index="{{ $i }}">
                                                                                 <span class="text-[11.5px] w-12" style="color: var(--muted);">#{{ $i }}:</span>
+                                                                                {{-- Comma → decimal point (F-29); amber when over 2× expected. --}}
                                                                                 <input type="number" name="weights[]"
                                                                                     step="0.001" min="0.001"
                                                                                     placeholder="{{ number_format($expWeight, 3) }}"
+                                                                                    data-expected="{{ $expWeight }}"
                                                                                     class="mf-input w-24 px-2 py-0.5 text-[12px] weight-input"
+                                                                                    onkeydown="if (event.key === ',') { event.preventDefault(); document.execCommand('insertText', false, '.'); }"
                                                                                     oninput="updateTotal({{ $allocation->id }})"
                                                                                     required>
                                                                                 <span class="text-[11.5px]" style="color: var(--muted);">kg</span>
@@ -343,6 +346,11 @@
                 if (input.offsetParent !== null && input.value) {
                     total += parseFloat(input.value) || 0;
                 }
+                // More than twice the expected weight: probably a misplaced
+                // decimal point. The server refuses 3× outright.
+                const expected = parseFloat(input.dataset.expected) || 0;
+                input.closest('.weight-row').style.color =
+                    expected > 0 && (parseFloat(input.value) || 0) > 2 * expected ? 'var(--warn-ink)' : '';
             });
 
             document.getElementById('total_' + allocationId).textContent = total.toFixed(3);

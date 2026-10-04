@@ -8,8 +8,10 @@ use App\Models\Customer;
 use App\Models\Payment;
 use App\Services\InvoicingException;
 use App\Services\PaymentService;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -59,6 +61,9 @@ class PaymentController extends Controller
             'customers' => Customer::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'openInvoices' => $openInvoices,
             'methods' => PaymentMethod::selectable(),
+            // One per rendered form: a repeat POST of this form is recognised
+            // and redirected instead of recording the money twice.
+            'formToken' => (string) Str::uuid(),
         ]);
     }
 
@@ -69,13 +74,20 @@ class PaymentController extends Controller
         $validated = $request->validate([
             'customer_id' => 'required|exists:customers,id',
             'amount' => 'required|numeric|min:0.01',
+            'form_token' => 'nullable|uuid',
             'received_at' => 'required|date',
             'method' => 'required|in:'.implode(',', array_column(PaymentMethod::cases(), 'value')),
             'reference' => 'nullable|string|max:255',
             'notes' => 'nullable|string|max:2000',
             'allocations' => 'nullable|array',
             'allocations.*' => 'nullable|numeric|min:0',
+        ], [
+            'amount.min' => 'A payment must be more than zero. Record refunds as credit notes.',
         ]);
+
+        if ($repeat = $this->repeatSubmission($validated['form_token'] ?? null)) {
+            return $repeat;
+        }
 
         $customer = Customer::findOrFail($validated['customer_id']);
 
@@ -86,6 +98,11 @@ class PaymentController extends Controller
                 $validated['allocations'] ?? [],
                 $request->user(),
             );
+        } catch (UniqueConstraintViolationException) {
+            // Two near-simultaneous posts of the same form: the second insert
+            // hits the unique form_token index.
+            return $this->repeatSubmission($validated['form_token'] ?? null)
+                ?? back()->withInput()->with('error', 'This payment could not be recorded. Please try again.');
         } catch (InvoicingException $e) {
             return back()->withInput()->with('error', $e->getMessage());
         }
@@ -99,6 +116,21 @@ class PaymentController extends Controller
         }
 
         return redirect()->route('invoicing.payments.show', $payment)->with('success', $message);
+    }
+
+    /** The payment this form already recorded, as a redirect — or null. */
+    private function repeatSubmission(?string $formToken): ?RedirectResponse
+    {
+        if (! $formToken) {
+            return null;
+        }
+
+        $existing = Payment::where('form_token', $formToken)->first();
+
+        return $existing
+            ? redirect()->route('invoicing.payments.show', $existing)
+                ->with('success', 'Payment already recorded — this was a repeat submission.')
+            : null;
     }
 
     public function show(Payment $payment): View

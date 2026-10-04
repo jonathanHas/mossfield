@@ -40,9 +40,10 @@
             @endphp
 
             <form method="POST" action="{{ route('invoicing.payments.store') }}"
-                  x-data="paymentForm({{ Illuminate\Support\Js::from($invoiceData) }}, {{ (float) old('amount', 0) }})">
+                  x-data="paymentForm({{ Illuminate\Support\Js::from($invoiceData) }}, @js((string) old('amount', '')))">
                 @csrf
                 <input type="hidden" name="customer_id" value="{{ $customer->id }}">
+                <input type="hidden" name="form_token" value="{{ old('form_token', $formToken) }}">
 
                 <div class="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4">
                     <div class="mf-panel">
@@ -82,6 +83,7 @@
                                                        max="{{ (float) $invoice->balance }}"
                                                        name="allocations[{{ $invoice->id }}]"
                                                        x-model="allocations[{{ $invoice->id }}]"
+                                                       x-on:input="allocationsTouched = true"
                                                        class="mf-input text-right font-mono" style="width: 120px;"
                                                        placeholder="0.00">
                                             </td>
@@ -110,9 +112,10 @@
                             <div class="px-4 py-3 space-y-3">
                                 <div>
                                     <label for="amount" class="mf-label">Amount received (€)</label>
+                                    {{-- A string model, parsed where used: x-model.number turned a
+                                         typed "-5" into 5 (E2E F-40). min="0.01" now refuses it. --}}
                                     <input type="number" step="0.01" min="0.01" id="amount" name="amount"
-                                           x-model.number="amount" class="mf-input font-mono"
-                                           value="{{ old('amount') }}" required>
+                                           x-model="amount" class="mf-input font-mono" required>
                                 </div>
                                 <div>
                                     <label for="received_at" class="mf-label">Date received</label>
@@ -166,12 +169,22 @@
             <script>
                 /* Keeps the allocation table honest against the amount entered:
                    the running totals update live and Record stays disabled while
-                   the split exceeds the payment. */
+                   the split exceeds the payment. Unless the operator has edited an
+                   Apply box, the amount is applied oldest-first as it's typed, so
+                   a payment isn't left sitting as credit by default (E2E F-36). */
                 function paymentForm(invoices, initialAmount) {
                     return {
                         invoices,
-                        amount: initialAmount || 0,
+                        amount: initialAmount ?? '',
                         allocations: {},
+                        allocationsTouched: false,
+                        init() {
+                            this.$watch('amount', () => {
+                                if (! this.allocationsTouched) {
+                                    this.autoFill();
+                                }
+                            });
+                        },
                         allocated() {
                             return Object.values(this.allocations)
                                 .reduce((sum, v) => sum + (parseFloat(v) || 0), 0);
@@ -183,6 +196,7 @@
                             return (parseFloat(this.amount) || 0) > 0 && this.unallocated() >= -0.001;
                         },
                         autoFill() {
+                            this.allocationsTouched = false;
                             let left = parseFloat(this.amount) || 0;
                             this.allocations = {};
                             for (const invoice of this.invoices) {

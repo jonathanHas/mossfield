@@ -88,7 +88,7 @@ class FulfilmentUnitWeightsTest extends TestCase
         $item = $order->orderItems()->create([
             'product_variant_id' => $variant->id, 'quantity_ordered' => $qty, 'unit_price' => $variant->base_price,
         ]);
-        $alloc = $item->allocateFromBatchItem($this->batchItem($variant), $qty);
+        $alloc = $item->allocateFromBatchItem($this->batchItem($variant, max(10, $qty)), $qty);
 
         return [$order, $item, $alloc];
     }
@@ -186,6 +186,79 @@ class FulfilmentUnitWeightsTest extends TestCase
         $alloc->refresh();
         $this->assertSame('1.050', (string) $alloc->actual_weight_kg);
         $this->assertNull($alloc->unit_weights_kg, 'bulk lines have no per-unit figures');
+    }
+
+    // ------------------------------------- plausibility + decimal commas (F-29)
+
+    public function test_a_wheel_weight_far_above_nominal_is_refused(): void
+    {
+        // E2E F-29: "5,210" lost its comma in the browser and arrived as 5210.
+        [$order, $item, $batchItem] = $this->unallocated($this->wheel, 2);
+
+        $this->actingAs(User::factory()->factoryWorker()->create())
+            ->from(route('picking.item', [$order, $item]))
+            ->post(route('picking.pick', [$order, $item]), [
+                'batch_item_id' => $batchItem->id,
+                'quantity' => 2,
+                'weights' => ['5210', '4.980'],
+            ])->assertSessionHasErrors(['weights.0' => 'Each unit must weigh no more than 15 kg — a wheel is usually about 5.000 kg. Check the decimal point.']);
+
+        $this->assertSame(0, $item->fresh()->quantity_fulfilled, 'nothing picked');
+        $this->assertSame(10, $batchItem->fresh()->quantity_remaining);
+    }
+
+    public function test_a_decimal_comma_is_read_as_a_decimal_point(): void
+    {
+        [$order, $item, $batchItem] = $this->unallocated($this->wheel, 2);
+
+        $this->actingAs(User::factory()->factoryWorker()->create())
+            ->post(route('picking.pick', [$order, $item]), [
+                'batch_item_id' => $batchItem->id,
+                'quantity' => 2,
+                'weights' => ['5,210', '4.980'],
+            ])->assertRedirect(route('picking.show', $order))->assertSessionHasNoErrors();
+
+        $alloc = $item->orderAllocations()->sole();
+        $this->assertSame([5.21, 4.98], $alloc->unit_weights_kg);
+        $this->assertSame('10.190', (string) $alloc->actual_weight_kg);
+    }
+
+    public function test_a_bulk_total_far_above_nominal_is_refused(): void
+    {
+        // 18 packs × 0.250 kg nominal = 4.5 kg; the bound is 3× that.
+        [$order, $item, $alloc] = $this->allocated($this->pack, 18);
+
+        $this->actingAs(User::factory()->create())
+            ->from(route('orders.show', $order))
+            ->post(route('order-allocations.fulfill', $alloc), [
+                'quantity' => 18, 'actual_weight_kg' => 60,
+            ])->assertSessionHasErrors('actual_weight_kg');
+
+        $this->assertSame(0, $item->fresh()->quantity_fulfilled);
+
+        // A comma in the bulk total is read as a decimal point too.
+        $this->actingAs(User::factory()->create())
+            ->post(route('order-allocations.fulfill', $alloc), [
+                'quantity' => 18, 'actual_weight_kg' => '4,680',
+            ])->assertSessionHasNoErrors();
+
+        $this->assertSame('4.680', (string) $alloc->fresh()->actual_weight_kg);
+    }
+
+    public function test_a_variant_without_a_nominal_weight_is_not_bounded(): void
+    {
+        $loose = $this->variant([
+            'name' => 'Loose Wheel', 'unit' => 'wheel', 'weight_kg' => null, 'base_price' => 16.00,
+            'is_variable_weight' => true, 'is_bulk_weighed' => false, 'is_priced_by_weight' => false,
+        ]);
+        [$order, $item, $alloc] = $this->allocated($loose, 1);
+
+        $this->actingAs(User::factory()->create())
+            ->post(route('order-allocations.fulfill', $alloc), [
+                'quantity' => 1, 'weights' => [50],
+            ])->assertSessionHasNoErrors();
+
+        $this->assertSame('50.000', (string) $alloc->fresh()->actual_weight_kg);
     }
 
     // ------------------------------------------------- partial pick + undo

@@ -166,6 +166,25 @@ class CheeseCutWeightTest extends TestCase
             ->assertSee('cannot weigh more than the wheel');
     }
 
+    public function test_a_refused_cut_hands_back_the_weighed_total(): void
+    {
+        // E2E F-12: after a refusal the form reset the weighed total to
+        // packs × nominal (4.500), so a resubmit recorded the wrong figure.
+        // The server side of that is old('total_weight_kg') being rendered;
+        // the form's script no longer overwrites it on load.
+        $wheel = $this->wheels(daysAgo: 30);
+        $before = $wheel->batch->production_date->copy()->subDay()->toDateString();
+
+        $response = $this->cutPost($wheel, $this->cut(['cut_date' => $before, 'total_weight_kg' => '4.680']));
+        $response->assertSessionHasErrors('cut_date');
+
+        $page = $this->followRedirects($response)->assertOk()->getContent();
+
+        $this->assertMatchesRegularExpression('/<input[^>]*id="total_weight_kg"[^>]*value="4\.680"/s', $page);
+        $this->assertStringContainsString('if (totalWeightInput.value)', $page, 'the script keeps a restored total');
+        $this->assertSame(0, CheeseCuttingLog::count());
+    }
+
     // ------------------------------------------- finding 3: cut_date bounds
 
     public function test_cut_date_cannot_precede_the_batch_production_date(): void

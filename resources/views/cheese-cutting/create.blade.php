@@ -181,13 +181,34 @@
                 updateWaste();
             }
 
+            // The total is a nominal suggestion until the operator types the
+            // weighed figure. Once typed it's theirs: a refused submit must
+            // hand it back (E2E F-12 — it used to be reset to packs × nominal
+            // on load, so a resubmit recorded the nominal, not the weighed).
+            // Changing the pack count clears the claim and recomputes.
+            let totalTouched = false;
+
             wheelWeightInput.addEventListener('input', updateWaste);
 
-            vacuumPackVariantSelect.addEventListener('change', updateTotalWeight);
-            vacuumPacksInput.addEventListener('input', updateTotalWeight);
-            totalWeightInput.addEventListener('input', updateAverageWeight);
+            vacuumPackVariantSelect.addEventListener('change', function () {
+                if (! totalTouched) {
+                    updateTotalWeight();
+                }
+            });
+            vacuumPacksInput.addEventListener('input', function () {
+                totalTouched = false;
+                updateTotalWeight();
+            });
+            totalWeightInput.addEventListener('input', function () {
+                totalTouched = true;
+                updateAverageWeight();
+            });
 
-            if (vacuumPackVariantSelect.value && vacuumPacksInput.value) {
+            if (totalWeightInput.value) {
+                // Restored from old() after a refusal: keep it, refresh the calculator.
+                totalTouched = true;
+                updateAverageWeight();
+            } else if (vacuumPackVariantSelect.value && vacuumPacksInput.value) {
                 updateTotalWeight();
             }
         });

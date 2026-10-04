@@ -112,9 +112,11 @@ class OrderAllocationController extends Controller
     {
         $orderItem = $allocation->orderItem;
 
+        $this->normaliseWeightInput($request);
+
         $validated = $request->validate(array_merge([
             'quantity' => 'required|integer|min:1|max:'.$allocation->quantity_remaining,
-        ], $this->fulfilmentWeightRules($orderItem)), $this->fulfilmentWeightMessages());
+        ], $this->fulfilmentWeightRules($orderItem)), $this->fulfilmentWeightMessages($orderItem));
 
         [$actualWeight, $unitWeights] = $this->resolveFulfilmentWeight($validated, $orderItem);
         $order = $orderItem->order;

@@ -144,9 +144,19 @@
                     <x-input-error :messages="$errors->get('items')" class="mt-2" />
                 </div>
 
+                {{-- Priced at this customer's rates, with their delivery charge —
+                     the same figures store() will save (E2E F-20). --}}
                 <div class="mb-5 mf-panel">
+                    <div class="px-4 pt-3 flex justify-between items-center text-[13px]">
+                        <span>Items</span>
+                        <span id="orderItemsTotal" class="font-mono">€0.00</span>
+                    </div>
+                    <div class="px-4 pt-1 flex justify-between items-center text-[13px]">
+                        <span>Delivery (incl. VAT)</span>
+                        <span id="orderDelivery" class="font-mono">€0.00</span>
+                    </div>
                     <div class="px-4 py-3 flex justify-between items-center">
-                        <span class="text-[13px] font-semibold">Order total</span>
+                        <span class="text-[13px] font-semibold">Total</span>
                         <span id="orderTotal" class="font-mono text-[18px] font-semibold">€0.00</span>
                     </div>
                 </div>
@@ -246,9 +256,27 @@
             }
         }
 
+        // Per-customer special prices (variant id => estimated unit price) and
+        // delivery settings, so the preview matches what will be saved.
+        const customerPrices = @json($customerPrices);
+        const customerCharges = @json($customerCharges);
+
+        function currentCustomerId() {
+            return document.getElementById('customer_id').value;
+        }
+
+        function unitPrice(option) {
+            if (! option || ! option.value) {
+                return 0;
+            }
+            const special = customerPrices[currentCustomerId()]?.[option.value];
+
+            return special !== undefined ? parseFloat(special) : parseFloat(option.dataset.price);
+        }
+
         function updateLineTotal(productSelect, quantityInput, lineTotalInput) {
             const selectedOption = productSelect.selectedOptions[0];
-            const price = selectedOption ? parseFloat(selectedOption.dataset.price) : 0;
+            const price = unitPrice(selectedOption);
             const quantity = parseInt(quantityInput.value) || 0;
             const lineTotal = price * quantity;
 
@@ -263,14 +291,33 @@
                 const quantityInput = item.querySelector('.quantity-input');
 
                 if (productSelect.value && quantityInput.value) {
-                    const selectedOption = productSelect.selectedOptions[0];
-                    const price = parseFloat(selectedOption.dataset.price);
+                    const price = unitPrice(productSelect.selectedOptions[0]);
                     const quantity = parseInt(quantityInput.value);
-                    total += price * quantity;
+                    total += Math.round(price * quantity * 100) / 100;
                 }
             });
 
-            document.getElementById('orderTotal').textContent = '€' + total.toFixed(2);
+            const settings = customerCharges[currentCustomerId()] || { charge: 0, percent: null };
+            const delivery = total > 0
+                ? (settings.percent ? Math.round(total * settings.percent) / 100 : parseFloat(settings.charge) || 0)
+                : 0;
+
+            document.getElementById('orderItemsTotal').textContent = '€' + total.toFixed(2);
+            document.getElementById('orderDelivery').textContent = '€' + delivery.toFixed(2);
+            document.getElementById('orderTotal').textContent = '€' + (total + delivery).toFixed(2);
+        }
+
+        // Prices and delivery depend on the customer: re-price every line.
+        function repriceAllLines() {
+            document.querySelectorAll('.order-item').forEach(function(item) {
+                const productSelect = item.querySelector('.product-select');
+                const quantityInput = item.querySelector('.quantity-input');
+                const lineTotalInput = item.querySelector('.line-total');
+                if (productSelect.value && quantityInput.value) {
+                    updateLineTotal(productSelect, quantityInput, lineTotalInput);
+                }
+            });
+            updateOrderTotal();
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -301,6 +348,8 @@
                     updateLineTotal(productSelect, quantityInput, lineTotalInput);
                 }
             });
+
+            document.getElementById('customer_id').addEventListener('change', repriceAllLines);
 
             ensureTrailingEmptyItem();
             updateOrderTotal();

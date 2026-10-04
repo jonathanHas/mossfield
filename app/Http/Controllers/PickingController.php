@@ -132,10 +132,12 @@ class PickingController extends Controller
             return $redirect;
         }
 
+        $this->normaliseWeightInput($request);
+
         $validated = $request->validate(array_merge([
             'batch_item_id' => 'required|exists:batch_items,id',
             'quantity' => 'required|integer|min:1|max:'.$orderItem->quantity_remaining,
-        ], $this->fulfilmentWeightRules($orderItem)), $this->fulfilmentWeightMessages());
+        ], $this->fulfilmentWeightRules($orderItem)), $this->fulfilmentWeightMessages($orderItem));
 
         $batchItem = BatchItem::with('batch')->findOrFail($validated['batch_item_id']);
 

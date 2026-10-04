@@ -248,4 +248,24 @@ class InvoiceIssueTest extends InvoicingTestCase
 
         $this->assertSame('ready', $order->fresh()->status);
     }
+
+    public function test_a_per_order_invoice_names_the_order_and_the_customers_reference(): void
+    {
+        // E2E F-35: a per-order invoice printed neither our order number nor
+        // the customer's PO reference — only consolidated headings did.
+        $order = $this->deliveredOrder(10);
+        $order->update(['customer_reference' => 'PO-123']);
+        $invoice = $this->issue($order);
+
+        $this->actingAs(\App\Models\User::factory()->create())
+            ->get(route('invoicing.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee($order->order_number)
+            ->assertSee('Your ref:')
+            ->assertSee('PO-123');
+
+        $html = view('invoicing.invoices.pdf', ['invoice' => $invoice->fresh('lines'), 'pdf' => true])->render();
+        $this->assertStringContainsString('Order '.$order->order_number, $html);
+        $this->assertStringContainsString('Your ref: PO-123', $html);
+    }
 }

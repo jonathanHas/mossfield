@@ -305,11 +305,17 @@
                         <div class="mob-weight" :class="parseFloat(weights[i-1]) > 0 ? 'is-done' : ''">
                             <div>
                                 <div style="font-size: 11px; color: var(--muted);">{{ ucfirst($variant->unit ?: 'piece') }} <span x-text="'#' + i"></span></div>
+                                {{-- A typed comma becomes a decimal point: a number input
+                                     would otherwise drop it and turn 5,210 into 5210 (F-29). --}}
                                 <input type="number" name="weights[]" step="0.001" min="0.001" inputmode="decimal" placeholder="0.000"
-                                       x-model="weights[i-1]" style="margin-top: 2px;">
+                                       x-model="weights[i-1]" style="margin-top: 2px;"
+                                       x-on:keydown="if ($event.key === ',') { $event.preventDefault(); document.execCommand('insertText', false, '.'); }">
                                 <div class="est">expected ~ {{ number_format($expWeight, 2) }} kg</div>
                             </div>
-                            <span class="mf-tag mf-tag-accent" x-show="parseFloat(weights[i-1]) > 0"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                            {{-- More than twice the expected weight is almost certainly a
+                                 misplaced decimal point. The server refuses 3× outright. --}}
+                            <span class="mf-tag mf-tag-accent" x-show="parseFloat(weights[i-1]) > 0 && parseFloat(weights[i-1]) <= {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                            <span class="mf-tag mf-tag-warn" x-show="parseFloat(weights[i-1]) > {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>Check</span>
                         </div>
                     </template>
                     <input type="hidden" name="actual_weight_kg" :value="total > 0 ? total.toFixed(3) : ''">
@@ -322,10 +328,12 @@
                         <div>
                             <div style="font-size: 11px; color: var(--muted);">Total for <span x-text="qty"></span> {{ Str::plural($variant->unit ?: 'unit', 2) }}</div>
                             <input type="number" name="actual_weight_kg" step="0.001" min="0.001" inputmode="decimal" placeholder="0.000"
-                                   x-model="bulkWeight" style="margin-top: 2px;">
+                                   x-model="bulkWeight" style="margin-top: 2px;"
+                                   x-on:keydown="if ($event.key === ',') { $event.preventDefault(); document.execCommand('insertText', false, '.'); }">
                             <div class="est">expected ~ <span x-text="(qty * {{ $expWeight }}).toFixed(2)"></span> kg</div>
                         </div>
-                        <span class="mf-tag mf-tag-accent" x-show="parseFloat(bulkWeight) > 0"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                        <span class="mf-tag mf-tag-accent" x-show="parseFloat(bulkWeight) > 0 && parseFloat(bulkWeight) <= qty * {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>OK</span>
+                        <span class="mf-tag mf-tag-warn" x-show="parseFloat(bulkWeight) > qty * {{ 2 * $expWeight }}"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>Check</span>
                     </div>
                 </div>
             @endif

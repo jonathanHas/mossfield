@@ -10,6 +10,14 @@
                     · issued {{ $invoice->issued_at?->format('j M Y') }}
                     · due {{ $invoice->due_date?->format('j M Y') }}
                 </div>
+                @unless($invoice->isConsolidated())
+                    @foreach($orders as $ord)
+                        <div class="mt-0.5 text-[13px]" style="color: var(--muted);">
+                            Order <a href="{{ route('orders.show', $ord) }}" class="mf-link">{{ $ord->order_number }}</a>
+                            @if(filled($ord->customer_reference)) · Your ref: <span class="font-mono">{{ $ord->customer_reference }}</span>@endif
+                        </div>
+                    @endforeach
+                @endunless
             </div>
             <div class="flex flex-wrap gap-2">
                 <a href="{{ route('invoicing.invoices.pdf', $invoice) }}" target="_blank" class="mf-btn-secondary">View PDF</a>

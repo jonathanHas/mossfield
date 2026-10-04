@@ -195,4 +195,37 @@ class BatchCreateTest extends TestCase
         $this->assertSame(12, $batch->wheels_produced);
         $this->assertSame(1, BatchItem::count());
     }
+
+    public function test_a_refused_batch_hands_back_the_quantities_and_the_bad_expiry(): void
+    {
+        // E2E F-08: after a refusal the variant rows came back blank and the
+        // refused expiry was overwritten by the shelf-life auto-fill.
+        [$milk, $oneLitre] = $this->makeMilkProductWithTwoVariants();
+        $user = User::factory()->admin()->create();
+        $production = now()->toDateString();
+        $badExpiry = now()->subDays(3)->toDateString();
+
+        $response = $this->actingAs($user)
+            ->from(route('batches.create'))
+            ->post('/batches', [
+                'product_id' => $milk->id,
+                'production_date' => $production,
+                'expiry_date' => $badExpiry,
+                'raw_milk_litres' => 10,
+                'batch_items' => [
+                    ['variant_id' => $oneLitre->id, 'quantity_produced' => '10'],
+                ],
+            ]);
+
+        $response->assertSessionHasErrors('expiry_date');
+        $this->assertSame(0, Batch::count());
+
+        $page = $this->followRedirects($response)->assertOk()->getContent();
+
+        // The old rows are embedded for the script to seed the rebuilt inputs…
+        $this->assertMatchesRegularExpression('/"variant_id":"?'.$oneLitre->id.'"?,"quantity_produced":"10"/', $page);
+        // …and the refused expiry is in the field, with the auto-fill told to leave it.
+        $this->assertMatchesRegularExpression('/<input[^>]*id="expiry_date"[^>]*value="'.$badExpiry.'"/s', $page);
+        $this->assertStringContainsString('if (initialising && expiryDateInput.value)', $page);
+    }
 }

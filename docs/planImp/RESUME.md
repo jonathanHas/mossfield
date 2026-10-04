@@ -45,15 +45,17 @@ worth returning to.
   reconciled. Index in `TESTING_AND_FIXES.md` → 2026-10-04 End-to-end run;
   full report `archive/2026-10-04-e2e-browser-run/implemented.md`; decisions
   for Jon in `OPEN_QUESTIONS.md` #5.
-- **Cycle 3 — READY in `plan.md`:** "Money and state" — the S1/S2 fixes
-  (F-39 submit-once + payment `form_token`; F-29 weight comma + 3× nominal
-  bound; F-19 order-edit status bypass; F-12/F-08 refused forms keep input;
-  F-20 order-form price preview; F-35 PO ref on invoices; F-36/F-40 payment
-  auto-apply and negative amount). Kickoff: *"Read docs/planImp/planimp.md.
-  You are the Implementer. Implement docs/planImp/plan.md."*
-- **After that:** cycle 4 (S3/S4 friction — list in the cycle-2 Review);
-  `OPEN_QUESTIONS.md` #1 (write-offs) and #5 (E2E decisions) once Jon answers;
-  `FULFILMENT_PLAN.md` Phase 4.
+- **Cycle 3 "Money and state" — ACCEPTED 2026-10-04:** the S1/S2 fixes
+  landed (submit-once + payment `form_token`; weight comma + 3× nominal
+  bound; order-edit status bypass closed; refused cut/batch forms keep input;
+  order-form price preview; PO ref on invoices; payment auto-apply and
+  negative amount). Suite **557 passed, 0 failed**. Write-up in
+  `TESTING_AND_FIXES.md` → 2026-10-04 Money and state. Jon archives
+  `plan.md` + `implemented.md` to `archive/2026-10-04-money-and-state/`.
+- **Next, in either order:** cycle 4 (S3/S4 friction from the E2E run — list
+  in the cycle-2 Review, plus the four follow-ons in the cycle-3 Review);
+  `OPEN_QUESTIONS.md` #1 (write-offs) and #5 (E2E decisions) once Jon
+  answers — each answer is a one-step plan; `FULFILMENT_PLAN.md` Phase 4.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -95,7 +97,9 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 statement, 18 customers (27 **E2E Corner Shop**, 28 **E2E Weekly Deli** at
 run #1 positions 1–2; run #1 charge is now €6.15). Order 14 is `preparing`
 with 12 units reserved — pick it, short it or cancel it when it gets in the
-way. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+way. Cycle 3's browser checks added orders 19–20 (cancelled) and payment 8
+(€1.00 on INV-000006, the double-click check — the one row with a
+`form_token`); counts now 19 orders, 4 payments. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.
