@@ -1,574 +1,390 @@
-# Friction: the S3 findings from the end-to-end run
+# Copy and polish: the S4 findings and the cycle-4 follow-ons
 
-Status: ACCEPTED
+Status: READY
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
 
 ## Goal
 
-The end-to-end run (`archive/2026-10-04-e2e-browser-run/implemented.md`) found
-the arithmetic sound and the surfaces tiring. This cycle takes the S3 findings
-— places where the screen misleads or costs the operator real effort — plus
-the four follow-ons from cycle 3. After it: expired stock is visible instead of
-vanishing; the picker's "Today" is today; a partial mature release is one
-action; the order page stops offering two unlabelled number boxes per line;
-every save lands back where the operator was working; reordering a run is one
-form; the dispatch flash names orders and reasons; Finance defaults to the
-period the office actually wants; error pages lead home. Pure copy and
-cosmetic items (S4) wait for a short cycle 5.
+Clear the small things the end-to-end run listed as S4 — copy, labels, a
+logo, a divider, a dialog that doesn't name its batch — together with the
+four follow-ons the cycle-4 review deferred: a flash that's out of view after a
+fragment redirect, sheet rows landing flush at the top, a 404 for an unmatched
+URL telling a signed-in user to sign in, and a third allocate message. Also
+the 1.76 MB one-page PDFs. Nothing here changes stock or money; everything
+here is what an operator reads or taps every day.
 
 ## Context
 
-HEAD `7c86326` + the staged archive of cycle 3. Suite **557 passed, 0
-failed**; any failure is real. `pint --test app tests database routes` clean.
-Nothing pushed or deployed. Dev DB holds the E2E data (`RESUME.md`): expired
-milk batches 16/19/21/22 and yoghurt 18, July `ready` orders that were never
-dispatched, order 14 `preparing` — all useful for the browser checks here.
+HEAD `f6e9de4` + the staged archive of cycle 4. Suite **598 passed, 0 failed**;
+any failure is real. `pint --test app tests database routes` clean. Nothing
+pushed or deployed.
 
-Each step cites its finding(s); read them in the archived `implemented.md`
-first. Laravel 12: `redirect()->route(...)->withFragment('id')` exists and is
-how "land back on the thing you edited" is done below.
+Findings referenced are in `archive/2026-10-04-e2e-browser-run/implemented.md`;
+the four follow-ons are in `archive/2026-10-04-friction/plan.md` → Review.
 
 **Facts the steps rely on**
 
-- Dashboard (`routes/web.php:43–50`): `readyNowCount` = `status='active'`
-  with `ready_date` null-or-past — no expiry, no stock check. `/stock`
-  (`StockOverviewService::build()`) returns per-type cards with
-  `active_batches`/`variants`; the card view prints "No active milk batches."
-  (`stock/overview.blade.php:39,74,106`). `/batches` already tags expired
-  batches (`batch-card.blade.php:45`). Strict expiry everywhere =
-  `expiry_date > today` (`BatchItem::allocatable()`).
-- Batch create: the expiry hint is `#expiry-note` (`batches/create.blade.php:53`),
-  products carry `data-shelf-life-days`; the batch page only renders an Expiry
-  row when set (`batches/show.blade.php:107`).
-- Picking queue (`PickingController::index()`): all `confirmed|preparing|ready`
-  orders, no date filter; the view groups by delivery date and the strip is
-  `pickedUnits/totalUnits` over everything. `PickingController::item()` sets
-  `$skipTo` = **first** unsettled line other than the current, so Skip from
-  line 2 goes back to line 1 (F-31). Stepper `+` is `qty = Math.min(maxQty, qty+1)`
-  with no disabled state (`picking/item.blade.php:263`). `.mob-shell` has
-  `padding-bottom: 110px` for the fixed `.mob-footer`; the "Can't finish"
-  button sits in a `.mob-section` above the footer at `:348`. The OK/Check
-  tags compare to `{{ 2 * $expWeight }}` where `$expWeight = (float)
-  ($variant->weight_kg ?? 1)` (`:12`) — a stored `0` gets through.
-- Mature conversion (`cheese-conversion/index.blade.php`): the header button
-  submits a hidden sibling `release-form-{id}` whose `quantity` is fixed to
-  the **saved** hold (`:259–261`); the hold form's `quantity` is Alpine
-  `mature.length` (`:56`). `CheeseConversionController::release()` already
-  validates `quantity` as `integer|min:1|max:{held}` — a partial release is
-  legal server-side.
-- Order page (`orders/partials/allocation-items.blade.php`): per allocation a
-  **Fulfil** form with a `quantity` number input (max = remaining) and no
-  `data-confirm` (`~:120–160`), and per line a **Qty / Update** form
-  (`:286–290`) — two unlabelled boxes showing the same number (F-21). Add
-  item's quantity is `value="{{ old('quantity', 1) }}"` (`orders/show.blade.php:427`).
-  `OrderController::store()` creates one line per posted item (`:249+`);
-  `storeItem()` merges by variant. Sibling list age uses `order_date`
-  (`orders/show.blade.php:68`) and the summary is
-  `quantity_ordered.'× '.$i->productVariant->product->name` (`:58`). The
-  create form's option label is `picker_label (price_label)` — standard
-  price even when the line uses the customer's special (cycle 3 note).
-  `update()`'s success flash is "Order updated successfully." even for
-  Confirm (`:394`). 32 `redirect()->route('orders.show', $order)` calls in
-  `OrderController` + `OrderAllocationController` land at the top of the page.
-- Customers: `CustomerController::store()` redirects to `customers.index`
-  (`:92`); `destroy()` to `customers.index` without the search (`:216,222`);
-  `CustomerSpecialPriceController` → `customers.show` with no fragment; the
-  Special prices panel is at `customers/show.blade.php:338` (no `id`).
-- Delivery runs (`DeliveryRunController`): every action redirects to
-  `delivery-runs.index` top; `reorder()` takes the whole `positions[]` array
-  (`:115–134`); the view posts one such form per ↑/↓ (`delivery-runs/index.blade.php:85–105`).
-  The charge reveal prints `€ charge: on/off` from `apply_delivery_charge`
-  only (`:80`); a `delivery_charge_percent` customer shows "off" (F-18).
-- Chilled runs: `saveStop()` validates `qty.*` + `customer_reference` only —
-  no `notes` (F-28); redirects to `chilled-runs.index` with run/date, no
-  fragment; rows are `id="stop-{customer_id}"`. `dispatchFlash()`
-  (`ChilledRunController:~225–283`) says "N stops dispatched" (it counts
-  orders), names skipped **customers** (`$names()`), and gives one reason
-  per bucket. `toggleLoaded()` flash names the customer, not the order.
-- Orders show: `Edit` link always rendered (`orders/show.blade.php:130`);
-  `update()` refuses invoiced orders only on submit (`blockedByInvoice`).
-- Finance: Void button is `@can('void', $invoice)` → absent when
-  `Invoice::isVoidable()` is false (payments allocated or an issued credit
-  note). Consolidated shortcuts: Last month / This month / Last week
-  (`consolidated/create.blade.php:27–29`, `ConsolidatedInvoiceController:~105–114`);
-  statement preview defaults to **last** month (`StatementController::133`).
-  Customer page "Net owed" prints a negative euro when in credit
-  (`customers/show.blade.php:157`). `OrderAllocationController::allocate()`
-  has one generic refusal (`:79`). The payments component starts
-  `allocations: {}` even after a validation redirect. No
-  `resources/views/errors/` — Laravel's bare pages.
-- Tests to extend: `StockOverviewTest`, `PickingTest`, `CheeseConversionTest`,
-  `OrderAddItemTest`, `OrderItemEditTest`, `OrderStoreOptionalFieldsTest`,
-  `CustomerSpecialPriceTest`, `ChilledRunTest` (also holds run CRUD/assign/
-  reorder), `DispatchRunTest`, `InvoiceVoidTest`, `StatementTest`,
-  `ConsolidatedInvoiceTest`, `PaymentAllocationTest`, `OrderTransitionsTest`.
-  New: `DashboardTest`, `ErrorPagesTest`.
+- Flash region: `resources/views/layouts/partials/feedback.blade.php`,
+  included once in `layouts/app.blade.php` at the top of `<main>` (a `div
+  class="px-6 pt-5 …" role="status"`). `LayoutFeedbackTest` pins
+  exactly-once rendering. The picking layout has its own region — untouched.
+- Fragment targets: order rows `id="line-{id}" class="scroll-mt-20"`; run
+  stop rows `id="stop-{id}"` with `scroll-mt-20`; the two chilled-run sheet
+  rows `<tr id="stop-{{ $customer->id }}"` at `_run-table.blade.php:103` (edit)
+  and `:194` (display) have **no** `scroll-mt`.
+- Error pages: `resources/views/errors/{layout,404,403}.blade.php` (cycle 4).
+  An unmatched URL 404s before the `web` group runs, so `auth()->user()` is
+  null and the page says "Sign in". `routes/web.php` has no `Route::fallback`.
+- `OrderAllocationController::allocationRefusal()` (`:94–107`): "already
+  fully allocated (N of N)" → "only N available in this batch" → generic.
+  Missing: the request asks for more than the line still needs while the
+  batch has enough (`quantity > ordered − allocated`).
+- Login: `layouts/guest.blade.php:18` renders `<x-application-logo>` (the
+  Laravel cube) above a `bg-gray-100` page; the app's brand mark is the
+  "M" square + "Mossfield Dairy" at `layouts/navigation.blade.php:~115–123`.
+  `auth/login.blade.php:11` gives `#login` `autofocus` unconditionally (F-04).
+- Topbar: `layouts/partials/topbar.blade.php:48` is a 1 px divider that is
+  always rendered; the date chip after it is `hidden sm:inline` (F-05).
+- Batch copy (F-11): `batches/create.blade.php:159` prints `${variant.size}
+  ${variant.unit}` and `batches/show.blade.php:159` prints `size unit` — both
+  "wheel wheel" when they're equal. `components/stock/case-blocks.blade.php:47`
+  and `case-pictograph.blade.php:40` print `{{ n }} cases × {{ caseSize }}`.
+  `batches/show.blade.php:101` and `batch-card.blade.php:64` print
+  `ready_date->diffForHumans()` ("1 month from now" for 60 days).
+  `batch-card.blade.php:72` prints `number_format(raw_milk_litres, 1)L` —
+  "0.0L" on a converted Mature batch. `batch-card.blade.php:160` has
+  `data-confirm="Are you sure?"` on Delete, rendered for anyone who `@can('delete')`
+  even when `BatchController::deletionBlocker()` (`:223–260`, private: counts
+  allocations, source+target cutting logs, source+target conversion logs)
+  would refuse. The index's `batchItems` eager-load already carries
+  `withCount('sourceCuttingLogs')`, `withSum(... converted_wheels)` and the
+  allocations sum (`BatchController::index():4–12`).
+- F-14: `batches/show.blade.php:121` prints `{{ $batch->remaining_stock }} units`
+  and `batch-card.blade.php:75` `Stock: {{ remaining_stock }}` — wheels and
+  packs summed.
+- F-17: `customers/create.blade.php:126–134` "Online integration · Mossorders
+  user ID" bare number input (same block in `edit.blade.php`).
+- F-26 dialog labels: `orders/show.blade.php:500` Cancel order button; the
+  shared dialog's cancel button is `#confirm-action-cancel` "Cancel"
+  (`layouts/partials/confirm-dialog.blade.php:8`); `resources/js/confirm.js`
+  sets title/message/OK label from `data-confirm-*` and has no cancel-label
+  option.
+- F-27: `ChilledRunController::buildSheet():686` keeps only the **first**
+  order's `customer_reference` per stop; `_run-table.blade.php:268` prints it;
+  the per-order loaded ticks (`:208–220`) have `aria-label` "Mark loaded" with
+  no order number and no visible label; `:278` says "Multiple orders — edit
+  above".
+- F-31: `orders/index.blade.php:64` wraps the table in `overflow-x-auto`;
+  order numbers wrap mid-number at 500 px.
+- F-34: PDFs come from `Pdf::loadView(...)` (barryvdh/laravel-dompdf) with
+  `font-family: 'DejaVu Sans'` / `'DejaVu Sans Mono'` in
+  `documents/_pdf-styles.blade.php`; the whole fonts are embedded (1.4–1.8 MB
+  per one-page document, attached to every email). `config/dompdf.php` is
+  **not published**; the package default is `'enable_font_subsetting' => false`
+  (`vendor/barryvdh/laravel-dompdf/config/dompdf.php:113`). `pdftotext` is
+  installed at `/usr/bin/pdftotext`. `DispatchConfirmationTest:58–60` already
+  asserts the content type and `%PDF`.
+- F-38: `Invoice::getPaymentStateAttribute()` (`app/Models/Invoice.php:173`)
+  returns `partial` when `amount_paid > 0 || amount_credited > 0`; the label
+  is "Part paid" (`:198`). A credit-only invoice therefore reads "Part paid".
+  Customer form: `payment_terms` select (`customers/create.blade.php:69–75`,
+  default Immediate) and `invoicing_mode` select in the same form.
 
 ## Constraints
 
-- No change to stock/money arithmetic, `DispatchService`, allocation,
-  `isAllowedStatusChange()`, or the free-stock expression
-  (`TESTING_AND_FIXES.md` → *Invariants worth keeping*, all sections).
-- Every existing flash/message text stays unless a step changes it.
-- `data-confirm` for anything destructive; forms already submit once.
+- No stock or money arithmetic changes; `payment_state` **values** stay
+  (filters and tests use them) — only the label may change.
+- Every message a customer or operator sees stays unless a step changes it.
+- `LayoutFeedbackTest` (flash rendered exactly once) must keep passing.
 - `npm run build` after JS/CSS changes; `./vendor/bin/pint` on touched PHP.
 - **Do not commit.** Planner commits on acceptance. Nothing pushed/deployed.
 
 ## Out of scope
 
-- `OPEN_QUESTIONS.md` #1 and #5 (write-offs; F-06, F-09, F-10, F-24, F-25,
-  F-33, F-34's per-order-without-loaded, F-38's two policy items).
-- **Cycle 5 (copy & polish, S4):** F-03 Laravel logo, F-04 login focus, F-05
-  topbar divider, F-11 batch copy nits + naming the batch in its delete
-  dialog + hiding Delete when `deletionBlocker()` would refuse, F-14 "29
-  units", F-17 Mossorders id field, F-26's dialog button labels and
-  tab-order, F-27 second ref / loaded tick labels on a multi-order stop,
-  F-31's `/orders` at phone width, F-34's PDF size, F-38's "Partial" label
-  for a credit-only invoice and the weekly-terms warning.
-- Drag-and-drop for run stops (step 8 uses position inputs).
-- Any redesign of the picking screens beyond the three fixes in step 3.
+- Everything in `OPEN_QUESTIONS.md` #1 and #5.
+- Redesigning the picking or run-sheet screens; drag-and-drop anywhere.
+- The `/orders` table beyond `whitespace-nowrap` (factory stays on `/picking`).
+- Changing PDF layout or content — only how fonts are embedded.
 
 ## Steps
 
-### 1. Expired stock is visible (F-01, F-02, F-07)
+### 1. A redirect that lands on an element still shows its message (cycle-4 note)
 
-Files: `routes/web.php`, `app/Services/StockOverviewService.php`,
-`resources/views/stock/overview.blade.php`, `resources/views/dashboard.blade.php`,
-`resources/views/batches/create.blade.php`, `resources/views/batches/show.blade.php`,
-`tests/Feature/DashboardTest.php` (new), `tests/Feature/StockOverviewTest.php`,
-`tests/Feature/BatchCreateTest.php`
+Files: `resources/views/layouts/partials/feedback.blade.php`,
+`resources/css/app.css`, `resources/views/chilled-runs/partials/_run-table.blade.php`,
+`tests/Feature/LayoutFeedbackTest.php`
 
 What:
-- **Dashboard** `readyNowCount`: active, ready-date null-or-past, **not
-  expired** (`whereNull('expiry_date')->orWhere('expiry_date', '>', today())`,
-  the same strict rule) **and with stock** (`whereHas('batchItems', qty_remaining > 0)`).
-  Add `expiredCount` / `expiredUnits`: active batches with `expiry_date <=
-  today` and `SUM(quantity_remaining) > 0`. Render a tile **"Expired stock"**
-  (value = batches, sub = "N units · write off or close") linking to
-  `/batches?status=expired`, only when `expiredCount > 0`, for admin/office/
-  factory. Note in a comment that the write-off route is OPEN_QUESTIONS #1.
-- **`/stock`**: `StockOverviewService::build()` also returns, per type,
-  `expired` = `['batches' => n, 'units' => u]` from the same query (one
-  grouped query for all three types, not per card). The card's empty state
-  becomes: *"No sellable milk."* + when `expired.batches > 0`: *"N expired
-  batches still hold U units — see Batches."* (link with `?status=expired`).
-  When the card has stock **and** expired batches exist, show the same line
-  as a small muted note under the card header.
-- **Batch create**: when the chosen product has no `shelf_life_days`, the
-  `#expiry-note` reads *"This product has no shelf life set — the batch will
-  have **no expiry** and stays sellable until sold. Enter one if it should
-  expire."* (JS on product change; keep the current text when a shelf life
-  exists).
-- **Batch page**: always render the Expiry row; when null print *"None — stays
-  sellable until sold"*.
-- Tests: `DashboardTest` (new): with one sellable, one expired-with-stock and
-  one expired-empty batch, office sees "ready now" = 1 and the Expired tile
-  says 1 batch; factory sees the tile too; the tile is absent when nothing is
-  expired. `StockOverviewTest`: an expired milk batch with stock → card shows
-  "1 expired batch" and the sellable count excludes it. `BatchCreateTest`: a
-  yoghurt batch page shows "None — stays sellable".
+- Make the feedback region **sticky**: the wrapper gets `position: sticky;
+  top: 0; z-index: 30` (a `.mf-feedback` class in `app.css`, with the page
+  background behind it so content doesn't show through) and a small **×**
+  dismiss button per flash (`type="button"`, removes its flash with a two-line
+  inline script or Alpine `x-data="{show:true}" x-show="show"`). Sticky
+  inside `<main>` keeps the message at the top of the viewport however far
+  the fragment scrolled the page.
+- Highlight the landed element: one CSS rule `:target { animation:
+  mf-target 1.8s ease-out }` with a keyframe from the accent tint to
+  transparent background (`.scroll-mt-20:target` is enough to scope it to
+  the elements we give fragments).
+- Both sheet `<tr>`s (`:103`, `:194`) get `scroll-mt-20` in their class list.
+- Test: `LayoutFeedbackTest` — the flash is still rendered exactly once and
+  the wrapper carries `mf-feedback`.
 
-Check: `php artisan test --filter="DashboardTest|StockOverviewTest|BatchCreateTest"`
-pass. Browser as office: dashboard shows the Expired tile (dev DB has 5),
-`/stock` milk card names the expired batches instead of "No active milk
-batches".
+Check: `php artisan test --filter=LayoutFeedbackTest` pass. Browser: change a
+line qty on a long order page → the page lands on the line **and** the green
+flash is visible at the top of the viewport; × hides it; the line flashes
+briefly. Save a sheet row → the row lands below the column headers.
 
-### 2. The picking queue shows one day (F-30)
+### 2. An unmatched URL still knows who you are (cycle-4 note)
 
-Files: `app/Http/Controllers/PickingController.php`,
-`resources/views/picking/index.blade.php`, `tests/Feature/PickingTest.php`
+Files: `routes/web.php`, `tests/Feature/ErrorPagesTest.php`
 
 What:
-- `index()`: collect the queue as now, then derive `$days` = the distinct
-  delivery dates present (nulls as a trailing "No date" bucket). `$selected`
-  = `?date=` if it is one of them; else **today** if present; else the
-  **nearest future** date; else the **latest past** date. The page shows only
-  the selected day's orders; the strip (`pickedUnits/totalUnits`) counts only
-  them. Header: `◀ Tue 6 Oct ▶` switching between `$days` (links with
-  `?date=`), with "Today"/"Tomorrow" labels as the view already derives.
-- **Stale bucket**: `ready` orders whose delivery date is **before today**
-  are *not* in `$days`; they go in a collapsed `<details>` at the bottom:
-  *"Ready, awaiting dispatch — N orders from earlier days"* listing
-  `order_number · customer · date`, each linking to the order overview. They
-  are the office's to dispatch, not the floor's to pick. (`confirmed`/
-  `preparing` orders with past dates **do** stay in `$days` — they still need
-  picking.)
-- `show()`'s `$nextOrder` prefers the same day, then the queue order as now.
-- Tests: with a July `ready` order and two orders for Tuesday, GET `/picking`
-  as factory defaults to Tuesday, strip counts Tuesday only, the July order is
-  under "awaiting dispatch"; `?date=` switches; a past `preparing` order is a
-  selectable day.
+- At the end of `routes/web.php` add `Route::fallback(fn () => abort(404));`
+  — routes in `web.php` carry the `web` group, so the session loads and the
+  error layout sees the user. JSON requests still get Laravel's JSON 404
+  (`abort()` honours `expectsJson()`).
+- Test: a signed-in office user on `/no-such-page` → 404 page with "Back to
+  the dashboard"; factory → "Back to picking"; guest → "Sign in"; a JSON
+  request to `/no-such-page` → JSON.
 
-Check: `php artisan test --filter=PickingTest` pass. Browser as factory at
-500 px: `/picking` opens on the nearest day with work, not July; the stale
-bucket lists the July orders.
+Check: `php artisan test --filter=ErrorPagesTest` pass;
+`php artisan route:list | wc -l` is the previous count + 1.
 
-### 3. Picking ergonomics (F-31 + cycle-3 follow-on)
+### 3. The third allocate refusal (cycle-4 note)
 
-Files: `app/Http/Controllers/PickingController.php`,
-`resources/views/picking/item.blade.php`, `resources/css/app.css`,
-`tests/Feature/PickingTest.php`
-
-What:
-- `item()`: `$skipTo` = the first unsettled line **after** the current one in
-  order-item order, wrapping to the start — so Skip walks the lines in a
-  cycle rather than bouncing to line 1.
-- Stepper: `+` gets `:disabled="qty >= maxQty"` and `−` gets
-  `:disabled="qty <= 1"`, with a disabled style on `.mob-step-btn[disabled]`
-  (opacity .4, default cursor).
-- The "Can't finish this line — mark short" section must clear the fixed
-  footer on a 659 px-tall viewport: raise `.mob-shell`'s `padding-bottom` to
-  the footer's real height on the pick screen (measure it; the footer has two
-  rows there) or give that section its own bottom margin. Verify by scrolling
-  to the bottom at 500 × 659 — nothing hidden.
-- OK/Check thresholds: compute `$expWeight` as the server does — `weight_kg`
-  when `> 0`, else **no thresholds** (both tags fall back to the old
-  behaviour: OK when > 0). Same guard on the desktop row's `data-expected`.
-- Test: Skip from line 2 of a three-line order goes to line 3; from line 3 to
-  line 1.
-
-Check: `php artisan test --filter=PickingTest` pass. Browser at 500 × 659:
-Skip cycles; `+` greys out at the cap; the short button is reachable above
-the footer.
-
-### 4. Release part of a hold (F-13)
-
-Files: `resources/views/cheese-conversion/index.blade.php`,
-`tests/Feature/CheeseConversionTest.php`
-
-What:
-- The release control becomes a small `<input type="number" min="1"
-  max="{{ $maturing }}" value="{{ $maturing }}">` (the hidden field's value)
-  beside the button, label "Release" + input + "of {{ $maturing }} to mature".
-  The `data-confirm` text reads the input's value at click time — give the
-  button `x-data`-free JS: `onclick` is gone (cycle 1); instead set
-  `data-confirm` dynamically on the input's `input` event
-  (`btn.dataset.confirm = \`Release ${n} held wheel(s) into mature cheese?\``),
-  or render the message as "Release the entered number of held wheel(s)…".
-- While the Maturing zone is **dirty** (Alpine `mature.length !== held`),
-  disable the Release button and show *"Save maturing first"* — the
-  released count must be the saved hold the server validates against.
-- Test: POST release with `quantity=1` on a hold of 2 → one wheel released,
-  hold 1 (already legal server-side; the test pins the page renders the input
-  with `max="2"`).
-
-Check: `php artisan test --filter=CheeseConversionTest` pass. Browser: hold 2
-on G010426 (it has 1 held now — hold one more, Save), set the input to 1,
-Release → 1 released, 1 still held; move a wheel without saving → Release
-disabled with the hint.
-
-### 5. Order line controls (F-21, F-22, F-23)
-
-Files: `resources/views/orders/partials/allocation-items.blade.php`,
-`resources/views/orders/show.blade.php`, `app/Http/Controllers/OrderController.php`,
-`tests/Feature/OrderAddItemTest.php`, `tests/Feature/OrderStoreOptionalFieldsTest.php`
-
-What:
-- **F-21**: label the two boxes. The allocation row's input gets a visible
-  `Pick` label (`<label>` text "Pick" before the box, `aria-label="Units to
-  pick now"`), the line's Qty form keeps "Qty:" but its label becomes
-  **"Ordered:"**. Add `data-confirm="Record a pick of N × {variant} from
-  batch {code}?"` on the Fulfil button (N read live from the input via a
-  tiny `oninput` that updates `dataset.confirm`, or word it without N),
-  `data-confirm-label="Record pick"`. This makes Enter-in-the-wrong-box
-  harmless.
-- **F-22**: Add item quantity → `value="{{ old('quantity') }}"
-  placeholder="1"`; server default: if blank, treat as 1 (`storeItem()`
-  validates `quantity` as `required` — make it `nullable` and default 1).
-- **F-23**: `store()` merges posted items by `product_variant_id`, summing
-  quantities, before creating lines (same rule as `storeItem()`).
-- Tests: Add item page has no `value="1"` on `#add_quantity` and a blank
-  quantity creates a line of 1; `store()` with the same variant twice creates
-  **one** line with the summed quantity.
-
-Check: `php artisan test --filter="OrderAddItemTest|OrderStoreOptionalFieldsTest|OrderItemEditTest"`
-pass. Browser: Fulfil now asks; Add item with an empty box → 1.
-
-### 6. The order page and form behave like one tool (F-26 functional bits, F-20 follow-on)
-
-Files: `app/Http/Controllers/OrderController.php`, `app/Http/Controllers/OrderAllocationController.php`,
-`resources/views/orders/create.blade.php`, `resources/views/orders/show.blade.php`,
-`resources/views/orders/partials/allocation-items.blade.php`,
-`tests/Feature/OrderItemEditTest.php`, `tests/Feature/OrderTransitionsTest.php`
-
-What:
-- **Land on the line you touched.** Every line/allocation action redirect
-  (`storeItem`, `updateItem`, `destroyItem`, `shortCloseItem`, `reopenItem`,
-  `allocate`, `deallocate`, `fulfill`, `unfulfill`) appends
-  `->withFragment('line-'.$orderItem->id)`; the partial gives each line
-  block `id="line-{{ $orderItem->id }}"` (and the read-only table rows the
-  same). `autoAllocate` and status changes keep landing at the top.
-- **Delivery date default** on `/orders/create`: pass
-  `customerRunDates` = `[customer_id => next run date]` where the customer is
-  on a run (`DeliveryRun::dateFor(now())` if `>= today`, else
-  `dateFor(now()->addWeek())`; whole-week runs → week start). JS fills
-  `#delivery_date` on customer change **only if the field is empty or still
-  holds the previous auto-fill**.
-- `Line total` input: `tabindex="-1"` (it's read-only).
-- Flash: `update()` says **"Order confirmed."** when the status moved
-  `pending → confirmed`; "Order updated successfully." otherwise.
-- Sibling list: age from `created_at` (`diffForHumans`), and the summary uses
-  `productVariant->picker_label` (e.g. `24× Organic Milk · 1L Bottle`).
-- Option labels on the create form show the **customer's** price when a
-  special exists: on customer change, JS rewrites each option's text to
-  `picker_label (€x.xx)` from `customerPrices`, falling back to the server
-  label; mark special ones with `· special`.
-- Tests: `updateItem` redirect is `route('orders.show', $order).'#line-'.$item->id`;
-  the create page embeds `customerRunDates` for a customer on a Tuesday run
-  with next Tuesday's date; Confirm flash text.
-
-Check: `php artisan test --filter="OrderItemEditTest|OrderTransitionsTest|OrderStoreOptionalFieldsTest"`
-pass. Browser: change a line qty → the page reloads scrolled to that line;
-pick E2E Corner Shop on the create form → delivery date = next Tuesday; the
-1L option reads "(€1.25 · special)".
-
-### 7. Office forms land where the work is (F-16, F-28)
-
-Files: `app/Http/Controllers/CustomerController.php`,
-`app/Http/Controllers/CustomerSpecialPriceController.php`,
-`app/Http/Controllers/DeliveryRunController.php`, `app/Http/Controllers/ChilledRunController.php`,
-`resources/views/customers/show.blade.php`, `resources/views/chilled-runs/partials/_run-table.blade.php`,
-`tests/Feature/CustomerSpecialPriceTest.php`, `tests/Feature/ChilledRunTest.php`
-
-What:
-- `CustomerController::store()` → `customers.show` for the new customer.
-  `destroy()` → `customers.index` **with the incoming `search`/`is_active`
-  query** (pass them through from the request).
-- Special prices: all three redirects `->withFragment('special-prices')`;
-  the panel gets `id="special-prices"`; the add `<select>` **omits variants
-  that already have a special price** for this customer.
-- Delivery runs: `assign`, `unassign`, `toggleCharge`, `reorder` redirect
-  `->withFragment('stop-'.$customer->id)` (the moved/toggled stop; for
-  `reorder` the moved id is posted — see step 8); the stop rows get
-  `id="stop-{{ $stop->id }}"`.
-- Chilled runs: `saveStop()` redirects `->withFragment('stop-'.$customer->id)`;
-  the row editor gains a **Notes** textarea (`name="notes"`, 2 rows, in the
-  Notes cell under the added-lines UI, `form="stop-form-{id}"`), validated
-  `nullable|string|max:2000`, saved to the order (created or existing; the
-  dirty-tracking `$watch` includes it). Display mode already shows notes.
-- Tests: `store` redirects to `customers.show`; special-price redirect has the
-  fragment and the select omits a priced variant; `saveStop` with `notes`
-  persists and redirects with `#stop-{id}`.
-
-Check: `php artisan test --filter="CustomerSpecialPriceTest|ChilledRunTest"`
-pass. Browser: create a customer → its page; add a special price → page
-reloads at the panel; save a sheet row → reloads at that row.
-
-### 8. Reordering a run is one form (F-15, F-18)
-
-Files: `app/Http/Controllers/DeliveryRunController.php`,
-`resources/views/delivery-runs/index.blade.php`, `tests/Feature/ChilledRunTest.php`
-
-What:
-- Each stop row gets a `Position` number input (`positions[{customer_id}]`,
-  value = current position, `min=1`) and the run panel gets one **Save
-  order** button posting them all to `reorder` — the array now maps
-  customer id ⇒ wanted position; `reorder()` sorts by wanted position (ties
-  by current), renumbers 1…n, validates every id belongs to the run, and
-  redirects with the fragment of the first stop whose position changed.
-  Keep the ↑/↓ buttons but have them post `move: {customer_id, direction}`
-  to the same endpoint (swap with the neighbour) and redirect to
-  `#stop-{id}` — no more losing your place. Both shapes go through one
-  method: `positions` xor `move`.
-- Charge reveal: a stop with `delivery_charge_percent` shows
-  **`{{ pct }} % of order value`** (tag, no toggle) instead of "€ charge:
-  off"; the toggle stays for the others.
-- Tests: posting `positions` as id ⇒ position renumbers correctly; `move`
-  down swaps two stops; a customer not on the run is refused; the percent
-  customer's row shows "5 % of order value".
-
-Check: `php artisan test --filter=ChilledRunTest` pass. Browser: set E2E
-Weekly Deli's position to 17 and Save → it's last, page scrolled to it; ↑
-once → page lands on the row.
-
-### 9. Dispatch and loaded flashes name orders and reasons (F-32, F-34 Edit)
-
-Files: `app/Http/Controllers/ChilledRunController.php`,
-`resources/views/orders/show.blade.php`, `tests/Feature/DispatchRunTest.php`,
-`tests/Feature/OrderTransitionsTest.php`
-
-What:
-- `dispatchFlash()`: "N **orders** dispatched"; skipped entries per **order**:
-  `ORD-… {customer} ({reasons})` where reasons are any of *not picked*
-  (status ≠ ready), *not loaded*; e.g. `skipped: ORD-20261004-003 E2E Corner
-  Shop (not picked, not loaded); ORD-20261004-005 An Tairseach (not picked,
-  not loaded)`. Keep the invoice-failed / no-email parts.
-- `toggleLoaded()` flash: `"{customer} · {order_number} marked loaded."`.
-- `orders/show`: when `$order->invoice_id` is set, don't render **Edit**;
-  render a muted line *"On invoice {number} — void it to edit."* (the
-  billing line already links to Finance).
-- Tests: `DispatchRunTest` flash contains the order number and both reasons;
-  loaded flash contains the order number; an invoiced order's page has no
-  `orders.edit` link.
-
-Check: `php artisan test --filter="DispatchRunTest|OrderTransitionsTest|DispatchConfirmationTest"` pass.
-
-### 10. Finance defaults and messages (F-37, F-38 defaults, F-41 message, cycle-3 follow-on)
-
-Files: `resources/views/invoicing/invoices/show.blade.php`,
-`app/Http/Controllers/Invoicing/ConsolidatedInvoiceController.php`,
-`resources/views/invoicing/consolidated/create.blade.php`,
-`app/Http/Controllers/Invoicing/StatementController.php`,
-`resources/views/customers/show.blade.php`, `app/Http/Controllers/OrderAllocationController.php`,
-`resources/views/invoicing/payments/create.blade.php`,
-`tests/Feature/InvoiceVoidTest.php`, `tests/Feature/StatementTest.php`,
-`tests/Feature/ConsolidatedInvoiceTest.php`, `tests/Feature/PaymentAllocationTest.php`,
+Files: `app/Http/Controllers/OrderAllocationController.php`,
 `tests/Feature/OrderAllocationConcurrencyTest.php`
 
-What:
-- Invoice page: when issued but not voidable, render a disabled **Void**
-  button with `title` and a muted line: *"Can't void — remove its payments
-  (N) / credit note (CN-…) first."* (name what blocks it).
-- Consolidated: add a **This week** shortcut (`period=this_week`, Mon–Sun of
-  today); default stays last month.
-- Statement preview default: **this month** (`today()->startOfMonth()`,
-  `today()`), not last month.
-- Customer page: when `outstanding_balance < 0` print **"€X in credit"** (and
-  the green tone the page uses for credit), never a minus sign.
-- `allocate()` refusal: distinguish *"This line is already fully allocated
-  (N of N)."* from *"Only N units are available in this batch right now."*
-  from the existing generic text (keep it as the final fallback).
-- Payments form: seed `allocations` from `old('allocations', [])` so a
-  refused submit keeps a manual split; set `allocationsTouched = true` when
-  any were restored.
-- Tests: void hint text on an invoice with a payment; `this_week` period
-  bounds; statement default `from` = first of this month; "in credit" text;
-  the two allocate messages; old allocations rendered.
+What: in `allocationRefusal()`, after the "already fully allocated" check and
+before the batch-availability check: `$needed = ordered − allocated`; if
+`$quantity > $needed` → `"This line only needs {$needed} more — allocate at
+most that many."`. Test: an order of 10 with 6 allocated, batch holding 50,
+request 5 → that message; request 4 → allocates.
 
-Check: `php artisan test --filter="InvoiceVoidTest|StatementTest|ConsolidatedInvoiceTest|PaymentAllocationTest|OrderAllocationConcurrencyTest"` pass.
+Check: `php artisan test --filter=OrderAllocationConcurrencyTest` pass.
 
-### 11. Error pages lead home (F-41)
+### 4. Login looks like Mossfield and puts the cursor where it's needed (F-03, F-04)
 
-Files: `resources/views/errors/404.blade.php` (new), `resources/views/errors/403.blade.php` (new),
-`resources/views/errors/layout.blade.php` (new), `tests/Feature/ErrorPagesTest.php` (new)
+Files: `resources/views/layouts/guest.blade.php`, `resources/views/auth/login.blade.php`,
+`tests/Feature/Auth/AuthenticationTest.php`
 
 What:
-- A minimal standalone layout (own `<!DOCTYPE>`, `@vite` CSS, the app's
-  background/ink vars, centred card) — not `x-app-layout` (errors happen for
-  guests too). 404: *"That page doesn't exist."* 403: *"You don't have access
-  to that page."* Both offer **one** link: signed-in factory → `/picking`
-  ("Back to picking"); any other signed-in user → dashboard; guest → login.
-  Include the request path in muted mono so the office can report it.
-- Tests: guest 404 links to login; factory 403 on `/customers` links to
-  `/picking`; office 404 links to the dashboard; no stack trace text.
+- Replace `<x-application-logo>` with the app's mark: the same "M" square +
+  "Mossfield Dairy" markup as `layouts/navigation.blade.php:~115–123`
+  (extract it into `resources/views/components/brand-mark.blade.php` and use
+  it in both places so they can't drift). Page background `var(--bg)`, card
+  uses `mf-panel`; keep the form itself.
+- `login.blade.php`: `#login` gets `autofocus` only when `old('login')` is
+  empty; otherwise `#password` gets it (the username is kept after a failed
+  attempt, the password is what needs retyping).
+- Tests: the login page contains "Mossfield" and not the Laravel logo's SVG
+  path; after a failed POST, following the redirect gives a page where the
+  `autofocus` attribute is on the password input.
 
-Check: `php artisan test --filter=ErrorPagesTest` pass. Browser:
-`/orders/999999` as factory shows the page with "Back to picking".
+Check: `php artisan test --filter=AuthenticationTest` pass. Browser: `/login`
+shows the mark; wrong password → cursor in the password box.
 
-### 12. Docs
+### 5. Topbar divider (F-05)
 
-Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`
+Files: `resources/views/layouts/partials/topbar.blade.php`
+
+What: the 1 px divider at `:48` gets `class="hidden sm:block"` so it hides
+with the date chip it separates.
+
+Check: browser at 500 px — bell, no stray bar.
+
+### 6. Batch copy and the delete button (F-11, F-14)
+
+Files: `resources/views/batches/create.blade.php`, `resources/views/batches/show.blade.php`,
+`resources/views/batches/partials/batch-card.blade.php`,
+`resources/views/components/stock/case-blocks.blade.php`,
+`resources/views/components/stock/case-pictograph.blade.php`,
+`app/Models/Batch.php`, `app/Http/Controllers/BatchController.php`,
+`tests/Feature/BatchCreateTest.php`, `tests/Feature/StockOverviewTest.php`
 
 What:
-- `CLAUDE.md`: Stock Overview → the `expired` per-type summary and the
-  dashboard tile; Mobile Picking → one-day queue + stale bucket + cyclic
-  Skip; Chilled Run Sheet → row editor has Notes; Delivery runs → `reorder()`
-  accepts `positions` (id ⇒ position) or `move`; a one-line **Redirect
-  convention**: line/stop/panel actions redirect `->withFragment(...)` to the
-  element edited, status-level actions to the top; `errors/` views exist.
-- `WORK_IN_PROGRESS.md`: *Recently Completed: Friction fixes (2026-10-04)*
-  entry listing the findings closed.
+- **"wheel wheel"**: print `size` only when it differs from `unit` — in the
+  create form's JS template and the show page's Size column.
+- **Cases**: `{{ n }} cases × {{ caseSize }}` → when `n === 0`:
+  `"{{ units }} loose — less than a case of {{ caseSize }}"`; otherwise
+  `"{{ n }} {{ case|cases }} × {{ caseSize }}"` plus `" + {{ rem }} loose"`
+  when there's a remainder. Check how `$totalCases` is computed (the run saw
+  "1 cases × 16" for 12 bottles — if it's a ceil, make it the full-case
+  count).
+- **Ready countdown**: a tiny helper (Blade `@php` or a `Batch::readyIn()`
+  accessor) — under 90 days away print `"in N days"` / `"N days ago"`,
+  otherwise `diffForHumans()`. Both the card and the show page.
+- **Raw milk on a converted batch**: when `source_batch_id` is set and
+  `raw_milk_litres == 0`, print `—` (the lineage line already says where it
+  came from).
+- **Delete**: move `deletionBlocker()` from the controller to
+  `Batch::deletionBlocker(): ?string` reading the item counts from the
+  **loaded** relation when present (`$this->batchItems` with
+  `order_allocations_count`, `source_cutting_logs_count`,
+  `target_cutting_logs_count`, `source_conversion_logs_count`,
+  `target_conversion_logs_count`) and falling back to one `withCount` query
+  when not. `BatchController::destroy()` calls it. `BatchController::index()`
+  adds the missing `withCount([...])` to its `batchItems` eager-load (still
+  one query). The card renders Delete **only when `deletionBlocker()` is
+  null**; otherwise a muted "Can't delete — N records depend on it" with the
+  blocker as `title`. The dialog reads `"Delete batch {{ batch_code }}? This
+  can't be undone."`.
+- **F-14 "29 units"**: `Batch::remaining_by_variant` (or inline) → `"10
+  wheels · 18 packs"` built from `batchItems` as `{{ qty }} {{ variant unit,
+  pluralised }}` joined by ` · `; a single-variant batch keeps `"N units"`.
+  Both the show page and the card.
+- Tests: `BatchCreateTest` — the show page prints "wheel" once per wheel
+  item (not "wheel wheel"), the per-variant stock line, "—" for raw milk on a
+  converted batch, and "in 60 days"; the index renders Delete for a fresh
+  batch and the "Can't delete" text for one with an allocation, with the
+  query count for the index unchanged by the new counts (assert with
+  `DB::enableQueryLog()` before/after: same number of queries).
+  `StockOverviewTest` — 12 bottles of a 16-case → "12 loose — less than a
+  case of 16".
 
-Check: `grep -n "withFragment\|stale bucket\|positions\b.*move\|errors/" CLAUDE.md` → hits.
+Check: `php artisan test --filter="BatchCreateTest|StockOverviewTest|BatchFinishedWeightTest"`
+pass. Browser `/batches`: G030426's Delete is gone (it has cuts and sales);
+the Mature card's raw milk reads "—"; `/batches/26` reads "7 wheels · 18
+packs".
+
+### 7. The Mossorders id is tucked away (F-17)
+
+Files: `resources/views/customers/create.blade.php`, `resources/views/customers/edit.blade.php`
+
+What: wrap the "Online integration" block in a `<details>` that is **open**
+only when the field has a value (`old()` or the customer's); summary "Online
+integration (Mossorders link)"; hint → "The customer's user id in the
+Mossorders portal — found on their account there. Only needed for shops that
+order online."
+
+Check: browser — collapsed on create; open on an edit page for a linked
+customer. (No test; copy only.)
+
+### 8. Dialogs name the thing they ask about (F-26, F-11 dialog)
+
+Files: `resources/js/confirm.js`, `resources/views/orders/show.blade.php`,
+`tests/Feature/ConfirmDialogTest.php`
+
+What:
+- `confirm.js`: support `data-confirm-cancel-label` (default "Cancel") and
+  reset it on every open.
+- Cancel order: `data-confirm-title="Cancel this order?"`,
+  `data-confirm-cancel-label="Keep order"`, OK stays "Cancel order".
+- Test: `/orders/{pending}` contains `data-confirm-cancel-label="Keep order"`.
+
+Check: `php artisan test --filter=ConfirmDialogTest` pass; `npm run build`.
+Browser: the cancel-order dialog reads Keep order / Cancel order.
+
+### 9. A multi-order stop tells the driver what's what (F-27)
+
+Files: `app/Http/Controllers/ChilledRunController.php`,
+`resources/views/chilled-runs/partials/_run-table.blade.php`, `tests/Feature/ChilledRunTest.php`
+
+What:
+- `buildSheet()`: `references[customer_id]` becomes **all** non-empty refs,
+  in order-number order, joined by ` · ` (the editor's prefill
+  `editCustomerReference` keeps using the first — it edits one order).
+- Loaded ticks on a multi-order stop: each gets `aria-label="Mark
+  ORD-… loaded"` / `"ORD-… loaded — tap to unmark"` and a visible mono
+  `order_number` beside the tick (only when the stop has > 1 order).
+- `"Multiple orders — edit above"` → `"Multiple orders — open each to edit"`.
+- Test: a stop with two orders shows both refs and both order numbers next
+  to the ticks.
+
+Check: `php artisan test --filter=ChilledRunTest` pass. Browser: E2E Corner
+Shop's row on Tue 06/10 shows "Ref: PO-E2E-1 · PO-E2E-2" and labelled ticks.
+
+### 10. Order numbers don't wrap (F-31)
+
+Files: `resources/views/orders/index.blade.php`
+
+What: `whitespace-nowrap` on the order-number and status cells.
+
+Check: browser at 500 px — numbers on one line, table scrolls sideways.
+
+### 11. One-page PDFs weigh what one page should (F-34)
+
+Files: `config/dompdf.php` (new — published), `tests/Feature/DispatchConfirmationTest.php`
+
+What:
+- `php artisan vendor:publish --provider="Barryvdh\DomPDF\ServiceProvider"`
+  (config only), then set `'enable_font_subsetting' => true` in `options`.
+  Rebuild one dispatch confirmation and one invoice PDF (tinker →
+  `app(App\Documents\DispatchConfirmation::class …)` or hit the routes) and
+  record the sizes before/after. Expect well under 200 KB.
+- Verify with `pdftotext file.pdf - | head` that `€`, `·`, `—` and a batch
+  code survive subsetting.
+- If subsetting doesn't bring it down, fall back to core fonts
+  (`Helvetica`/`Courier` in `_pdf-styles`) and re-verify `€` — say which you
+  did.
+- Test: the existing PDF assertion in `DispatchConfirmationTest` gains
+  `assertLessThan(300 * 1024, strlen($response->getContent()))`.
+
+Check: `php artisan test --filter="DispatchConfirmationTest|InvoiceIssueTest"`
+pass; sizes recorded in the report.
+
+### 12. Finance labels (F-38)
+
+Files: `app/Models/Invoice.php`, `resources/views/customers/create.blade.php`,
+`resources/views/customers/edit.blade.php`, `tests/Feature/PaymentStateTest.php`
+
+What:
+- `getPaymentStateLabelAttribute()`: when state is `partial` and
+  `amount_paid == 0` (credit only) → **"Credited"**; the state value stays
+  `partial`.
+- Customer form: an inline hint under Payment terms, shown (Alpine) when
+  `invoicing_mode` is weekly/monthly **and** `payment_terms` is immediate:
+  *"Consolidated invoices are due the day they're issued with Immediate terms
+  — most weekly customers use Net 7 or Net 14."* No validation change.
+- Test: an invoice with a credit note and no payment has label "Credited"
+  and state `partial`.
+
+Check: `php artisan test --filter="PaymentStateTest|InvoicingAccessTest"` pass.
+
+### 13. Docs and the small-fixes list
+
+Files: `CLAUDE.md`, `docs/planImp/SMALL_FIXES.md`, `docs/planImp/WORK_IN_PROGRESS.md`
+
+What:
+- `CLAUDE.md`: Frontend Development → the flash region is sticky with a
+  dismiss and `:target` highlight; `Route::fallback` exists; `confirm.js`
+  supports `data-confirm-cancel-label`; PDFs use font subsetting
+  (`config/dompdf.php`); `Batch::deletionBlocker()` is the one place the
+  delete rule lives (views hide the button, the controller refuses).
+- `SMALL_FIXES.md`: tick **Destructive actions use native `confirm()`**
+  (done 2026-10-04, cycle 1 — the list predates it) with a one-line note;
+  leave the weight-input item and the Judgement section as they are.
+- `WORK_IN_PROGRESS.md`: *Recently Completed: Copy & polish (2026-10-04)*.
+
+Check: `grep -n "fallback\|cancel-label\|font_subsetting\|deletionBlocker" CLAUDE.md` → hits.
 
 ## Verification
 
-1. `php artisan test` → **0 failed**; record the passing count.
+1. `php artisan test` → **0 failed**; record the count.
 2. `./vendor/bin/pint --test app tests database routes` → clean.
 3. `npm run build` → ok.
-4. `git status --short` → only files this plan names (+ the staged archive).
-5. Browser checks from steps 1–9 and 11 with real input (`php artisan serve`
-   on 127.0.0.1 is fine; 500 × 659 for the picking steps). Console clean.
-6. Dev-DB probe: nothing in this cycle moves stock or money; confirm
-   `orders`, `payments`, `invoices` counts are unchanged except any order the
-   browser checks create (tag them `E2E-20261004 cycle4` and cancel them).
+4. `php artisan route:list | wc -l` → previous + 1 (the fallback).
+5. `git status --short` → only files this plan names (+ the staged archive).
+6. Browser checks from steps 1, 4, 5, 6, 7, 8, 9, 10 with real input; console
+   clean. PDF sizes before/after in the report.
 
 ## Risks
 
-- **Fragments and flashes.** `withFragment` keeps the session flash; the
-  layout's feedback region renders at the top, so a user scrolled to a line
-  may not see the flash. Acceptable here (the line itself changes), but say
-  so in the report; cycle 5 can anchor the flash near the fragment.
-- **Picking default day** must never hide a `confirmed`/`preparing` order:
-  only `ready` orders go to the stale bucket.
-- **Reorder semantics**: validate that every posted id belongs to the run and
-  that `positions` and `move` are mutually exclusive; the old per-row forms
-  posted the whole array and must not remain anywhere (grep the view).
-- **Merging duplicate variants in `store()`** changes the line count a
-  customer sees; the summed quantity is what they ordered, so it's right —
-  but check `OrderStoreOptionalFieldsTest` and `DeliveryChargeTest` still
-  pass (they create orders via `store()`).
-- **Error views**: Laravel renders `errors/404.blade.php` automatically when
-  present; make sure the layout has no dependency on a signed-in user
-  (`auth()->user()` may be null) and that the view doesn't itself 500 for an
-  API-shaped request (JSON requests still get JSON — don't change that).
-- **Session length.** Twelve steps; update `implemented.md` after each; a
-  `BLOCKED — resume from N+1` is a fine outcome.
+- **Sticky flash over fixed headers**: `z-index: 30` must sit below the modal
+  (`z-50`) and above the content; check the mobile drawer (`z-40`) still
+  covers it.
+- **`:target` animation** fires on every fragment landing, including the
+  browser's own back/forward — harmless.
+- **Font subsetting** can drop a glyph the layout uses (bullets, en/em
+  dashes, €). `pdftotext` is the check; the core-font fallback is the exit.
+- **`Route::fallback`** must stay **last** in `web.php`; any route file loaded
+  after it would be shadowed. `api.php` is a separate group and unaffected.
+- **Hiding Delete** must not add a query per card: the counts ride the
+  existing eager-load. The query-count assertion is the guard.
 
 ## Review
 
-Reviewed 2026-10-04 against `implemented.md` (Status: DONE, 712 lines, read to
-the end) and the full diff of the ten controllers/services, the new views and
-the two view families with the most logic (release control, line controls).
-Planner reran: `php artisan test` → **598 passed, 0 failed** (+41);
-`pint --test app tests database routes` → PASS 264 files; `npm run build` ok;
-`grep 'name="positions[]"' resources/views` → none; dev DB: orders 21 (19 +
-two cancelled cycle-4 probes), payments 4, invoices 7, run #1 positions 1…17,
-G010426 item 46 `held=1 remaining=7` (the step-4 release the plan asked for).
-
-### Criteria — all twelve pass
-
-1 Expired stock: dashboard "ready now" strict + has-stock; `expiredCount/Units`
-from one join; `/stock` cards get `expired` from one grouped query; hints on
-batch create/show; **plus** `?status=expired` widened so the tile's link isn't
-empty (deviation 2 — right call, pinned). 2 One-day queue: `partition` stale
-`ready`-before-today; `selectDay()` ?date → today → nearest future → latest
-past → undated; strip counts the day; `$nextOrder` prefers the same day.
-3 Skip cycles (`slice($position)->concat(take($position−1))`), stepper
-disabled at limits, `$expWeight` null when nominal ≤ 0 (both surfaces).
-4 Partial release: number input bound by `form=`, dynamic `data-confirm`,
-`:disabled` while the zone is dirty with a hint. 5 Pick/Ordered labels, Fulfil
-asks ("Record a pick of N × … from batch …" rewritten live), Add item blank →
-1, `store()` merges variants. 6 Fragments on every line action (`#order-items`
-after a removal — right, the line is gone), run-date default, `tabindex=-1`,
-"Order confirmed.", `created_at` age, `picker_label` summaries, special-price
-option labels. 7 Customer create → show; delete keeps filters via the form
-action; special prices → `#special-prices` and the select omits priced
-variants; run actions → `#stop-{id}` (`#run-{id}` after unassign); sheet
-Notes textarea with dirty tracking. 8 `positions` (id ⇒ position) xor `move`,
-unknown id refused, re-insert semantics, lands on the moved stop; percent tag.
-9 Per-order skipped list with both reasons; loaded flash names the order;
-invoiced orders lose Edit. 10 Void blocker named; This week link (the period
-already existed); statement defaults this month; "in credit" on both figures;
-two specific allocate refusals; old allocations restored. 11 Standalone error
-layout with one home link; JSON 404 untouched. 12 Docs present.
-
-### Deviations — all accepted
-
-1 baseline; 2 expired filter widened; 3 extra partial; 4 the fifteen redirect
-assertions and the other adapted tests follow behaviour the plan changed —
-the new assertions are stricter, not looser; 5 container fragments when the
-element is gone; **6 and 7 corrected the plan** (see above); 8 filter carried
-in the delete form's action; 9 Dispatch run not pressed — right, it would
-issue real invoices in dev and `DispatchRunTest` pins the text; 10–12 fine.
-
-### Notes for Planner — decisions
-
-- Flash out of view after a fragment redirect → **cycle 5**: a transient
-  inline "✓ saved" mark on the target element (or render the flash region
-  sticky). Known from this plan's Risks.
-- Sheet `<tr>`s lack `scroll-mt` → **cycle 5**, one line.
-- Unmatched-URL 404 shows "Sign in" to a signed-in user → **cycle 5**:
-  `Route::fallback()` inside the `web` group so the session loads; keep the
-  JSON behaviour.
-- Step-4 release moved dev stock → **keep** (recorded in `RESUME.md`).
-- Footer height → nothing to do.
-- Harness `<select>` keyboard quirk → `handoff/REPORT.md` for the browser
-  session.
-- `allocate()` third message ("Only N more needed on this line") → **cycle 5**.
-- `reorder()` unknown-id flash vs validation error → fine as is.
-
-Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-friction`
-and move `plan.md` + `implemented.md` there.
+(Planner fills this in after reading implemented.md and the diff.)
