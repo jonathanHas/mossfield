@@ -29,11 +29,19 @@ worth returning to.
   read actions with no `authorize()`). Recorded in `TESTING_AND_FIXES.md` →
   2026-10-04. If the browser session's next brief is authorisation findings,
   check them against that section first — most should already be closed.
+- **2026-10-04, first Plan/Implement cycle (`planimp.md`) — ACCEPTED:** the
+  housekeeping batch (strict expiry on `/stock`, the 7 Breeze tests retired,
+  all 41 native `confirm()`s replaced by one `data-confirm` dialog,
+  `WORK_IN_PROGRESS.md` refreshed). Planned by Fable, implemented by an Opus
+  session, reviewed against the diff. Write-up in `TESTING_AND_FIXES.md` →
+  2026-10-04 Housekeeping batch; cycle files in
+  `archive/2026-10-04-housekeeping-batch/` once Jon archives them.
+  `handoff/REPORT.md` now carries the browser checklist for both October
+  passes (it also says `NEXT.md` is stale).
 - **Candidates for what's next:** the first question in `OPEN_QUESTIONS.md` (no
-  way to record stock being lost) if Jon decides it; the housekeeping batch
-  (expiry `>` vs `>=` divergence between `StockOverviewService` and
-  `BatchItem::allocatable()`, delete/rewrite the 7 Breeze tests, replace the
-  41 native `confirm()`s with a modal, refresh the stale `WORK_IN_PROGRESS.md`).
+  way to record stock being lost) — needs Jon's decisions before a plan can be
+  READY; `FULFILMENT_PLAN.md` Phase 4 (driver route + proof of delivery); the
+  per-unit weight input UX item in `SMALL_FIXES.md`.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -52,9 +60,10 @@ prefixed with the product, batch page/cards split cut/converted out of "sold",
 ## Committed locally, NOT pushed or deployed
 
 Everything above (plus the invoicing work that preceded it) was committed on
-2026-10-04 as **`26934f4`** on `main`, one commit ahead of `origin/main`
-(`989574f`). The production server was unreachable at the time, so it has not
-been pushed to GitHub and not deployed. When the server is back: push, then
+2026-10-04 as **`26934f4`** on `main`, followed by the authorisation pass
+(`24ce7cb`), the planImp protocol + plan (`218f492`) and the housekeeping
+cycle — all local, ahead of `origin/main` (`989574f`). The production server
+was unreachable, so nothing has been pushed to GitHub or deployed. When the server is back: push, then
 follow `DEPLOYMENT.md` §7 with maintenance mode on — this commit carries the
 invoicing migrations (`invoices`, `document_sequences`, …) and new
 `INVOICING_*` env vars, so don't `ship --no-maintenance` it.
@@ -64,9 +73,7 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **529 passing, 7 failing** — the 7 are the documented
-  Breeze baseline (`TESTING_AND_FIXES.md` → *Known-failing baseline*). An 8th
-  failure is real.
+- `php artisan test` → **all passing, 0 failing** (the 7 Breeze failures were retired 2026-10-04). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
 
 ## Dev database (`mossfield_cl`) — repaired, not reset
@@ -75,8 +82,12 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 2026-09-12). Batch **G030426** (`/batches/17`, wheel item 26): 38 produced —
 26 free · 4 cut · 4 converted · 4 sold; the browser session's 2a/2b
 verification cuts and releases are in there on purpose. Mature batch
-G030426-1 (`/batches/23`) exists from those releases. If you want a clean
-seeded state instead:
+G030426-1 (`/batches/23`) exists from those releases. On 2026-10-04 the
+housekeeping cycle re-ran `AdminUserSeeder` (the `admin` login had been
+missing; `office_test`/`factory_test`/`driver_test` passwords reset to
+`admin123`) and round-tripped order 3 item 13 (reopen → undo → re-pick 1 ×
+0.250 kg → short) — it ended where it started except for fresh timestamps.
+If you want a clean seeded state instead:
 
 ```bash
 php artisan mossfield:reset-trading-data --seed=1            # dry run

@@ -137,7 +137,7 @@
                         <a href="{{ route('invoicing.statements.preview', $customer) }}" class="mf-btn-secondary">Statement</a>
                         @if($finance['credit'] > 0 && $finance['openTotal'] > 0)
                             <form method="POST" action="{{ route('invoicing.payments.apply-credit', $customer) }}"
-                                  onsubmit="return confirm('Apply €{{ number_format($finance['credit'], 2) }} of credit to the oldest open invoices?')">
+                                  data-confirm="Apply €{{ number_format($finance['credit'], 2) }} of credit to the oldest open invoices?" data-confirm-label="Apply">
                                 @csrf
                                 <button type="submit" class="mf-btn-primary">Apply credit</button>
                             </form>
@@ -374,7 +374,7 @@
                                         </form>
                                     </td>
                                     <td class="mf-td text-right">
-                                        <form method="POST" action="{{ route('customers.special-prices.destroy', [$customer, $sp]) }}" onsubmit="return confirm('Remove this special price?');">
+                                        <form method="POST" action="{{ route('customers.special-prices.destroy', [$customer, $sp]) }}" data-confirm="Remove this special price?" data-confirm-label="Remove" data-confirm-danger>
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);">Remove</button>

@@ -78,7 +78,7 @@
                                  unsaved, Maturing-zone count. --}}
                             <button type="submit" form="release-form-{{ $item->id }}"
                                     class="mc-btn mc-btn-mature" style="margin-left: 8px;"
-                                    onclick="return confirm('Release {{ $maturing }} held wheel(s) into mature cheese?')">
+                                    data-confirm="Release {{ $maturing }} held wheel(s) into mature cheese?" data-confirm-label="Release">
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg>
                                 Release {{ $maturing }} to mature
                             </button>

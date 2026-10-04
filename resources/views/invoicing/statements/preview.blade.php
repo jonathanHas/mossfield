@@ -37,7 +37,7 @@
                     <button type="submit" class="mf-btn-secondary">Generate</button>
                     @if($customer->billingEmail())
                         <button type="submit" name="send" value="1" class="mf-btn-primary"
-                                onclick="return confirm('Generate and email this statement to {{ $customer->billingEmail() }}?')">
+                                data-confirm="Generate and email this statement to {{ $customer->billingEmail() }}?" data-confirm-label="Send">
                             Generate &amp; email
                         </button>
                     @endif

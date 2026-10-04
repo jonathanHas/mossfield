@@ -32,6 +32,7 @@
 
                 <main class="flex-1" style="background: var(--bg);">
                     @include('layouts.partials.feedback')
+                    @include('layouts.partials.confirm-dialog')
                     {{ $slot }}
                 </main>
             </div>

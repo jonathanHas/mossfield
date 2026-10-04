@@ -87,7 +87,7 @@
                                             <form action="{{ route('users.deactivate', $user) }}" method="POST" class="inline">
                                                 @csrf
                                                 <button type="submit" class="mf-link" style="color: var(--warn-ink);"
-                                                        onclick="return confirm('Deactivate {{ $user->name }}? They will be signed out immediately.')">Deactivate</button>
+                                                        data-confirm="Deactivate {{ $user->name }}? They will be signed out immediately." data-confirm-label="Deactivate" data-confirm-danger>Deactivate</button>
                                             </form>
                                         @else
                                             <span style="color: var(--faint);"> · </span>
@@ -100,7 +100,7 @@
                                         <form action="{{ route('users.destroy', $user) }}" method="POST" class="inline">
                                             @csrf @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                    onclick="return confirm('Permanently delete {{ $user->name }}? This cannot be undone.')">Delete</button>
+                                                    data-confirm="Permanently delete {{ $user->name }}? This cannot be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
                                         </form>
                                     @endif
                                 </td>

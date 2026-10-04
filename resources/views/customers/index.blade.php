@@ -97,7 +97,7 @@
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                    onclick="return confirm('Are you sure you want to delete this customer?')">Delete</button>
+                                                    data-confirm="Are you sure you want to delete this customer?" data-confirm-label="Delete" data-confirm-danger>Delete</button>
                                         </form>
                                     @endif
                                 </td>

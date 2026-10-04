@@ -14,7 +14,7 @@
                     @if ($sheet['pendingCount'] > 0)
                         @can('create', App\Models\Order::class)
                             <form method="POST" action="{{ route('chilled-runs.confirm-all') }}"
-                                  onsubmit="return confirm('Confirm {{ $sheet['pendingCount'] }} pending {{ Str::plural('order', $sheet['pendingCount']) }} on this run? They will appear on the picking queue.');">
+                                  data-confirm="Confirm {{ $sheet['pendingCount'] }} pending {{ Str::plural('order', $sheet['pendingCount']) }} on this run? They will appear on the picking queue." data-confirm-label="Confirm">
                                 @csrf
                                 <input type="hidden" name="run" value="{{ $activeRun->id }}">
                                 <input type="hidden" name="date" value="{{ request('date') }}">
@@ -30,7 +30,7 @@
                     @if ($sheet['allocatableCount'] > 0)
                         @can('create', App\Models\Order::class)
                             <form method="POST" action="{{ route('chilled-runs.allocate-all') }}"
-                                  onsubmit="return confirm('Reserve available stock (oldest batches first) for {{ $sheet['allocatableCount'] }} {{ Str::plural('order', $sheet['allocatableCount']) }} on this run?');">
+                                  data-confirm="Reserve available stock (oldest batches first) for {{ $sheet['allocatableCount'] }} {{ Str::plural('order', $sheet['allocatableCount']) }} on this run?" data-confirm-label="Allocate">
                                 @csrf
                                 <input type="hidden" name="run" value="{{ $activeRun->id }}">
                                 <input type="hidden" name="date" value="{{ request('date') }}">
@@ -46,7 +46,7 @@
                     @if ($sheet['dispatchableCount'] > 0)
                         @can('create', App\Models\Order::class)
                             <form method="POST" action="{{ route('chilled-runs.dispatch-all') }}"
-                                  onsubmit="return confirm('Dispatch {{ $sheet['dispatchableCount'] }} loaded {{ Str::plural('order', $sheet['dispatchableCount']) }}? Figures are frozen: invoices are issued for per-order customers and a dispatch confirmation is emailed to each shop. Invoices are sent from Finance.');">
+                                  data-confirm="Dispatch {{ $sheet['dispatchableCount'] }} loaded {{ Str::plural('order', $sheet['dispatchableCount']) }}? Figures are frozen: invoices are issued for per-order customers and a dispatch confirmation is emailed to each shop. Invoices are sent from Finance." data-confirm-label="Dispatch">
                                 @csrf
                                 <input type="hidden" name="run" value="{{ $activeRun->id }}">
                                 <input type="hidden" name="date" value="{{ request('date') }}">

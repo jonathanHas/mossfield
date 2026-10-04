@@ -1,6 +1,6 @@
 # Housekeeping batch: expiry rule, Breeze tests, confirm() dialogs, stale WIP doc
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
@@ -508,4 +508,49 @@ Run in order and paste results:
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-04 against `implemented.md` (Status: DONE) and the working
+tree diff. Verification rerun by the Planner: `php artisan test` → 536 passed,
+0 failed; `pint --test app tests database routes` → clean; `grep -rn "confirm("
+resources/views` → empty; `route:list | wc -l` → 157; `npm run build` → ok.
+
+### Criteria
+
+| Step | Result |
+| --- | --- |
+| 1 Expiry | **Pass.** `>` at `StockOverviewService.php:33` with the comment; new test proves the service and `BatchItem::allocatable()` agree (one batch of three, 300 units) and the Implementer red-checked it. `CLAUDE.md:296` updated as specified. |
+| 2 Breeze | **Pass.** Guard grep pasted — every hit inside a deleted file. Two test files, four controllers, two views gone; `routes/auth.php` untouched (157 routes). `AuthenticationTest` posts `login`, gains username + inactive cases; `ProfileTest` drops the two `email_verified_at` assertions. Baseline docs rewritten in all three places. |
+| 3 Confirm dialog | **Pass.** `confirm.js` matches 3b: capture-phase `submit` and `click` listeners, `requestSubmit(submitter)`, flag cleared both on the re-entrant submit and by `setTimeout(0)`, `textContent` for the message, Cancel focused. Partial included once per layout. 41 sites converted with messages verbatim (spot-checked `statements/preview` — `name="send"` kept; both picking `form="…"` buttons; `orders/show`; `users/index`; `chilled-runs/index`). 23 marked danger. Three tests pass. Browser check done **with real input** on `/users` and `/picking/3/items/13`, console clean. |
+| 4 WIP doc | **Pass.** All four edits plus the second broken link; structure reads October 2026. |
+
+### Deviations — all accepted
+
+1. Test scans for `confirm(` only, not `onsubmit=` — accepted; the plan's
+   `onsubmit=` ban was overbroad (`cheese-conversion/index.blade.php:54`'s
+   `onsubmit="return false"` is a read-only guard, not a confirm).
+2. Partial comment reworded to dodge its own grep — accepted.
+3. `window.confirm` fallback when no dialog markup is on the page — accepted;
+   fail-closed is the right default and no view contains `confirm(`.
+4. Deactivate user marked danger; "Close short" / "Mark short" labels —
+   accepted, better than the plan's list.
+5. Second `DEPLOYMENT.md` link fixed — accepted.
+6. `AdminUserSeeder` re-run on the dev DB — accepted and recorded in
+   `RESUME.md` (the `admin` login `CLAUDE.md` documents now exists again).
+7. 41 sites not 42 — accepted; the Planner's count was wrong.
+
+### Notes for Planner — decisions
+
+- Not clicked through with real input: `statements/preview` "Generate &
+  email" and the three chilled-run buttons → **handed to the browser session**
+  via `handoff/REPORT.md` (its checklist).
+- Dev-DB changes → **recorded** in `RESUME.md`.
+- `WORK_IN_PROGRESS.md` "Vacuum packs remain fixed weight" stale → **fixed now
+  by the Planner** (docs, not code): the block now lists the real ten cheese
+  variants from the dev DB, including that Garlic & Basil and Mature wheels
+  are not €/kg (which is `SMALL_FIXES.md`'s open judgement item).
+- `onsubmit="return false"` → `x-on:submit.prevent` → **rejected**: harmless,
+  no automation impact, and out of this plan's scope.
+- `a[data-confirm]` unused → noted, keep (cheap, specified).
+- Import hoisting in `app.js` → noted, harmless as analysed.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-housekeeping-batch`
+and move `plan.md` + `implemented.md` there.

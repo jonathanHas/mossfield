@@ -336,7 +336,7 @@
                                 @can('delete', $log)
                                     @if($canUndo)
                                         <form method="POST" action="{{ route('cheese-conversion.undo', $log) }}"
-                                              onsubmit="return confirm('Return {{ $log->wheels_converted }} wheel(s) to the farmhouse maturing hold?')">
+                                              data-confirm="Return {{ $log->wheels_converted }} wheel(s) to the farmhouse maturing hold?" data-confirm-label="Return" data-confirm-danger>
                                             @csrf
                                             <button type="submit" class="mf-link" style="color: var(--accent-ink);">Return to farmhouse hold</button>
                                         </form>

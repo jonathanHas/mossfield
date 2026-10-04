@@ -76,7 +76,7 @@
 
         <div class="mob-section" style="margin-top: 14px;">
             <form method="POST" action="{{ route('picking.reopen', [$order, $orderItem]) }}"
-                  onsubmit="return confirm('Reopen this line? It will need picking again and the order goes back to Preparing.')">
+                  data-confirm="Reopen this line? It will need picking again and the order goes back to Preparing." data-confirm-label="Reopen">
                 @csrf
                 @if ($pickable->isNotEmpty())
                     {{-- Stock has since arrived — make picking it again the obvious move. --}}
@@ -120,7 +120,7 @@
 
         <div class="mob-section" style="margin-top: 14px;">
             <form method="POST" action="{{ route('picking.undo', [$order, $orderItem]) }}"
-                  onsubmit="return confirm('Undo this pick? Stock will be restored to the batch.')">
+                  data-confirm="Undo this pick? Stock will be restored to the batch." data-confirm-label="Undo" data-confirm-danger>
                 @csrf
                 <button type="submit" class="mf-btn-secondary w-full justify-center" style="padding: 12px; border-radius: 10px; color: var(--warn-ink);">
                     Undo last pick
@@ -153,7 +153,7 @@
              reverse action isn't sitting under a thumb next to "Skip". --}}
         <div class="mob-section" style="margin-top: 14px;">
             <form method="POST" action="{{ route('picking.short', [$order, $orderItem]) }}"
-                  onsubmit="return confirm('Mark this line short? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won\'t be supplied or billed.')">
+                  data-confirm="Mark this line short? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won't be supplied or billed." data-confirm-label="Mark short" data-confirm-danger>
                 @csrf
                 <button type="submit" class="mf-btn-secondary w-full justify-center" style="padding: 12px; border-radius: 10px; color: var(--warn-ink);">
                     Mark short — no stock
@@ -209,8 +209,8 @@
                         @if ($orderItem->quantity_fulfilled > 0)
                             <div style="font-size: 11.5px; color: var(--muted); margin-top: 3px;">
                                 {{ $orderItem->quantity_fulfilled }} of {{ $orderItem->quantity_ordered }} already picked ·
-                                <button type="button" class="mf-link" style="color: var(--warn-ink); font-size: 11.5px;"
-                                    onclick="if (confirm('Undo the last pick on this line? Stock will be restored to the batch.')) document.getElementById('undo-line-form').submit();">Undo</button>
+                                <button type="submit" class="mf-link" style="color: var(--warn-ink); font-size: 11.5px;"
+                                    form="undo-line-form" data-confirm="Undo the last pick on this line? Stock will be restored to the batch." data-confirm-label="Undo" data-confirm-danger>Undo</button>
                             </div>
                         @endif
                     </div>
@@ -334,9 +334,9 @@
                  the fixed footer rather than in it — three thumb-sized actions
                  side by side is one too many, and this one is decisive. --}}
             <div class="mob-section" style="margin-top: 22px;">
-                <button type="button" class="mf-btn-secondary w-full justify-center"
+                <button type="submit" class="mf-btn-secondary w-full justify-center"
                         style="padding: 11px; border-radius: 10px; color: var(--warn-ink); font-size: 13px;"
-                        onclick="if (confirm('Can\'t finish this line? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won\'t be supplied or billed.')) document.getElementById('short-line-form').submit();">
+                        form="short-line-form" data-confirm="Can't finish this line? The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won't be supplied or billed." data-confirm-label="Mark short" data-confirm-danger>
                     Can't finish this line — mark short
                 </button>
             </div>

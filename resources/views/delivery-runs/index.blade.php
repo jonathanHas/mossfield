@@ -48,7 +48,7 @@
                         <div class="ml-auto flex items-center gap-3">
                             <a href="{{ route('delivery-runs.edit', $run) }}" class="mf-link text-[12px]">Edit</a>
                             <form method="POST" action="{{ route('delivery-runs.destroy', $run) }}"
-                                  onsubmit="return confirm('Delete this run? Its customers will be unassigned (not deleted).');">
+                                  data-confirm="Delete this run? Its customers will be unassigned (not deleted)." data-confirm-label="Delete" data-confirm-danger>
                                 @csrf
                                 @method('DELETE')
                                 <button type="submit" class="mf-link text-[12px]" style="color: var(--danger);">Delete</button>
@@ -107,7 +107,7 @@
                                         @endif
 
                                         <form method="POST" action="{{ route('delivery-runs.unassign', $stop) }}"
-                                              onsubmit="return confirm('Remove {{ $stop->name }} from this run?');">
+                                              data-confirm="Remove {{ $stop->name }} from this run?" data-confirm-label="Remove" data-confirm-danger>
                                             @csrf
                                             <button type="submit" class="mf-btn-ghost" style="padding: 2px 6px; color: var(--danger);" title="Remove from run">&times;</button>
                                         </form>

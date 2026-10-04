@@ -13,7 +13,7 @@
             </div>
             @if($perOrder->isNotEmpty())
                 <form method="POST" action="{{ route('invoicing.uninvoiced.issue-all') }}"
-                      onsubmit="return confirm('Issue {{ $perOrder->count() }} invoices?')">
+                      data-confirm="Issue {{ $perOrder->count() }} invoices?" data-confirm-label="Issue">
                     @csrf
                     <button type="submit" class="mf-btn-primary">Issue all {{ $perOrder->count() }}</button>
                 </form>

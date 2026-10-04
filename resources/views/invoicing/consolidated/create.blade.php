@@ -38,7 +38,7 @@
             </div>
         @else
             <form method="POST" action="{{ route('invoicing.consolidated.store') }}"
-                  onsubmit="return confirm('Issue consolidated invoices for the selected customers?')">
+                  data-confirm="Issue consolidated invoices for the selected customers?" data-confirm-label="Issue">
                 @csrf
                 <input type="hidden" name="start" value="{{ $start->toDateString() }}">
                 <input type="hidden" name="end" value="{{ $end->toDateString() }}">

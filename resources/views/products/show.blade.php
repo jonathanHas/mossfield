@@ -154,7 +154,7 @@
                                             <span style="color: var(--faint);">·</span>
                                             <a href="{{ route('products.variants.create', ['product' => $product, 'from' => $variant->id]) }}" class="mf-link">Duplicate</a>
                                             <span style="color: var(--faint);">·</span>
-                                            <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline" onsubmit="return confirm('Are you sure you want to delete this variant?');">
+                                            <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline" data-confirm="Are you sure you want to delete this variant?" data-confirm-label="Delete" data-confirm-danger>
                                                 @csrf @method('DELETE')
                                                 <button type="submit" class="mf-link" style="color: var(--danger);">Delete</button>
                                             </form>

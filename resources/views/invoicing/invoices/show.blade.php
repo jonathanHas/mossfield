@@ -17,7 +17,7 @@
                 @if($invoice->isIssued())
                     @if($invoice->documentRecipient())
                         <form method="POST" action="{{ route('invoicing.invoices.email', $invoice) }}"
-                              onsubmit="return confirm('Email invoice {{ $invoice->number }} to {{ $invoice->documentRecipient() }}?')">
+                              data-confirm="Email invoice {{ $invoice->number }} to {{ $invoice->documentRecipient() }}?" data-confirm-label="Send">
                             @csrf
                             <button type="submit" class="mf-btn-primary">
                                 {{ $invoice->hasBeenEmailed() ? 'Email again' : 'Email invoice' }}
@@ -26,7 +26,7 @@
                     @endif
                     @if($invoice->canBeReminded())
                         <form method="POST" action="{{ route('invoicing.invoices.remind', $invoice) }}"
-                              onsubmit="return confirm('Send a payment reminder for {{ $invoice->number }}?')">
+                              data-confirm="Send a payment reminder for {{ $invoice->number }}?" data-confirm-label="Send">
                             @csrf
                             <button type="submit" class="mf-btn-secondary">Send reminder</button>
                         </form>

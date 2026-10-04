@@ -76,18 +76,97 @@ what prompted the command.
 
 ## Known-failing baseline
 
-**7 failures are expected and are not regressions.** They are stock Laravel
-Breeze scaffolding from the initial commit that never matched this app:
+**None.** The suite reads green; any failure is real.
 
-| Test | Why it fails |
-| --- | --- |
-| `Auth\RegistrationTest` (2) | Self-registration is disabled; the routes don't exist |
-| `Auth\EmailVerificationTest` (3) | Email verification is disabled; `User` doesn't implement `MustVerifyEmail` |
-| `Auth\AuthenticationTest` (1) | Posts `email` to `/login`; this app's field is `login` (username **or** email) |
-| `ProfileTest` (1) | Asserts `email_verified_at` behaviour that doesn't apply |
+Until 2026-10-04 seven stock Laravel Breeze tests failed on every run
+(`Auth\RegistrationTest`, `Auth\EmailVerificationTest`, one case each in
+`Auth\AuthenticationTest` and `ProfileTest`) because they tested
+self-registration and email verification, both deliberately disabled in this
+app. The registration/verification tests, their orphaned controllers and
+views were deleted; the other two were corrected to post the `login` field
+and to stop asserting `email_verified_at` behaviour. If a future Breeze
+upgrade re-scaffolds them, delete them again rather than re-documenting a
+baseline.
 
-Treat an **8th** failure as real. The passing count moves with whatever is in
-the working tree, so it isn't a useful baseline on its own — the failure list is.
+---
+
+## 2026-10-04 — Housekeeping batch (first Plan/Implement cycle)
+
+**Scope:** four long-deferred items cleared in one pass, run under the new
+`planimp.md` protocol — Fable planned (`plan.md`), an Opus session implemented
+(`implemented.md`), Fable reviewed the diff and reran verification. Archived
+in `archive/2026-10-04-housekeeping-batch/`. Suite afterwards: **536 passed,
+0 failed** — the first green run in the project's history.
+
+### Finding 1 — `/stock` showed a batch as available on the day the allocator refused it
+
+`Batch::isExpired()` (`expiry_date->lt(now())`) and `BatchItem::allocatable()`
+(`expiry_date > today`) both treat the expiry day itself as expired;
+`StockOverviewService` alone used `>=`. So for one day per batch `/stock`
+quoted stock that auto-allocate, manual allocate and the picker would all
+decline — a one-line breach of the free-stock invariant ("no surface may show
+as available what the allocator would not hand out"). Was `WORK_IN_PROGRESS.md`
+follow-up #6, "needs an owner"; the owner is the allocator's rule. Now `>`.
+Pinned by `StockOverviewTest::test_a_batch_expiring_today_is_excluded_like_the_allocator_excludes_it`,
+which builds yesterday/today/tomorrow batches and asserts the service and
+`allocatable()` return the same single batch.
+
+### Finding 2 — the seven "known-failing" Breeze tests are gone
+
+`Auth\RegistrationTest`, `Auth\EmailVerificationTest`, their four orphaned
+controllers and two views deleted (a reference grep across `app routes
+resources tests config` was pasted first — every hit was inside a deleted
+file). `AuthenticationTest` now posts the app's `login` field and gains
+username-login and inactive-user cases; `ProfileTest` stops asserting
+`email_verified_at`. Route count unchanged at 157. The *Known-failing
+baseline* section above now says: none.
+
+### Finding 3 — 41 native `confirm()` dialogs replaced by one in-app dialog
+
+Native `confirm()` is unstyleable, untestable and blocks browser automation
+(it froze two testing sessions). Every destructive or irreversible action in
+21 views now carries `data-confirm="…"` (message verbatim), optional
+`data-confirm-label` and `data-confirm-danger`, driven by
+`resources/js/confirm.js` over `layouts/partials/confirm-dialog.blade.php`
+(the Breeze `<x-modal>`), included once in each layout. Two details that
+matter: confirmed submits go through `form.requestSubmit(submitter)` so a
+button's `name`/`value` still posts (`statements/preview` relies on
+`name="send"`), and the confirmed-flag is cleared by `setTimeout(0)` as well as
+on the re-entrant submit, because `requestSubmit` fires no `submit` event when
+constraint validation refuses — otherwise the next click would skip the dialog.
+The two picking buttons that did `if (confirm()) getElementById(…).submit()`
+became `type="submit" form="…"`. If no dialog markup is present (a page outside
+both layouts) the JS falls back to `window.confirm` rather than letting the
+action through. Pinned by `ConfirmDialogTest` (a scan of `resources/views` for
+`confirm(`, both layouts render the dialog, `/users` marks Deactivate as
+danger). Verified with real mouse/keyboard on `/users` (Deactivate → Cancel /
+Escape / backdrop / confirm → Reactivate) and `/picking/3/items/13` (Reopen,
+Undo via `undo-line-form`, Can't finish via `short-line-form`), console clean.
+
+### Also
+
+`WORK_IN_PROGRESS.md` refreshed (January "current issue" removed, next steps
+rewritten, both broken `DEPLOYMENT.md` links fixed, cheese-variant table
+replaced with the real ten). `AdminUserSeeder` re-run on the dev DB to restore
+the documented `admin` login.
+
+### Invariants worth keeping
+
+- **Expiry is strict everywhere**: a batch expiring today is out of `/stock`,
+  the allocator, the picker and `Batch::isExpired()` alike. A new free-stock
+  surface copies `BatchItem::allocatable()`'s `>`.
+- **No native `confirm()` in a view** — `ConfirmDialogTest` fails the build on
+  the first one. New destructive actions use `data-confirm` on the form or the
+  submit button; a button that must submit a *different* form uses the HTML
+  `form="…"` attribute, not JS.
+- **The suite is green.** Any failure is real.
+
+### Not verified in the browser yet
+
+`statements/preview` "Generate & email" (that `name="send"` reaches the
+controller through `requestSubmit`) and the chilled-run Confirm all / Allocate
+all / Dispatch run buttons, which share a page with the `data-confirm-unsaved`
+guard. Listed in `handoff/REPORT.md` for the browser session.
 
 ---
 

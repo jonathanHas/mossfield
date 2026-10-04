@@ -33,6 +33,8 @@
             @endif
 
             {{ $slot }}
+
+            @include('layouts.partials.confirm-dialog')
         </div>
     </body>
 </html>

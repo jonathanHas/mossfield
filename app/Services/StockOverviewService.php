@@ -27,9 +27,10 @@ class StockOverviewService
             ], DB::raw('quantity_allocated - quantity_fulfilled'))
             ->whereHas('batch', function ($q) use ($today) {
                 $q->where('status', 'active')
+                    // Strict, matching BatchItem::allocatable() and Batch::isExpired(): a batch expiring today is already out.
                     ->where(function ($q) use ($today) {
                         $q->whereNull('expiry_date')
-                            ->orWhere('expiry_date', '>=', $today);
+                            ->orWhere('expiry_date', '>', $today);
                     });
             })
             ->get();

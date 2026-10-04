@@ -2,9 +2,35 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-09-12
+**Last Updated**: 2026-10-04
 
-> **Production install runbook lives in [`DEPLOYMENT.md`](./DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+> **Production install runbook lives in [`DEPLOYMENT.md`](../../DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Housekeeping batch (2026-10-04)
+
+Planned in `docs/planImp/plan.md` under the Plan/Implement protocol
+(`planimp.md`), implemented by a separate session. `/stock` now uses the
+allocator's strict expiry rule (a batch expiring today is out everywhere —
+follow-up #6 below, closed); the 7 always-failing Breeze tests are gone and
+the suite reads green; every native `confirm()` is replaced by one shared
+in-app dialog (`layouts/partials/confirm-dialog.blade.php` +
+`resources/js/confirm.js`, driven by `data-confirm` attributes — the
+browser-testing session can now drive destructive actions); this file was
+refreshed.
+
+---
+
+## Recently Completed: Authorisation boundary pass (2026-10-04)
+
+`tests/Feature/AuthorizationBoundaryTest.php` walks the router and checks
+every route for guest / driver / factory / office / admin. Four findings
+fixed: a "Remember me" cookie survived deactivation (token now cycled +
+`EnsureUserIsActive` middleware); `DELETE /orders/{order}` was a 500
+(route removed); `ProductRequest` validated before the policy check;
+four read actions had no `authorize()`. Full write-up in
+`TESTING_AND_FIXES.md` → 2026-10-04.
 
 ---
 
@@ -249,60 +275,6 @@ Phone-first picking surface at `/picking` from the Claude Design handoff (5 scre
 
 ---
 
-## Current Issue: Variable Weight Input Fields Not Rendering
-
-### Problem
-The individual weight input fields for variable-weight cheese items are not displaying in the fulfillment UI at `/order-allocations/{order}`.
-
-### What Should Happen
-When fulfilling cheese wheels (variable weight items), the UI should show:
-- A quantity selector (dropdown)
-- Individual weight input fields for each unit (#1, #2, #3, etc.)
-- A running total of all entered weights
-- The total weight is submitted as `actual_weight_kg`
-
-### What's Currently Happening
-- The "Variable Weight" badge shows correctly
-- The "Weight" column appears in the allocations table
-- The quantity selector and "Fulfill" button appear
-- But the individual weight input rows (#1, #2, #3) are NOT rendering
-- Only "Total: kg" shows with no input fields above it
-
-### Files Involved
-- `resources/views/orders/partials/allocation-items.blade.php` (the variable-weight Fulfill form — was `order-allocations/show.blade.php` before allocation was folded inline on 2026-05-25)
-  - Contains the form with Blade `@for` loops to render weight inputs
-  - JavaScript functions `updateWeightInputs()` and `updateTotal()` at bottom
-- `app/Http/Controllers/OrderAllocationController.php`
-  - `fulfill()` method handles the form submission
-  - Expects `quantity` and `actual_weight_kg` parameters
-
-### Test Order
-- Order 12 (`ORD-20260110-004`)
-- Contains 3 Mossfield Farmhouse Cheese Whole Wheels (variable weight)
-- Allocation #18 has 3 units allocated, 0 fulfilled
-
-### Debugging Steps Tried
-1. Verified `isVariableWeight()` returns `true` for the order item
-2. Cleared view cache (`php artisan view:clear`)
-3. Tried Alpine.js approach - didn't render
-4. Switched to plain Blade `@for` loops with vanilla JavaScript - still not rendering
-
-### Possible Causes to Investigate
-1. **Blade Compilation Issue**: The `@for` loops might not be compiling correctly
-2. **View Caching**: Old cached view might still be served (try hard refresh in browser)
-3. **Conditional Logic**: Check if `$allocation->quantity_remaining > 0` evaluates correctly
-4. **HTML Structure**: Verify the form HTML is actually in the page source (View Source in browser)
-
-### Quick Test
-```bash
-# Check if weight inputs are in the compiled view
-php artisan view:clear
-# Then check raw HTML output:
-curl -s "http://mossfield.local/order-allocations/12" | grep -A5 "weight-row"
-```
-
----
-
 ## Recently Completed Features
 
 ### Order Totals Reflect Actual Fulfilled Weight (2026-05-25)
@@ -442,7 +414,7 @@ Applied the dev-safe subset of the post-Phase-3 operator actions on the shared d
 
 **Gap remaining:** nothing runs `php artisan schedule:run` every minute on this box. The hourly schedule entries are registered but inert until a cron line is added (`DEPLOYMENT.md` §6 has the exact line). Decision pending from user on whether to add the dev cron now or wait for prod.
 
-**New doc:** created [`DEPLOYMENT.md`](./DEPLOYMENT.md) as the single operator runbook for production installs. Mirrored on the mossorders repo.
+**New doc:** created [`DEPLOYMENT.md`](../../DEPLOYMENT.md) as the single operator runbook for production installs. Mirrored on the mossorders repo.
 
 ### Security Review — Phases 1–3 (2026-04-20)
 
@@ -530,41 +502,49 @@ All migrations are up to date including:
 - `2026_01_10_144304_add_actual_weight_to_order_allocations_table`
 - `2026_01_10_144316_add_fulfilled_weight_to_order_items_table`
 - `2026_07_27_120000_add_short_close_to_order_items_table`
+- `2026_09_13_*` (wheel weight at cutting, per-unit fulfilment weights)
 
-### Cheese Variants Configuration
-All cheese wheel variants are marked as variable weight:
+### Cheese Variants Configuration (dev DB, 2026-10-04)
+Every cheese variant is variable-weight. Wheels are weighed per unit; vacuum
+packs are bulk-weighed (one total per line). €/kg pricing is per variant:
 ```
-Mossfield Farmhouse Cheese - Whole Wheel | variable: yes | by_weight: yes
-Mossfield Garlic & Basil Cheese - Whole Wheel | variable: yes | by_weight: yes
-Mossfield Tomato & Herb - Wheel | variable: yes | by_weight: yes
-Mossfield Mature - Whole Wheel | variable: yes | by_weight: yes
+Mossfield Farmhouse Cheese     - Whole Wheel  | variable: yes | by_weight: yes | bulk: no
+Mossfield Farmhouse Cheese     - Vacuum Pack  | variable: yes | by_weight: no  | bulk: yes
+Mossfield Garlic & Basil Cheese- Whole Wheel  | variable: yes | by_weight: no  | bulk: no   ← €40 flat, see SMALL_FIXES judgement
+Mossfield Garlic & Basil Cheese- Vacuum Pack  | variable: yes | by_weight: no  | bulk: yes
+Mossfield Mediterranean Cheese - Whole Wheel  | variable: yes | by_weight: yes | bulk: no
+Mossfield Mediterranean Cheese - Vacuum Pack  | variable: yes | by_weight: no  | bulk: yes
+Mossfield Cumin Cheese         - Whole Wheel  | variable: yes | by_weight: yes | bulk: no
+Mossfield Cumin Cheese         - Vacuum Pack  | variable: yes | by_weight: no  | bulk: yes
+Mossfield Mature Cheese        - Whole Wheel  | variable: yes | by_weight: no  | bulk: no   ← €55 flat, see SMALL_FIXES judgement
+Mossfield Mature Cheese        - Vacuum Pack  | variable: yes | by_weight: no  | bulk: yes
 ```
-
-Vacuum packs remain fixed weight (variable: no, by_weight: no).
 
 ---
 
 ## Next Steps
 
-1. **Fix weight input rendering** - Debug why Blade `@for` loops aren't generating HTML
-2. **Test full fulfillment flow** - Enter weights, submit, verify database
-3. **Test undo fulfillment** - Verify stock restoration works
-4. **Online Orders testing** - Test preview and import with live Mossorders instance
+1. **Decide the write-off question** — `OPEN_QUESTIONS.md` #1. The app has
+   no way to record stock being lost (spoilage, samples, expiry); the
+   reconciliation closes only on cutting waste. Needs Jon's answers on
+   reason codes, whether expiry is a write-off, who may do it and whether it
+   reverses, before any code.
+2. **Browser verification of the two October passes** — authorisation
+   boundaries per role in the UI (nav visibility, not just HTTP), and the
+   new confirm dialog on every converted action.
+3. **Still untested** (from `TESTING_AND_FIXES.md` → *Not covered*): invoicing
+   and VAT through the UI, picking and delivery runs end to end, the online
+   sync, double-submit / back-button / two-tab edits, mobile layout.
+4. **Fulfilment Phase 4** (`FULFILMENT_PLAN.md`): driver route + proof of
+   delivery. Phase 2's dispatch queue is largely superseded by "Dispatch run".
 
-### Follow-ups left open by the 2026-07-26 allocation work
+### Follow-ups from the 2026-07-26 allocation work — both closed
 
-Both are pre-existing divergences that predate that change; it deliberately didn't widen its blast radius to fix them.
-
-5. **`BatchItem::available_quantity` double-counts partially-fulfilled allocations.** `getHoldableQuantityAttribute()` sums `quantity_allocated WHERE fulfilled_at IS NULL`, but the already-fulfilled portion of such an allocation has *already* decremented `quantity_remaining`. `StockOverviewService` uses the corrected `quantity_allocated - quantity_fulfilled`. **So `/stock` and the allocator disagree today.** The chilled-run stock footer deliberately mirrors the **allocator** (so it truthfully predicts what "Allocate all" will take), which means `/chilled-runs` can show slightly *less* free stock than `/stock` for the same variant. Fixing the accessor is the real repair but touches every allocation path.
-6. **Expiry `>` vs `>=`.** Every allocation path (now `BatchItem::allocatable()`) uses strict `>`, matching `Batch::isExpired()`; `StockOverviewService` uses `>=`. One-line divergence, needs an owner.
-
----
-
-## Known Test Noise
-
-`php artisan test` reports **7 pre-existing failures** in `tests/Feature/Auth/{AuthenticationTest,EmailVerificationTest,RegistrationTest}.php` and `tests/Feature/ProfileTest.php`. These are stale Laravel Breeze scaffolding tests for **registration and email verification — both deliberately disabled in this app** (see `CLAUDE.md` → Authentication Flow; the routes were removed, the controllers left behind).
-
-They fail on a clean tree — verified by `git stash`. Don't chase them when a change looks like it broke something; check whether the failing test names are in that set first. Worth deleting or rewriting them at some point so the suite reads green.
+5. `BatchItem::available_quantity` double-counting partially-fulfilled
+   allocations — **fixed 2026-09-12** (audit finding 1; the reservation is
+   `quantity_allocated − quantity_fulfilled` at all eight free-stock sites).
+6. Expiry `>` vs `>=` — **fixed 2026-10-04**: `StockOverviewService` now
+   uses the allocator's strict `>`.
 
 ---
 

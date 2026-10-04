@@ -157,7 +157,7 @@
                     <form action="{{ route('batches.destroy', $batch) }}" method="POST" class="inline">
                         @csrf @method('DELETE')
                         <button type="submit" class="mf-link" style="color: var(--danger);"
-                                onclick="return confirm('Are you sure?')">Delete</button>
+                                data-confirm="Are you sure?" data-confirm-label="Delete" data-confirm-danger>Delete</button>
                     </form>
                 @endcan
             </div>

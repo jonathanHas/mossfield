@@ -80,7 +80,7 @@
                                         <form action="{{ route('products.destroy', $product) }}" method="POST" class="inline">
                                             @csrf @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                    onclick="return confirm('Are you sure?')">Delete</button>
+                                                    data-confirm="Are you sure?" data-confirm-label="Delete" data-confirm-danger>Delete</button>
                                         </form>
                                     @endcan
                                 </div>
@@ -150,7 +150,7 @@
                                                                 <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline">
                                                                     @csrf @method('DELETE')
                                                                     <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                                            onclick="return confirm('Are you sure you want to delete this variant?')">Delete</button>
+                                                                            data-confirm="Are you sure you want to delete this variant?" data-confirm-label="Delete" data-confirm-danger>Delete</button>
                                                                 </form>
                                                             @endcan
                                                         </td>

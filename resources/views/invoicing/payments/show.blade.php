@@ -16,7 +16,7 @@
             </div>
             @can('delete', $payment)
                 <form method="POST" action="{{ route('invoicing.payments.destroy', $payment) }}"
-                      onsubmit="return confirm('Remove this payment? The invoices it settled will go back to outstanding.')">
+                      data-confirm="Remove this payment? The invoices it settled will go back to outstanding." data-confirm-label="Remove" data-confirm-danger>
                     @csrf @method('DELETE')
                     <button type="submit" class="mf-btn-danger">Remove payment</button>
                 </form>

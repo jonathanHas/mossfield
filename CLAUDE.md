@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **`DEPLOYMENT.md`** — production install/upgrade runbook (env vars, MySQL bootstrap, IP allowlist, scheduler cron, smoke tests). Start here for any "how do I deploy / set up a new prod install" question.
 - **`SECURITY_NEXT_STEPS.md`** — security-review tracking doc + token-rotation runbook
 - **`docs/planImp/`** — how the app is being reviewed and improved (as distinct from how it works, here, or how it ships, `DEPLOYMENT.md`); `docs/planImp/README.md` indexes it
-- **`docs/planImp/TESTING_AND_FIXES.md`** — how to run the suites, the 7 known-failing Breeze tests (an 8th failure is real), and the audit log: what was deliberately tested, what broke, and the invariants the fixes established. Start here before touching stock/allocation arithmetic.
+- **`docs/planImp/TESTING_AND_FIXES.md`** — how to run the suites (the suite reads green — any failure is real), and the audit log: what was deliberately tested, what broke, and the invariants the fixes established. Start here before touching stock/allocation arithmetic.
 - **`docs/planImp/RESUME.md`** — the last stopping point (loop position, uncommitted state, baseline, dev DB, how to bring the box up); read it first when resuming after a reboot
 - **`docs/planImp/WORK_IN_PROGRESS.md`** — current in-flight issues and recently completed work (`docs/planImp/FULFILMENT_PLAN.md` is the fulfilment-flow roadmap; `docs/planImp/OPEN_QUESTIONS.md` and `SMALL_FIXES.md` are the decisions-pending and polish lists)
 - **mossorders side:** same split exists at `/var/www/html/mossorders/{README,AGENTS,DEPLOYMENT}.md`
@@ -293,7 +293,7 @@ Mossfield Organic Farm produces three product types:
 - **Row-per-(variant, batch)**: `StockOverviewService` groups items by `product_variant_id|batch_id` so each row tags its own `batch_code` and per-batch `expiry`. Rows sort by variant name then production date (FIFO).
 - **Sold visibility**: milk/yoghurt mirror cheese — `total` is `quantity_produced`, segments break into `available / allocated / sold` (`sold = produced − remaining`); sold cases render with `--state-sold`.
 - **Cheese wheels**: `available / allocated / cut / sold` breakdown; `cut` comes from `source_cutting_logs_count` per batch_item.
-- **Active filter**: only batches with `status = 'active'` AND `(expiry_date IS NULL OR expiry_date >= today)` contribute; closed/expired fall off automatically.
+- **Active filter**: only batches with `status = 'active'` AND `(expiry_date IS NULL OR expiry_date > today)` contribute; closed/expired fall off automatically. Strict, like BatchItem::allocatable() — a batch expiring today is out everywhere (fixed 2026-10-04; was >= here alone).
 - **Total value**: top-of-page euro figure summed from `productVariant->calculatePrice(available_quantity)` so weight-priced cheese is valued correctly.
 
 ### ✅ **Customer & Order Management**

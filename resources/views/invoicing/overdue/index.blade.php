@@ -11,7 +11,7 @@
             </div>
             @if($invoices->isNotEmpty())
                 <form method="POST" action="{{ route('invoicing.overdue.remind-all') }}"
-                      onsubmit="return confirm('Send a reminder for every overdue invoice not already reminded today?')">
+                      data-confirm="Send a reminder for every overdue invoice not already reminded today?" data-confirm-label="Send">
                     @csrf
                     <button type="submit" class="mf-btn-primary">Remind everyone</button>
                 </form>

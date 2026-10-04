@@ -197,7 +197,7 @@
                                                         <form method="POST" action="{{ route('order-allocations.deallocate', $allocation) }}" class="inline">
                                                             @csrf @method('DELETE')
                                                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                                onclick="return confirm('Remove this allocation?')">Remove</button>
+                                                                data-confirm="Remove this allocation?" data-confirm-label="Remove" data-confirm-danger>Remove</button>
                                                         </form>
                                                     @endif
                                                     @if($allocation->quantity_fulfilled > 0)
@@ -209,7 +209,7 @@
                                                                     value="{{ $allocation->quantity_fulfilled }}"
                                                                     class="mf-input w-16 px-2 py-0.5 text-[12px]">
                                                                 <button type="submit" class="mf-link" style="color: var(--warn-ink);"
-                                                                    onclick="return confirm('Undo fulfillment? This will restore stock to the batch.')">Undo</button>
+                                                                    data-confirm="Undo fulfillment? This will restore stock to the batch." data-confirm-label="Undo" data-confirm-danger>Undo</button>
                                                             </div>
                                                         </form>
                                                     @endif
@@ -292,7 +292,7 @@
                         <form method="POST" action="{{ route('orders.items.destroy', [$order, $orderItem]) }}" class="inline">
                             @csrf @method('DELETE')
                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                onclick="return confirm('{{ $isOnlyLine ? 'This is the only item — removing it will cancel the order and return any picked stock to its batch. Continue?' : 'Remove this line? Any picked stock will be returned to its batch.' }}')">{{ $isOnlyLine ? 'Remove (cancels order)' : 'Remove line' }}</button>
+                                data-confirm="{{ $isOnlyLine ? 'This is the only item — removing it will cancel the order and return any picked stock to its batch. Continue?' : 'Remove this line? Any picked stock will be returned to its batch.' }}" data-confirm-label="Remove" data-confirm-danger>{{ $isOnlyLine ? 'Remove (cancels order)' : 'Remove line' }}</button>
                         </form>
                         @unless($settled)
                             {{-- Close short: available whenever the line still has
@@ -304,7 +304,7 @@
                                 <input type="text" name="short_reason" maxlength="255" placeholder="Reason (optional)"
                                     class="mf-input w-40 px-2 py-0.5 text-[12px]">
                                 <button type="submit" class="mf-link" style="color: var(--warn-ink);"
-                                    onclick="return confirm('Close this line short? {{ $orderItem->quantity_remaining }} units will be released back to stock, and won\'t be supplied or billed.')">Close short</button>
+                                    data-confirm="Close this line short? {{ $orderItem->quantity_remaining }} units will be released back to stock, and won't be supplied or billed." data-confirm-label="Close short" data-confirm-danger>Close short</button>
                             </form>
                         @endunless
                     </div>
