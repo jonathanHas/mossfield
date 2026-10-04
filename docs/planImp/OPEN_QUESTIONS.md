@@ -11,7 +11,28 @@ implementation into `handoff/NEXT.md`.
 
 ## 1. The app has no way to record stock being lost
 
-**Raised:** 2026-09-13, after the stock model work · **Status:** open, needs Jon
+**Raised:** 2026-09-13, after the stock model work · **Status:** **decided
+2026-10-04** — implementation is Plan/Implement cycle 7 (`plan.md`, then
+`archive/2026-10-04-write-offs/`).
+
+### Decision (Jon, 2026-10-04)
+
+1. **Reason codes** — a fixed list the office can **extend** (and an optional
+   short **note** on each write-off). Seeded: spoiled, damaged, sample, own
+   use, stocktake, expired, returned.
+2. **Expiry is a write-off.** Office/admin write expired stock off (a
+   one-click "write off everything left, reason: expired" on the batch).
+3. **Who:** office/admin only, logged with who and when.
+4. **Reversible.** A write-off can be reversed; the record stays as history.
+5. **Units and kilograms.** Interpreted for v1 as: a write-off is always a
+   whole number of units, and for variable-weight stock the operator may
+   record the **measured weight of those units** (so the finished-weight
+   model uses the real figure instead of nominal). Partial-weight loss on a
+   unit that stays on the shelf (trim, a salvaged half-wheel) is **not**
+   covered — it would need a sixth state in the weight model; raise it again
+   if it turns out to matter.
+6. Written-off units **count toward finished weight** (the make produced
+   them) and **not toward sellable stock**, as proposed above.
 
 ### The gap
 
@@ -167,8 +188,29 @@ to follow.
 ## 5. Decisions surfaced by the 2026-10-04 end-to-end run
 
 **Raised:** 2026-10-04 (findings in `archive/2026-10-04-e2e-browser-run/implemented.md`)
-· **Status:** open, needs Jon. Each is a rule the app has no opinion on; none
-is broken as such. Answer them in any order — each becomes a one-step plan.
+· **Status:** **seven of eight decided 2026-10-04** (below, per item);
+implementation is Plan/Implement cycle 8. F-38 stays open — Jon wants to go
+through it in more detail.
+
+### Decisions (Jon, 2026-10-04)
+
+- **F-24 — one delivery charge per drop.** A flagged customer pays the run
+  charge once per (customer, run, delivery date); later same-day orders carry
+  €0. (Percentage customers are unaffected — theirs scales with each order.)
+- **F-25 — the credit limit warns.** Confirming an order that would take
+  `outstanding + order total` over the limit shows a warning naming the
+  figures; it does not block.
+- **F-10 — Mature is reachable by conversion only.** Not offered as a fresh
+  production batch.
+- **F-09 — a sanity ceiling, yes.** Design to be set in the plan (a per-type
+  ceiling with an explicit "yes, really" rather than a hard refusal).
+- **F-06 — milk yield must not exceed 100 %.** Bottled volume above the raw
+  milk entered is refused; yield is computed (bottled ÷ raw), not hard-coded.
+- **F-33 — order notes stay internal.** Not printed on the dispatch
+  confirmation or the docket.
+- **F-34 — align per-order dispatch with the run button**: Mark dispatched
+  also requires the loaded tick.
+- **F-38 — open.** See the two sub-items above; to be gone through with Jon.
 
 - **F-24 — one delivery charge per drop, or per order?** A flagged customer
   with two orders for the same run day is charged the run fee twice (€12.30

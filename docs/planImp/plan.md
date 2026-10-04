@@ -1,331 +1,446 @@
-# Loose ends: an allocate crash, a gated reservation sum, an N+1, and three small things
+# Stock write-offs: a fifth state for stock that is lost
 
-Status: ACCEPTED
+Status: READY
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
 
 ## Goal
 
-Close what cycles 4–5 left behind and two defects the Planner found while
-reading for this plan. After it: topping up a reservation from the same batch
-on the order page works instead of crashing; the mature-conversion allocator
-counts reserved wheels the same way every other free-stock surface does; the
-`/batches` page costs the same number of queries whether it shows 2 batches
-or 40; a saved run-sheet row lands under its column headers; the last two
-`/orders` cells don't wrap at phone width; and an unused Breeze component is
-gone.
+Stock can currently leave a batch three ways — sold, cut, converted — so a
+mouldy wheel, a dropped crate, a tasting sample or a batch that expired on the
+shelf has nowhere honest to go: the expired batches on dev still hold 5,907
+units as `active` stock. This cycle adds the **write-off**: office/admin
+record that N units of a batch item were lost, with a reason from an
+extendable list, an optional note, and for weighed stock the measured weight;
+the units leave sellable stock everywhere at once (they come off
+`quantity_remaining`, which every free-stock surface already reads), stay
+counted in the batch's finished weight (the make produced them), and appear
+as a fifth state in the reconciliation
+`on hand + dispatched + cut + converted + written off = produced`. A
+write-off is reversible and stays on the record. Expired stock gets a
+one-click write-off. Decisions: `OPEN_QUESTIONS.md` #1.
 
 ## Context
 
-HEAD `292cbfd` + the staged archive of cycle 5. Suite **612 passed, 0 failed**;
+HEAD `742674c` + the staged archive of cycle 6. Suite **617 passed, 0 failed**;
 any failure is real. `pint --test app tests database routes config` clean.
 Nothing pushed or deployed.
 
-**Facts the steps rely on**
+**The model to extend**
 
-- `OrderItem::allocateFromBatchItem()` (`app/Models/OrderItem.php:116–147`)
-  locks the batch item, checks availability and the line ceiling, then
-  **always** `create()`s an `order_allocations` row. The table is unique per
-  `(order_item_id, batch_item_id)`, so a second allocation from the same batch
-  throws `UniqueConstraintViolationException` → 500 on
-  `POST /order-allocations/{orderItem}/allocate` (found in cycle 5; the
-  cycle-5 test for the "only needs N more" message had to use a second batch
-  item to dodge it). `OrderItem::extendAllocation()` (`:276–307`, private)
-  already does the right thing for `pickFromBatchItem()`: lock, check
-  `available_quantity >= units` (which excludes the row's own unfulfilled
-  reservation), check the line ceiling, widen `quantity_allocated`, clear
-  `fulfilled_at` when under-fulfilled, roll up the line.
-- **Free-stock invariant** (`CLAUDE.md` → Mature Conversion; `TESTING_AND_FIXES.md`
-  → 2026-09-12 audit, finding 1): the reservation is
-  `SUM(quantity_allocated − quantity_fulfilled)` over **all** allocations,
-  **never filtered on `fulfilled_at`** — `fulfilled_at` is stamped on a
-  partial pick (`OrderItem.php:203`) while units are still owed.
-  `CheeseConversionController::index()` (`:34–38`) still has
-  `->withSum(['orderAllocations as quantity_currently_allocated' => fn ($qa)
-  => $qa->whereNull('fulfilled_at')], DB::raw('quantity_allocated - quantity_fulfilled'))`.
-  The view (`cheese-conversion/index.blade.php:11–13`) computes `holdable =
-  remaining − that sum`, so a partially picked reservation makes wheels look
-  holdable that are already owed. `CheeseCuttingController::index()` (`:30–33`)
-  and `BatchController::index()` are ungated — copy them.
-- `BatchItem::wheelStates()` (`app/Models/BatchItem.php:109–128`) reads
-  `getAttribute('converted_wheels') ?? <query>` and
-  `getAttribute('quantity_currently_allocated') ?? <query>`. `withSum` yields
-  **`null`** when there are no matching rows, so every item with no
-  conversions and every item with no allocations runs a live `SUM` — the
-  N+1 the cycle-5 report saw on `/batches` (and `/cheese-cutting`, which
-  eager-loads the same sums). `source_cutting_logs_count` is a `withCount`
-  (0, never null) and is fine. `BatchCreateTest::test_the_index_hides_delete_…`
-  (`:307–340`) already has a `DB::enableQueryLog()` helper that counts the
-  `/batches` queries at 2 and 4 batches but only asserts the deletion-count
-  query; the cycle-5 report says the remaining growth is entirely these SUMs.
-- Run sheet: `_run-table.blade.php:48–58` wraps `<table class="mf-run">` in
-  `<div class="overflow-x-auto">`; `.mf-run thead th { background: var(--bg) }`
-  (`app.css:513`) plus tinted `.col-*` header backgrounds (`:549,550,584`).
-  A scroll container (`overflow-x: auto` makes `overflow-y` compute to
-  `auto` too) traps `position: sticky` inside itself, so a sticky `<thead>`
-  only works when the wrapper isn't a scroll container. The sheet fits at
-  the desktop widths the office uses (~1 000 px for 17 columns); the
-  horizontal scroll matters only below that.
-- `/orders` (`orders/index.blade.php:100–132`): the number and status cells
-  have `whitespace-nowrap` (cycle 5); the Payment cell (`:115–120`) and the
-  actions cell (`:124–130`) don't.
-- `resources/views/components/application-logo.blade.php` is referenced
-  nowhere (grep of `resources` and `app`).
-- Tests: `OrderAllocationConcurrencyTest` (allocation window cases;
-  `test_asking_for_more_than_the_line_needs_says_how_many_it_needs` at
-  `:158` uses a second batch item), `CheeseConversionTest`
-  (`test_held_wheels_are_excluded_from_auto_allocation`), `CheeseCutFreeStockTest`
-  (`test_the_cutting_index_never_gates_the_reservation_on_fulfilled_at` at
-  `:214` is the template for step 2's test), `BatchCreateTest`, `ChilledRunTest`.
+- `BatchItem` (`app/Models/BatchItem.php`): `quantity_produced`,
+  `quantity_remaining`, `quantity_maturing`, `unit_weight_kg`; relations
+  `orderAllocations`, `sourceCuttingLogs`, `targetCuttingLogs`,
+  `sourceConversionLogs`, `targetConversionLogs`. `available_quantity` =
+  `max(0, remaining − outstanding reservations − maturing)`; `holdable_quantity`
+  = `remaining − outstanding reservations`. **Every free-stock surface derives
+  from `quantity_remaining`**, so reducing it is the whole of "leaves sellable
+  stock" — no change needed at the eight sites.
+- `BatchItem::wheelStates()` (`:109`): `cut`, `converted`, `reserved` from
+  eager-loaded aggregates (`array_key_exists`, cycle 6), `sold = produced −
+  remaining − cut − converted`, then `allocated`/`maturing`/`free`. Rendered
+  by `batches/partials/_wheel-strip.blade.php` and `_wheel-legend.blade.php`
+  (colour tokens in `resources/css/stock.css`: `--state-damaged: var(--danger)`
+  exists and is unused).
+- `BatchItem::getWeightBreakdownAttribute()` (`:163–234`): wheels in four
+  states, measured where a measurement exists (dispatched →
+  `actual_weight_kg`; cut → `wheel_weight_kg`), nominal otherwise;
+  `reconciles = on_hand + dispatched + cut + converted === produced`;
+  `nominal_kg` counts on-hand + converted + unweighed cut + unweighed
+  dispatched × unit weight. Packs/milk: `produced × unit` (packs from cuts
+  excluded). `Batch::finished_product_weight` / `weight_coverage` sum these;
+  `BatchController::show()` eager-loads what the breakdown reads.
+- `BatchItem::getQuantitySoldAttribute()` (`:80`) is `produced − remaining`.
+- `StockOverviewService`: simple cards `sold = produced − remaining` (`:121`);
+  wheel rows `sold = produced − remaining − cut − converted` (`:196`);
+  segments arrays at `:131–135`, `:205–211`; `components/stock/cheese-row`
+  renders any `segments` state with `var(--state-{state})`; the index-style
+  eager-loads (`StockOverviewService:21–27`, `BatchController::index():20–35`,
+  `CheeseCuttingController::index():26–33`) carry the counts/sums
+  `wheelStates()` reads.
+- `/batches?status=expired` (cycle 4) matches `status=expired` or active past
+  expiry; the dashboard **Expired stock** tile (`routes/web.php`) counts
+  active, past-expiry batches with `quantity_remaining > 0` and links there;
+  `/stock` cards print an expired note (`stock/partials/_expired-note`).
+  Batch `status` enum: `active | sold_out | expired`.
+- Batch page `batches/show.blade.php`: panels for info (`:45`), items table
+  (`:134`), cutting history (`:189`), the items/actions panel (`:248`) with
+  Cut / hold buttons and the conversion history incl. "Return to farmhouse
+  hold" (`:339`, a `data-confirm` form). `Batch::deletionBlocker()` counts
+  allocations/cuts/conversions from the five `*_count`s the index eager-loads.
+- Admin-ish CRUD pattern to copy: `DeliveryRunController` + `resources/views/delivery-runs/`
+  (index with inline forms; create/edit pages). Policies: `BasePolicy`
+  subclasses registered in `AuthServiceProvider::$policies`. Office routes
+  live in the `role:admin,office` group in `routes/web.php` (`:138+`).
+- Housekeeping that fails tests if missed: `ResetTradingData::WIPE_ORDER`
+  (trading tables, FK order, `batch_items` near the end) / `KEEP` (reference
+  data) — `ResetTradingDataTest` fails on an unclassified table;
+  `BackupService::TABLES` (insert order) — `BackupRestoreTest` round-trips
+  them; `AuthorizationBoundaryTest` needs a fixture for every new route
+  parameter; `ConfirmDialogTest` scans views for `confirm(`;
+  `LayoutFeedbackTest` forbids a second flash region.
+- Seeders: `DatabaseSeeder` calls `AdminUserSeeder`, `ProductSeeder`,
+  `BatchSeeder`, `CustomerSeeder`. Production installs run migrations and
+  selected seeders (`DEPLOYMENT.md`); defaults a feature needs should ship
+  in the **migration** so no deploy step is forgotten.
+- Nav: Production group (`layouts/navigation.blade.php:66`) holds Batches,
+  Cheese Cutting, Mature Conversion for admin/office/factory.
 
 ## Constraints
 
-- The reservation expression stays `quantity_allocated − quantity_fulfilled`
-  over all allocations at every site; this cycle only removes a filter, it
-  never adds one.
-- `allocateFromBatchItem()` keeps its return type (`?OrderAllocation`) and its
-  guards (lock, availability, line ceiling) — widening must pass the same
-  checks.
-- No other behaviour changes; every flash text stays.
-- `npm run build` after CSS changes; `./vendor/bin/pint` on touched PHP.
+- **Units leave via `quantity_remaining` only.** No new column feeds any
+  free-stock expression; the eight sites stay untouched (`TESTING_AND_FIXES.md`
+  → invariants).
+- **Write-offs never touch reserved stock.** The bound is
+  `holdable_quantity` (remaining − outstanding reservations). Held
+  (maturing) wheels **can** be written off — a maturing wheel going mouldy
+  is the main case — and the hold is clamped to what remains.
+- **Reversal keeps the row.** `reversed_at`/`reversed_by` — never delete.
+  Aggregates and the weight model read **active** write-offs only (this is a
+  legitimate filter: a reversed write-off is not a write-off; don't confuse
+  it with the `fulfilled_at` rule).
+- **Written-off units count in finished weight and yield, not in sellable
+  stock** (OPEN_QUESTIONS #1, point 6).
+- Office/admin write, factory read-only (standard `BasePolicy`), driver
+  denied.
+- `data-confirm` on reverse and on the expired bulk action; no new flash
+  region; `npm run build` after CSS; `./vendor/bin/pint` on PHP.
 - **Do not commit.** Planner commits on acceptance. Nothing pushed/deployed.
 
 ## Out of scope
 
-- `OPEN_QUESTIONS.md` #1 and #5.
-- Making the sheet header sticky **inside** a horizontal scroll container
-  (needs a JS-synced header clone); below the breakpoint it just scrolls.
-- Anything in `/orders` beyond the two `whitespace-nowrap`s.
+- Partial-weight loss on a unit that stays in stock (trim/salvage) —
+  recorded as out of scope in OPEN_QUESTIONS #1.
+- Valuing losses (€ per batch), reports, a scheduled "expired → write off"
+  sweep (write-off of expired stock is a manual one-click action).
+- Changing batch `status` automatically (a fully written-off batch simply
+  has 0 remaining; the dashboard tile and `/stock` notes drop it because
+  they filter on `quantity_remaining > 0`).
+- Cycle 8's policy items (delivery per drop, credit-limit warning, Mature
+  conversion-only, sanity ceiling, milk yield, internal notes, dispatch
+  alignment).
 
 ## Steps
 
-### 1. Topping up a reservation from the same batch widens the row (cycle-5 finding)
+### 1. Schema and models
 
-Files: `app/Models/OrderItem.php`, `tests/Feature/OrderAllocationConcurrencyTest.php`
-
-What:
-- In `allocateFromBatchItem()`, after acquiring the lock (inside the
-  transaction), look for an existing row:
-  `$existing = $this->orderAllocations()->where('batch_item_id', $lockedBatchItem->id)->lockForUpdate()->first()`.
-  If found, delegate to `extendAllocation($existing, $lockedBatchItem, $quantity)`
-  and return `$existing->fresh()` on success, `null` on refusal. Otherwise
-  the current insert path. (`extendAllocation()` opens its own
-  `DB::transaction` — nested as a savepoint, fine; it re-locks the batch
-  item, which the outer lock already holds in the same transaction — also
-  fine.) Keep a one-line comment on why: the unique index.
-- Tests (`OrderAllocationConcurrencyTest`): a line of 10, allocate 6 from
-  batch X, then **4 more from X** → one `order_allocations` row with
-  `quantity_allocated = 10`, line `quantity_allocated = 10`, HTTP redirect
-  with the success flash (not 500); a top-up that would exceed the line
-  (6 then 5) → refused with the "only needs 4 more" message, row still 6; a
-  top-up beyond the batch's free stock → refused with the "only N available"
-  message; a top-up on a row that is **partly fulfilled** (6 allocated, 2
-  picked, then +4) → `quantity_allocated = 10`, `quantity_fulfilled = 2`,
-  `fulfilled_at` null. Rewrite the cycle-5 case at `:158` to use the same
-  batch item now that it can.
-
-Check: `php artisan test --filter="OrderAllocationConcurrencyTest|OrderShortSupplyTest|PickingTest"`
-pass. Browser (office, any confirmed order with ≥ 2 lines of stock): allocate
-part of a line from a batch, then allocate the rest from the **same** batch →
-"Allocated N units from batch …", one row in the allocations table.
-
-### 2. The conversion index stops gating on `fulfilled_at` (invariant breach)
-
-Files: `app/Http/Controllers/CheeseConversionController.php`,
-`tests/Feature/CheeseConversionTest.php`
+Files: `database/migrations/2026_10_04_130000_create_write_off_reasons_table.php` (new),
+`database/migrations/2026_10_04_130100_create_stock_write_offs_table.php` (new),
+`app/Models/WriteOffReason.php` (new), `app/Models/StockWriteOff.php` (new),
+`app/Models/BatchItem.php`, `app/Models/Batch.php`, `app/Models/User.php`
 
 What:
-- Remove the `=> fn ($qa) => $qa->whereNull('fulfilled_at')` constraint so the
-  `withSum` matches `CheeseCuttingController::index()` exactly (same
-  `DB::raw('quantity_allocated - quantity_fulfilled')`, no filter). Add the
-  same comment the cutting controller carries about never gating on
-  `fulfilled_at`.
-- Test (`CheeseConversionTest`, modelled on `CheeseCutFreeStockTest:214`): a
-  5-wheel item with an allocation of 3 of which **1 is picked**
-  (`quantity_fulfilled = 1`, `fulfilled_at` set, `quantity_remaining` 4) →
-  GET `/cheese-conversion` as office renders that card with `matureCard(2, 0)`
-  (holdable = 4 remaining − 2 still owed), **not** `matureCard(4, 0)`. Also
-  POST hold with `quantity = 3` → refused (the server-side cap uses
-  `holdable_quantity`, which is ungated — this pins that view and server
-  agree).
-- Paste `grep -rn "whereNull('fulfilled_at')" app` into the report — the
-  only hit may be the docblock at `app/Models/BatchItem.php:~311` that
-  explains why the filter was removed; no **code** hit. (`fulfilled_at` is
-  still *written* in several places; that's fine.)
+- `write_off_reasons`: `id`, `code` (string 40, unique, slug), `label`
+  (string 80), `is_active` (bool, default true), `sort_order` (unsigned
+  smallint, default 0), timestamps. **The migration inserts the defaults**
+  (`insertOrIgnore` on `code`): `spoiled` "Spoiled / mouldy", `damaged`
+  "Damaged / dropped", `sample` "Sample / tasting", `own_use` "Own use",
+  `stocktake` "Stocktake adjustment", `expired` "Expired", `returned`
+  "Customer return (not resaleable)", `sort_order` 10, 20, … 70.
+- `stock_write_offs`: `id`, `batch_item_id` FK (`constrained()->cascadeOnDelete()`,
+  like the other child tables — the delete guard is `Batch::deletionBlocker()`,
+  step 6), `write_off_reason_id` FK (`constrained()->restrictOnDelete()`),
+  `quantity` (unsigned int), `weight_kg` (decimal 8,3 nullable — the
+  measured weight of the written-off units, variable-weight variants only),
+  `note` (string 255 nullable), `written_off_on` (date), `written_off_by`
+  FK users (`nullOnDelete`), `reversed_at` (timestamp nullable),
+  `reversed_by` FK users nullable (`nullOnDelete`), timestamps. Index
+  `(batch_item_id, reversed_at)`.
+- `WriteOffReason`: fillable `code, label, is_active, sort_order`; scope
+  `active()`; `writeOffs()` hasMany; `isInUse()` = `writeOffs()->exists()`.
+- `StockWriteOff`: fillable all of the above; casts `weight_kg decimal:3`,
+  `written_off_on date`, `reversed_at datetime`; `batchItem()`, `reason()`,
+  `writtenOffBy()`, `reversedBy()`; scope `active()` (`whereNull('reversed_at')`);
+  `isReversed()`.
+- `BatchItem::writeOffs()` hasMany; `BatchItem::getWrittenOffUnitsAttribute()`
+  reads `written_off_units` when eager-loaded (`array_key_exists`, the
+  cycle-6 rule) else sums active rows. `getQuantitySoldAttribute()` becomes
+  `max(0, produced − remaining − written_off_units)`.
+- `Batch::writeOffs()` hasManyThrough batch_items (like `cuttingLogs()`).
+- `User::stockWriteOffs()` hasMany (optional, for the audit list).
 
-Check: `php artisan test --filter="CheeseConversionTest|CheeseCutFreeStockTest"`
-pass; the grep is empty.
+Check: `php artisan migrate` clean; `php artisan tinker --execute='echo
+App\Models\WriteOffReason::count();'` → 7; `php artisan migrate:rollback
+--step=2 && php artisan migrate` round-trips.
 
-### 3. `wheelStates()` trusts a loaded null (the `/batches` N+1)
+### 2. Recording and reversing — the service
 
-Files: `app/Models/BatchItem.php`, `tests/Feature/BatchCreateTest.php`
-
-What:
-- In `wheelStates()`, decide "was it eager-loaded" with
-  `array_key_exists('converted_wheels', $this->getAttributes())` (and the
-  same for `quantity_currently_allocated`), treating a loaded `null` as 0;
-  only query when the key is absent. Keep the relation-loaded fallbacks.
-  Apply the same `array_key_exists` test to `source_cutting_logs_count` for
-  symmetry.
-- Test: extend `BatchCreateTest::test_the_index_hides_delete_on_a_batch_that_cannot_be_deleted_without_extra_queries`
-  (or add a sibling) to assert the **total** `/batches` query count is the
-  same at 2 and at 4 cheese batches, where at least one batch item has no
-  allocations and no conversions (the null case). If something *else* still
-  grows with the batch count, don't paper over it — report the queries and
-  set the assertion to what you can justify, with the reason.
-- Also GET `/cheese-cutting` and `/cheese-conversion` in the same test with
-  the same before/after and assert they don't grow either (they eager-load
-  the same sums).
-
-Check: `php artisan test --filter="BatchCreateTest|CheeseCutFreeStockTest|ConsolidationPassTest"`
-pass; the report quotes the before/after query counts.
-
-### 4. A saved sheet row lands under its headers (cycle-5 note)
-
-Files: `resources/views/chilled-runs/partials/_run-table.blade.php`,
-`resources/css/app.css`
+Files: `app/Services/StockWriteOffService.php` (new), `app/Services/InvoicingException.php`
+(reuse pattern — or a new `App\Services\StockException`), `tests/Feature/StockWriteOffTest.php` (new)
 
 What:
-- The wrapper becomes `class="overflow-x-auto lg:overflow-visible"`, so at
-  `lg` and up the table is not inside a scroll container and sticky works;
-  below `lg` it still scrolls sideways and the header simply scrolls away.
-- `.mf-run thead th { position: sticky; top: 0; z-index: 2; }` (the existing
-  `background: var(--bg)` and the `.col-*` tints keep the body from showing
-  through). The sticky flash region is `z-index: 30`, so a visible flash
-  sits above the header; once dismissed, `top: 0` is exactly right.
-- Give the sheet's `<tr id="stop-…">`s a larger `scroll-margin-top` to clear
-  the header row — measure the header height in the browser (it is two rows:
-  group row + column row) and set `scroll-mt-[Npx]` accordingly (or a
-  `.mf-run tbody tr { scroll-margin-top: … }` rule).
+- `record(BatchItem $item, WriteOffReason $reason, int $quantity, ?float $weightKg,
+  ?string $note, CarbonInterface $on, User $by): StockWriteOff` in one
+  `DB::transaction` with `lockForUpdate()` on the batch item:
+  - refuse `quantity < 1`; refuse `quantity > holdable_quantity` with the
+    message `Only N units can be written off — M are reserved for orders.
+    Release them first.` (M = outstanding reservations when they bite,
+    else the plain bound);
+  - refuse `weight_kg` on a non-variable-weight variant; refuse
+    `weight_kg` > 3 × nominal × quantity when a nominal exists (the cycle-3
+    bound, same message family);
+  - refuse an inactive reason; refuse `on` before the batch's production
+    date or after today;
+  - `quantity_remaining −= quantity`; then
+    `quantity_maturing = min(quantity_maturing, max(0, quantity_remaining −
+    outstanding reservations))`;
+  - create the row; return it.
+- `reverse(StockWriteOff $wo, User $by): void` — refuse if already reversed;
+  `quantity_remaining += quantity` (sanity: refuse if that would exceed
+  `quantity_produced` — it can't, but say so if it would); stamp
+  `reversed_at/by`. **Does not** restore a maturing hold (note in the
+  flash: "…returned to free stock").
+- `writeOffExpired(Batch $batch, ?string $note, User $by): Collection` — for
+  every item of a batch whose `isExpired()` is true, record
+  `holdable_quantity` units with reason `expired`; skip items with 0; return
+  the rows; refuse (exception) when the batch isn't expired or nothing is
+  writable.
+- Tests (`StockWriteOffTest`, new; fixtures in the file's own `setUp`, as
+  `CheeseConversionTest` does): record reduces `quantity_remaining` and the
+  units vanish from `BatchItem::available_quantity`, `freeStockByVariant()`,
+  `/stock`'s available segment, the cutting index and the picking batch
+  chooser (five sites, one assertion each — the point of the invariant);
+  over-reserved refused with the message; a held wheel written off clamps
+  `quantity_maturing`; weight refused on milk; weight bound; inactive reason
+  refused; date bounds; reverse restores and stamps; double reverse refused;
+  `writeOffExpired` writes off every item and skips a non-expired batch;
+  `quantity_sold` excludes write-offs.
 
-Check: `npm run build`; browser at 1408 px: edit a row far down the sheet,
-Save → the row lands **below** the column headers, which stay visible while
-scrolling; dismiss the flash → the header is flush at the top. At 500 px the
-sheet still scrolls sideways. No test (CSS).
+Check: `php artisan test --filter=StockWriteOffTest` pass.
 
-### 5. The last two `/orders` cells don't wrap (cycle-5 note)
+### 3. The fifth state in the weight model and the wheel strip
 
-Files: `resources/views/orders/index.blade.php`
-
-What: `whitespace-nowrap` on the Payment `<td>` and the actions `<td>`.
-
-Check: browser at 500 px — "Paid · inv" and "View · Edit" each on one line.
-
-### 6. Delete the unused Breeze logo
-
-Files: `resources/views/components/application-logo.blade.php` (delete)
-
-What: `grep -rn "application-logo" resources app tests` first and paste it
-(expect only the file itself); then delete the file.
-
-Check: `php artisan view:cache && php artisan view:clear` clean;
-`php artisan test --filter="AuthenticationTest|ErrorPagesTest"` pass.
-
-### 7. Docs
-
-Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`
+Files: `app/Models/BatchItem.php`, `app/Services/StockOverviewService.php`,
+`app/Http/Controllers/BatchController.php`, `app/Http/Controllers/CheeseCuttingController.php`,
+`resources/views/batches/partials/_wheel-strip.blade.php`,
+`resources/views/batches/partials/_wheel-legend.blade.php`,
+`resources/views/components/stock/cheese-row.blade.php` (only if its state
+list is hard-coded), `resources/css/stock.css`,
+`tests/Feature/BatchFinishedWeightTest.php`, `tests/Feature/StockOverviewTest.php`,
+`tests/Feature/StockWriteOffTest.php`
 
 What:
-- `CLAUDE.md` → Order Allocation: `OrderItem::allocateFromBatchItem()` widens
-  an existing `(order_item, batch_item)` row via `extendAllocation()` — the
-  table is unique per pair, so a second allocation from the same batch is a
-  top-up, not a new row.
-- Mature Conversion → the "eight free-stock sites" sentence: state plainly
-  that `CheeseConversionController::index()` was the one still gating on
-  `fulfilled_at` until 2026-10-04 and that **no site may** (the grep in step
-  2 is the check).
-- Wheel & Vac-Pack Visualization: `wheelStates()` reads the eager-loaded
-  sums by `array_key_exists`, because `withSum` returns null for an empty
-  set — a `??` would re-query.
-- Chilled Run Sheet → Views/CSS: the header is sticky at `lg+`; below that
-  the wrapper scrolls.
-- `WORK_IN_PROGRESS.md`: *Recently Completed: Loose ends (2026-10-04)*.
+- **Eager-loads**: `BatchController::index()`, `CheeseCuttingController::index()`
+  and `StockOverviewService::build()` add
+  `->withSum(['writeOffs as written_off_units' => fn ($q) => $q->whereNull('reversed_at')], 'quantity')`
+  next to `converted_wheels`. `BatchController::show()` adds
+  `'batchItems.writeOffs.reason'` and `'batchItems.writeOffs.writtenOffBy'`.
+- **`wheelStates()`**: `written_off` from the loaded sum (null → 0) else a
+  query; `sold = max(0, produced − remaining − cut − converted − written_off)`;
+  `remaining = max(0, produced − cut − converted − sold − written_off)`;
+  return it in the array. Strip: a circle in `var(--state-damaged)` with
+  title "Written off" placed after converted; legend and the numeric
+  summary print `N written off` (drop when 0, as the others). Rename the
+  token to `--state-written-off` (keep `--state-damaged` as an alias) so the
+  stock component's `var(--state-{{ $state }})` resolves for a segment key
+  `written_off` — check how `cheese-row` maps keys to tokens (underscore vs
+  hyphen) and make them agree.
+- **`weight_breakdown`**: new key `written_off` (units) for every kind;
+  wheels: each active write-off adds its `quantity` to `written_off`; when
+  `weight_kg` is set it adds to `weighed` (by `quantity`) and `measured_kg`,
+  else to a `writtenOffNominalUnits` that joins the `nominal_kg` product;
+  `reconciles = on_hand + dispatched + cut + converted + written_off ===
+  produced`. Packs/milk: `written_off` units counted but **`nominal_kg`
+  unchanged** (produced × unit — they were made). Update the docblock's
+  state list.
+- **Batch page coverage line**: "N of M wheels weighed" keeps counting
+  write-offs with a weight as weighed.
+- **`StockOverviewService`**: simple cards `sold = max(0, produced − remaining −
+  written_off)` and a `written_off` segment; wheel rows `sold = … −
+  written_off` and a `written_off` segment after `converted`; packs likewise.
+  `buildCheeseCard`'s `tag`/totals include it where `sold` is summed.
+- Tests: `BatchFinishedWeightTest` — extend the reconciliation case with one
+  wheel written off **with** a weight (measured, `weighed` +1) and one
+  **without** (nominal), asserting the five states sum to produced and
+  `finished_product_weight` still equals the made weight; a milk batch with
+  a write-off keeps `nominal_kg = produced × unit` and `written_off = N`.
+  `StockOverviewTest` — a written-off bottle shows in a `written off`
+  segment and not in `sold`. `StockWriteOffTest` — `/batches` card summary
+  reads "… · 2 written off · …" and the strip has two `--state-written-off`
+  circles; the index query count doesn't grow (extend the cycle-6 flat-count
+  test's fixture with a write-off).
 
-Check: `grep -n "extendAllocation\|array_key_exists\|lg:overflow-visible" CLAUDE.md` → hits.
+Check: `php artisan test --filter="BatchFinishedWeightTest|StockOverviewTest|StockWriteOffTest|BatchCreateTest|ConsolidationPassTest"`
+pass.
+
+### 4. Routes, policies, controller
+
+Files: `routes/web.php`, `app/Policies/StockWriteOffPolicy.php` (new),
+`app/Policies/WriteOffReasonPolicy.php` (new), `app/Providers/AuthServiceProvider.php`,
+`app/Http/Controllers/StockWriteOffController.php` (new),
+`app/Http/Requests/StockWriteOffRequest.php` (new),
+`tests/Feature/StockWriteOffTest.php`, `tests/Feature/AuthorizationBoundaryTest.php`
+
+What:
+- Policies: both `extends BasePolicy` (office write, factory view, driver
+  deny); register.
+- Routes in the **office group**:
+  `POST /batches/{batch}/write-offs` → `store` (`batches.write-offs.store`);
+  `POST /batches/{batch}/write-offs/expired` → `storeExpired`
+  (`batches.write-offs.expired`); `POST /write-offs/{writeOff}/reverse` →
+  `reverse` (`write-offs.reverse`).
+- `StockWriteOffRequest::authorize()` = `can('create', StockWriteOff::class)`
+  (the cycle-3 rule for FormRequests); rules: `batch_item_id` required,
+  exists, **belongs to the route batch** (closure rule);
+  `write_off_reason_id` required, exists, active; `quantity` required int
+  min 1; `weight_kg` nullable numeric min 0.001; `note` nullable max 255;
+  `written_off_on` required date. Service exceptions → `redirect()->route('batches.show',
+  $batch)->withFragment('write-offs')->withErrors([...])->withInput()`;
+  success → same fragment with the flash `Written off N × {variant} — {reason}.`
+- `reverse()`: `authorize('update', $writeOff)`; service; flash `Write-off
+  reversed — N units returned to free stock.`; redirect to the batch page
+  fragment.
+- `storeExpired()`: `authorize('create')`; `note` nullable; flash lists what
+  was written off per item.
+- Tests: factory 403 on all three; office succeeds; a `batch_item_id` from
+  another batch → 422; `AuthorizationBoundaryTest::buildFixtures()` gains a
+  `writeOff` row and a `write_off_reason` (step 5 adds that parameter).
+
+Check: `php artisan test --filter="StockWriteOffTest|AuthorizationBoundaryTest"` pass.
+
+### 5. Reasons are manageable
+
+Files: `app/Http/Controllers/WriteOffReasonController.php` (new),
+`resources/views/write-off-reasons/index.blade.php` (new), `routes/web.php`,
+`resources/views/layouts/navigation.blade.php`, `tests/Feature/StockWriteOffTest.php`
+
+What:
+- `Route::resource('write-off-reasons', …)->only(['index', 'store', 'update'])`
+  in the office group (no destroy: a used reason is **deactivated**, an
+  unused one may be deleted — add `destroy` guarded by `isInUse()` → flash
+  error, if you prefer; either way no orphaned write-offs).
+- One page: the list (label, code, active, in-use count) with inline
+  rename / activate-deactivate forms, and an "Add reason" form (label →
+  code auto-slugged server-side, unique). Pattern: `delivery-runs/index`.
+- Nav: under Production for admin/office only — "Write-off reasons" is
+  admin housekeeping, so put it in the **Admin** group beside Users (or
+  Miscellaneous — your call, say which), not in the factory's view.
+- Tests: add/rename/deactivate; deactivated reason absent from the batch
+  page's select and refused by the service; factory 403.
+
+Check: `php artisan test --filter=StockWriteOffTest` pass.
+
+### 6. The batch page: record, see, reverse; the expired one-click
+
+Files: `resources/views/batches/show.blade.php`,
+`resources/views/batches/partials/_write-offs.blade.php` (new),
+`resources/views/batches/partials/batch-card.blade.php`, `app/Models/Batch.php`,
+`app/Http/Controllers/BatchController.php`, `resources/views/dashboard.blade.php`,
+`resources/views/stock/partials/_expired-note.blade.php`, `tests/Feature/StockWriteOffTest.php`
+
+What:
+- New panel **Write-offs** (`id="write-offs"`, `scroll-mt-20`) after the
+  cutting history: the form (`@can('create', StockWriteOff::class)`): item
+  `<select>` (hidden when the batch has one item), quantity, weight (shown
+  only for a variable-weight variant — Alpine on the item select, label
+  "Measured weight of these N units (kg)", optional), reason `<select>` of
+  active reasons with a "Manage reasons" link, note, date (default today);
+  then the history table: date · item · qty · kg · reason · note · by ·
+  Reverse (`data-confirm="Reverse this write-off? N units go back into free
+  stock." data-confirm-label="Reverse"`); reversed rows struck through with
+  "reversed {date} by {name}". Factory sees the table, no forms.
+- **Expired one-click**: when `$batch->isExpired()` and any item has
+  `holdable_quantity > 0`, a danger-tone button in the batch header
+  **"Write off expired stock (N units)"** with `data-confirm` naming the
+  units and the reason, posting `batches.write-offs.expired` (optional note
+  in the dialog is not possible — accept none; the service writes the note
+  "Expired — written off from the batch page").
+- Info panel: a **Written off** row ("N units · X kg measured") when > 0;
+  the reconciliation warning text gains the fifth term.
+- Card (`batch-card`): an expired card's "Expired" tag is followed by a
+  "Write off →" link to the batch page `#write-offs` when the batch still
+  has holdable units; `Batch::deletionBlocker()` and `dependentCounts()`
+  count write-offs (`stock_write_offs_count` via `withCount` on the index
+  eager-load — reversed rows count too; they're history).
+- Dashboard tile sub-line "write off or close" → "write off" linking as now;
+  `/stock` expired note unchanged (already links to the expired list).
+- Tests: the panel renders for office with the form and for factory without
+  it; a POST writes off and the page shows the row; reverse works through
+  the UI route; the expired button appears only on an expired batch with
+  stock and writes everything off; the card link appears; `deletionBlocker`
+  names write-offs.
+
+Check: `php artisan test --filter="StockWriteOffTest|BatchCreateTest"` pass.
+Browser as office: `/batches/19` (M230726, expired, 951 left) → "Write off
+expired stock (951 units)" → dialog → the panel lists one row per item,
+`/stock` milk note drops from 4 expired batches to 3, the dashboard tile from
+5 to 4; reverse one row → back; on G010426 write off 1 wheel at 4.900 kg
+reason Spoiled → strip shows a red circle, coverage counts it weighed,
+finished weight unchanged, `/cheese-cutting` shows one fewer free wheel.
+
+### 7. Housekeeping the suite insists on
+
+Files: `app/Console/Commands/ResetTradingData.php`, `app/Services/BackupService.php`,
+`tests/Feature/BackupRestoreTest.php`, `tests/Feature/ResetTradingDataTest.php`
+
+What:
+- `ResetTradingData::WIPE_ORDER`: `stock_write_offs` **before** `batch_items`
+  (FK order); `KEEP`: `write_off_reasons`.
+- `BackupService::TABLES`: `write_off_reasons` after `users`;
+  `stock_write_offs` after `batch_items` (and after `users` — it references
+  both).
+- Tests: `ResetTradingDataTest` passes as-is once classified (that's the
+  check); `BackupRestoreTest` round-trip includes a write-off and a custom
+  reason and restores both.
+
+Check: `php artisan test --filter="ResetTradingDataTest|BackupRestoreTest"` pass.
+
+### 8. Docs
+
+Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`, `README.md`
+
+What:
+- `CLAUDE.md`: a new **Stock Write-offs** section (model, the
+  `holdable_quantity` bound, maturing clamp, reversal keeps the row,
+  active-only aggregates, the five-state reconciliation, the eager-load key
+  `written_off_units`, routes/policies, reasons CRUD, the expired one-click);
+  update **Finished weight & yield** (five states), **Wheel & Vac-Pack
+  Visualization** (the `written_off` state and token), **Stock Overview**
+  (segment), **Resetting Dev Trading Data** (the two tables' classification),
+  and the Business Intelligence bullet that said losses can't be recorded.
+- `README.md` → Implemented Features: one bullet.
+- `WORK_IN_PROGRESS.md`: *Recently Completed: Stock write-offs (2026-10-04)*.
+
+Check: `grep -n "Stock Write-offs\|written_off_units\|writeOffExpired" CLAUDE.md` → hits.
 
 ## Verification
 
 1. `php artisan test` → **0 failed**; record the count.
 2. `./vendor/bin/pint --test app tests database routes config` → clean.
 3. `npm run build` → ok.
-4. `grep -rn "whereNull('fulfilled_at')" app` → only the `BatchItem.php` docblock.
-5. `grep -rn "application-logo" resources app tests` → nothing.
-6. `git status --short` → only files this plan names (+ the staged archive).
-7. Browser checks for steps 1, 4, 5 with real input; console clean.
-8. Dev-DB probe: step 1's browser check may create reservations — use an
-   existing confirmed/preparing E2E order (14 is `preparing` with 12 reserved)
-   or a tagged probe you cancel; nothing else moves.
+4. `php artisan migrate:status | tail -4` shows both migrations ran;
+   `php artisan tinker --execute='echo App\Models\WriteOffReason::count();'` → 7.
+5. `git status --short` → only files this plan names (+ the staged archive).
+6. Browser checks from step 6 with real input; console clean.
+7. Dev-DB probe: the browser checks **will** write off real expired dev stock
+   (M230726) and one G010426 wheel — that's the feature working; reverse the
+   G010426 one so its lineage numbers stay as `RESUME.md` records them, and
+   leave the expired write-off in place (it is correct). Record before/after
+   counts of `stock_write_offs`, `batch_items.quantity_remaining` for the
+   touched items, and the dashboard tile.
 
 ## Risks
 
-- **Nested transactions in step 1**: `extendAllocation()` wraps its own
-  `DB::transaction`; inside the outer one it becomes a savepoint. The outer
-  `lockForUpdate` on the batch item is held by the same connection, so the
-  inner re-lock doesn't deadlock. If MySQL complains, call the extension
-  logic without the inner transaction (extract a `widenLockedAllocation()`
-  that assumes the lock is held, and have both callers use it).
-- **Step 2 may change what the allocator shows on dev**: any card whose
-  reservations were partly picked will show fewer holdable wheels. That's
-  the correct number; note any card that changes.
-- **Step 3's total-count assertion** can expose another N+1; the plan says
-  report it, don't hide it.
-- **Sticky header at `lg+`** relies on the table fitting; if a run has many
-  cheese columns the table may overflow its panel without a scroll container
-  at `lg`. Check with the widest dev run (17 columns) and say what you saw;
-  if it overflows, use `xl:` instead.
+- **Reconciliation tests**: every existing fixture must still reconcile with
+  `written_off = 0`; the new term defaults to 0 when the relation/aggregate
+  is absent — don't make `weight_breakdown` lazy-load `writeOffs` (the
+  docblock's "reads only LOADED relations" rule). `BatchController::show()`
+  loads it; for other callers an unloaded relation must read as zero, not
+  as a query — mirror how `sourceCuttingLogs` is handled.
+- **`whereNull('reversed_at')` is a legitimate filter.** Say so in a comment
+  where it's used so a future reader doesn't "fix" it like the
+  `fulfilled_at` one.
+- **The maturing clamp** can silently shrink a hold; the flash must say
+  "hold reduced to N" when it does.
+- **Expired one-click on a batch with reservations**: it writes off only the
+  holdable units and the flash must list what was skipped and why.
+- **State key spelling**: `written_off` in PHP arrays vs `written-off` in CSS
+  tokens — one mapping, tested by the strip's rendered class/style.
+- **Migration defaults**: `insertOrIgnore` keyed on `code` so re-running on a
+  DB that already has reasons doesn't duplicate; the test DB gets them from
+  the migration too (RefreshDatabase).
 
 ## Review
 
-Reviewed 2026-10-04 against `implemented.md` (Status: DONE, 351 lines, read to
-the end) and the full diff. Planner reran: `php artisan test` → **617 passed,
-0 failed** (+5); `pint --test … config` → PASS 277 files; `npm run build` ok;
-`grep "whereNull('fulfilled_at')" app` → docblock only; no `application-logo`
-reference; dev DB: orders 24 (probe 25 cancelled, 0 allocation rows),
-allocations 33, payments 4, invoices 7.
-
-### Criteria — all seven pass
-
-1 `allocateFromBatchItem()` locks the batch item, looks up the existing pair
-under `lockForUpdate`, delegates to `extendAllocation()` and returns the
-fresh row; five test cases including fully-picked-then-widened (stamp
-cleared); browser: 6 + 4 from the same batch → one row of 10, where it was a
-500. 2 The gate is gone; the test pins `matureCard(2, 0)` and the server's
-refusal of a hold of 3; red-checked. 3 `array_key_exists` for all three
-sums; `/batches` 12→18 became **6→6**, `/cheese-cutting` 10→16 became
-**4→4**, `/cheese-conversion` flat at 5 — nothing else grows. 4 Sticky
-`<thead>` at `xl+` in display mode (deviations 2–6, all right: the sheet
-overflowed at `lg`; `.mf-panel` clips; edit mode is ~35 px wider; Chrome
-mis-paints a stuck collapsed header; and the header must sit **under** the
-flash that is always showing right after a save — `--mf-feedback-h`,
-measured as the page parses, zeroed on dismiss). Browser: row lands at 150
-under a header at 70–144; dismiss → header flush at 0. 5 Two nowraps.
-6 Deleted, grep empty. 7 Docs.
-
-### Deviations — all accepted
-
-1 baseline; 2 `xl:` (the Risks allowed it); 3 lifting `.mf-panel`'s clip;
-4 scroll wrapper kept while editing; 5 `<thead>` sticky + `border-collapse:
-separate` (diagnosed, not guessed); 6 `--mf-feedback-h` touching the
-feedback partial — necessary to meet the step's own goal; **7 corrects the
-plan's Context**: `fulfillAllocation()` stamps `fulfilled_at` only on a
-*full* pick (`quantity_fulfilled >= quantity_allocated`), not on a partial
-one. The gating bug's practical reach is therefore narrower than the plan
-said — a stamped row owes units only after it is widened (which
-`extendAllocation()` now un-stamps) or via legacy data — but the invariant
-is consistency across all sites and the fix stands. Recorded in
-`TESTING_AND_FIXES.md`. 8 tinker probe, cancelled.
-
-### Notes for Planner — decisions
-
-- **The `xl` fit is tight** (983 px in 985 with 11 columns): a third cheese
-  column would overflow display mode at 1280. → **Follow-up** (next polish
-  batch): compute `$stickyHead` from `$qtyColCount` (sticky only when the
-  sheet fits, e.g. ≤ 9 quantity columns) rather than from the breakpoint
-  alone. Logged in `TESTING_AND_FIXES.md`.
-- `.scroll-mt-20` → `calc(var(--mf-feedback-h) + 1rem)` for the order-page
-  lines → same follow-up batch.
-- Context correction → recorded (above).
-
-Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-04-loose-ends`
-and move `plan.md` + `implemented.md` there.
+(Planner fills this in after reading implemented.md and the diff.)
