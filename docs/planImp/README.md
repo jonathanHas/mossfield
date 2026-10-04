@@ -13,6 +13,8 @@ or how it ships (`DEPLOYMENT.md`, also at the root).
 | **`FULFILMENT_PLAN.md`** | The phased roadmap for the picking → dispatch → delivery flow from the Claude Design handoff, with phases ticked as they land. | Resuming fulfilment-flow work from the next unchecked phase. |
 | **`RESUME.md`** | The last stopping point: where the handoff loop is, what's uncommitted, the test baseline, the dev-DB state, how to bring the box up. | Coming back after a reboot or a gap — "Read `docs/planImp/RESUME.md`, then do the next handoff." |
 | **`handoff/`** | The working channel between the browser-testing session (writes `NEXT.md`) and Claude Code (writes `REPORT.md`). `handoff/README.md` has the protocol and the expected shape of a report. | "Do the next handoff." |
+| **`planimp.md`** | The Plan/Implement protocol: a Fable session plans (`plan.md`), an Opus session implements (`implemented.md`), the planner reviews the diff. Kickoff prompts are in the file. Accepted cycles move to `archive/`. | A fix big enough to want a written plan and an independent implementer. |
+| **`plan.md`** / **`implemented.md`** | The current Plan/Implement cycle — check the `Status:` line at the top of each. Empty between cycles. | "You are the Planner / Implementer." |
 
 `SECURITY_NEXT_STEPS.md` stays at the root on purpose: it is the token-rotation
 runbook that `DEPLOYMENT.md` and `README.md` point at, so it belongs with the
