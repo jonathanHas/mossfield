@@ -16,10 +16,12 @@ class Product extends Model
         'maturation_days',
         'shelf_life_days',
         'is_active',
+        'conversion_only',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
+        'conversion_only' => 'boolean',
         'maturation_days' => 'integer',
         'shelf_life_days' => 'integer',
     ];

@@ -27,7 +27,7 @@ class InvoiceService
     /**
      * Bill one order on its own invoice.
      *
-     * @throws InvoicingException when the order isn't ready or is already billed
+     * @throws InvoicingException when the order hasn't been dispatched or is already billed
      */
     public function issueForOrder(Order $order, ?User $by = null, bool $allowConsolidated = false): Invoice
     {
@@ -40,8 +40,10 @@ class InvoiceService
                 throw new InvoicingException('This order has already been invoiced.');
             }
 
-            if (! $locked->hasReachedReady()) {
-                throw new InvoicingException('An invoice is only available once the order has reached ready status.');
+            // Only once it has left (OPEN_QUESTIONS #5, F-38a): a ready order can
+            // still change at the van. DispatchService flips to dispatched first.
+            if (! in_array($locked->status, ['dispatched', 'delivered'], true)) {
+                throw new InvoicingException("An invoice is issued when the order is dispatched — this one hasn't left yet.");
             }
 
             $customer = $locked->customer()->firstOrFail();

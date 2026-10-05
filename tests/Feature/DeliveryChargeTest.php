@@ -391,6 +391,119 @@ class DeliveryChargeTest extends TestCase
             ->assertDontSee('Delivery charge');
     }
 
+    // ── Once per drop (OPEN_QUESTIONS #5, F-24) ──────────────────────
+
+    private function storeOrder(Customer $shop, string $deliveryDate, int $qty = 4)
+    {
+        return $this->actingAs(User::factory()->create())->post(route('orders.store'), [
+            'customer_id' => $shop->id,
+            'order_date' => today()->toDateString(),
+            'delivery_date' => $deliveryDate,
+            'items' => [['product_variant_id' => $this->variant->id, 'quantity' => $qty]],
+        ]);
+    }
+
+    public function test_a_second_order_for_the_same_drop_carries_no_charge(): void
+    {
+        $shop = $this->customerOnRun($this->makeRun(['delivery_charge' => 6.15]), 'Two Order Shop', charged: true);
+        $day = today()->addDays(2)->toDateString();
+
+        $this->storeOrder($shop, $day)->assertSessionHasNoErrors();
+        $first = Order::where('customer_id', $shop->id)->sole();
+        $this->assertSame('6.15', (string) $first->delivery_charge);
+
+        $this->storeOrder($shop, $day, 2)
+            ->assertSessionHas('success', fn ($m) => str_contains($m, "Delivery charge already on {$first->order_number} for that day."));
+        $second = Order::where('customer_id', $shop->id)->whereKeyNot($first->id)->sole();
+        $this->assertSame('0.00', (string) $second->delivery_charge);
+        $this->assertSame('3.00', (string) $second->total_amount, '2 × €1.50, no delivery');
+    }
+
+    public function test_a_different_day_is_a_different_drop(): void
+    {
+        $shop = $this->customerOnRun($this->makeRun(['delivery_charge' => 6.15]), 'Two Day Shop', charged: true);
+
+        $this->storeOrder($shop, today()->addDays(2)->toDateString());
+        $this->storeOrder($shop, today()->addDays(3)->toDateString())
+            ->assertSessionHas('success', fn ($m) => ! str_contains($m, 'Delivery charge already on'));
+
+        $this->assertSame(['6.15', '6.15'], Order::where('customer_id', $shop->id)->orderBy('id')->pluck('delivery_charge')->map(fn ($c) => (string) $c)->all());
+    }
+
+    public function test_an_order_without_a_delivery_date_is_charged_as_before(): void
+    {
+        $shop = $this->customerOnRun($this->makeRun(['delivery_charge' => 6.15]), 'Undated Shop', charged: true);
+        $this->storeOrder($shop, today()->addDays(2)->toDateString());
+
+        $this->actingAs(User::factory()->create())->post(route('orders.store'), [
+            'customer_id' => $shop->id,
+            'order_date' => today()->toDateString(),
+            'items' => [['product_variant_id' => $this->variant->id, 'quantity' => 1]],
+        ]);
+
+        $this->assertSame('6.15', (string) Order::where('customer_id', $shop->id)->whereNull('delivery_date')->sole()->delivery_charge);
+    }
+
+    public function test_a_cancelled_first_order_leaves_the_drop_uncharged(): void
+    {
+        $shop = $this->customerOnRun($this->makeRun(['delivery_charge' => 6.15]), 'Cancel Shop', charged: true);
+        $day = today()->addDays(2)->toDateString();
+        $this->storeOrder($shop, $day);
+        Order::where('customer_id', $shop->id)->sole()->update(['status' => 'cancelled']);
+
+        $this->storeOrder($shop, $day);
+
+        $this->assertSame('6.15', (string) Order::where('customer_id', $shop->id)->where('status', 'pending')->sole()->delivery_charge);
+    }
+
+    public function test_the_run_sheet_charges_the_drop_once(): void
+    {
+        $run = $this->makeRun(['delivery_charge' => 6.15]);
+        $shop = $this->customerOnRun($run, 'Sheet Shop', charged: true);
+        $office = User::factory()->create();
+
+        // An order already on the run date (from the order page): the sheet
+        // edits that order, so the drop still carries one charge.
+        $this->storeOrder($shop, $run->dateFor()->toDateString());
+        $this->actingAs($office)->post(route('chilled-runs.save-stop', $shop), [
+            'run' => $run->id, 'qty' => [$this->variant->id => 9],
+        ])->assertSessionHasNoErrors();
+        $this->assertSame(1, Order::where('customer_id', $shop->id)->count());
+        $this->assertSame('6.15', (string) Order::where('customer_id', $shop->id)->sole()->delivery_charge);
+
+        // With that order cancelled, the sheet's new order takes the charge.
+        Order::where('customer_id', $shop->id)->update(['status' => 'cancelled']);
+        $this->actingAs($office)->post(route('chilled-runs.save-stop', $shop), [
+            'run' => $run->id, 'qty' => [$this->variant->id => 3],
+        ]);
+        $this->assertSame('6.15', (string) Order::where('customer_id', $shop->id)->where('status', 'pending')->sole()->delivery_charge);
+        $this->assertNull($shop->deliveryChargeCarrierFor(today()->addDays(30)));
+    }
+
+    public function test_a_percentage_customer_is_charged_its_percentage_on_every_order(): void
+    {
+        $shop = $this->percentCustomer(10);
+        $day = today()->addDays(2)->toDateString();
+
+        $this->storeOrder($shop, $day, 10); // €15 → €1.50
+        $this->storeOrder($shop, $day, 20); // €30 → €3.00
+
+        $this->assertSame(['1.50', '3.00'], Order::where('customer_id', $shop->id)->orderBy('id')->pluck('delivery_charge')->map(fn ($c) => (string) $c)->all());
+    }
+
+    public function test_the_create_form_knows_which_drops_are_already_charged(): void
+    {
+        $shop = $this->customerOnRun($this->makeRun(['delivery_charge' => 6.15]), 'Preview Shop', charged: true);
+        $day = today()->addDays(2)->toDateString();
+        $this->storeOrder($shop, $day);
+        $first = Order::where('customer_id', $shop->id)->sole();
+
+        $this->actingAs(User::factory()->create())->get(route('orders.create'))
+            ->assertOk()
+            ->assertViewHas('customerChargedDates', fn ($map) => $map[$shop->id][$day] === $first->order_number)
+            ->assertSee('id="orderDeliveryNote"', false);
+    }
+
     private function orderWithCharge(float $charge, string $status = 'pending'): Order
     {
         $shop = $this->customerOnRun($this->makeRun(['delivery_charge' => $charge]), 'Shop '.uniqid(), true);

@@ -82,7 +82,8 @@ class BatchController extends Controller
     public function create(): View
     {
         $this->authorize('create', Batch::class);
-        $products = Product::with('variants')->where('is_active', true)->get();
+        // Conversion-only products (Mature) never get a production batch.
+        $products = Product::with('variants')->where('is_active', true)->where('conversion_only', false)->get();
 
         return view('batches.create', compact('products'));
     }
@@ -102,7 +103,15 @@ class BatchController extends Controller
         ]);
 
         $validated = $request->validate([
-            'product_id' => 'required|exists:products,id',
+            'product_id' => [
+                'required', 'exists:products,id',
+                function (string $attribute, mixed $value, \Closure $fail) {
+                    $product = Product::find($value);
+                    if ($product?->conversion_only) {
+                        $fail("{$product->name} is only made by releasing matured wheels — use Mature Conversion.");
+                    }
+                },
+            ],
             'production_date' => 'required|date',
             'expiry_date' => 'nullable|date|after:production_date',
             'raw_milk_litres' => 'required|numeric|min:0.001',
@@ -120,8 +129,40 @@ class BatchController extends Controller
             'batch_items.*.variant_id.required' => 'Product variant selection is required.',
         ]);
 
-        $batch = DB::transaction(function () use ($validated) {
-            $product = Product::find($validated['product_id']);
+        $product = Product::findOrFail($validated['product_id']);
+        $variants = ProductVariant::whereIn('id', array_column($validated['batch_items'], 'variant_id'))->get()->keyBy('id');
+
+        // Milk: the bottles can't hold more than the raw milk that went in
+        // (OPEN_QUESTIONS #5, F-06). A milk variant's weight_kg is its volume
+        // in litres.
+        if ($product->type === 'milk') {
+            $bottled = collect($validated['batch_items'])
+                ->sum(fn ($item) => (int) $item['quantity_produced'] * (float) ($variants[$item['variant_id']]->weight_kg ?? 0));
+            if ($bottled > (float) $validated['raw_milk_litres'] + 0.0001) {
+                return back()->withInput()->withErrors([
+                    'raw_milk_litres' => 'Bottled '.$this->litres($bottled).' L is more than the '.$this->litres((float) $validated['raw_milk_litres']).' L of raw milk entered.',
+                ]);
+            }
+        }
+
+        // A sanity ceiling per variant (config/mossfield.php batch_ceilings):
+        // above it the batch needs an explicit "yes, really" (F-09).
+        $ceiling = (int) config("mossfield.batch_ceilings.{$product->type}", 0);
+        $tooBig = $ceiling > 0
+            ? collect($validated['batch_items'])->filter(fn ($item) => (int) $item['quantity_produced'] > $ceiling)
+            : collect();
+        $largeConfirmed = $tooBig->isNotEmpty() && $request->boolean('confirm_large');
+        if ($tooBig->isNotEmpty() && ! $largeConfirmed) {
+            $errors = $tooBig->mapWithKeys(fn ($item, $index) => [
+                "batch_items.{$index}.quantity_produced" => number_format((int) $item['quantity_produced']).' × '.($variants[$item['variant_id']]->name ?? 'units')
+                    ." — the usual ceiling is {$ceiling}. Tick 'Yes, this batch really is that big' to save it.",
+            ])->all();
+
+            return back()->withInput()->withErrors($errors)
+                ->with('warning', 'That batch is much bigger than usual — check the quantities, or confirm it.');
+        }
+
+        $batch = DB::transaction(function () use ($validated, $product) {
 
             // Unit weight is a property of the variant, not something set per batch — source it
             // from the variant definition so operators can't override it on the create form.
@@ -160,7 +201,13 @@ class BatchController extends Controller
 
         return redirect()->route('batches.show', $batch)
             ->with('success', 'Batch '.$batch->batch_code.' created successfully! '.
-                   ($batch->wheels_produced ? $batch->wheels_produced.' wheels produced.' : ''));
+                   ($batch->wheels_produced ? $batch->wheels_produced.' wheels produced.' : '').
+                   ($largeConfirmed ? ' (large batch confirmed)' : ''));
+    }
+
+    private function litres(float $litres): string
+    {
+        return rtrim(rtrim(number_format($litres, 3, '.', ''), '0'), '.');
     }
 
     public function show(Batch $batch): View

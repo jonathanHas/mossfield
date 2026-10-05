@@ -199,6 +199,8 @@ class ProductSeeder extends Seeder
                 'description' => 'Farmhouse cheese aged five months into a deeper, sharper mature',
                 'maturation_days' => 150,
                 'is_active' => true,
+                // Made only by releasing matured Farmhouse wheels — never a production batch.
+                'conversion_only' => true,
             ]
         );
 

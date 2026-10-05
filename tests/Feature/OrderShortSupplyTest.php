@@ -153,6 +153,7 @@ class OrderShortSupplyTest extends TestCase
         \Illuminate\Support\Facades\Mail::fake();
         $office = $this->office();
         $this->actingAs($office)->post(route('orders.items.short', [$order, $item]));
+        $order->update(['loaded_at' => now()]); // dispatch needs the loaded tick (OPEN_QUESTIONS #5)
         $this->actingAs($office)->post(route('orders.dispatch', $order))->assertRedirect();
 
         $this->assertSame('dispatched', $order->fresh()->status);

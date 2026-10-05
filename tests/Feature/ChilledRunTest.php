@@ -742,6 +742,18 @@ class ChilledRunTest extends TestCase
         $this->assertSame(0, substr_count($response->getContent(), 'data-tick-order'));
     }
 
+    public function test_the_sheet_still_shows_order_notes(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Notes Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->orderFor($shop, [[$oneL, 4]])->update(['notes' => 'SECRET INTERNAL back door']);
+
+        $this->actingAs(User::factory()->create())->get(route('chilled-runs.index', ['run' => $run->id]))
+            ->assertOk()
+            ->assertSee('SECRET INTERNAL back door');
+    }
+
     public function test_factory_gets_no_entry_ui_and_cannot_save(): void
     {
         $run = $this->makeRun();

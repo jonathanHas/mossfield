@@ -85,6 +85,21 @@
                     </div>
                 </div>
 
+                {{-- Only after the ceiling check refused the quantities (config/mossfield.php batch_ceilings). --}}
+                @php
+                    $overCeiling = collect($errors->getMessages())
+                        ->filter(fn ($messages, $key) => str_starts_with($key, 'batch_items.') && str_contains(implode(' ', $messages), 'usual ceiling'))
+                        ->isNotEmpty();
+                @endphp
+                @if($overCeiling || old('confirm_large'))
+                    <div class="mf-flash mf-flash-warn mb-4" data-confirm-large>
+                        <label class="flex items-center gap-2">
+                            <input type="checkbox" name="confirm_large" value="1" class="mf-checkbox" @checked(old('confirm_large'))>
+                            <span><b>Yes, this batch really is that big</b> — save it with these quantities.</span>
+                        </label>
+                    </div>
+                @endif
+
                 <div class="flex items-center justify-end gap-2 pt-4" style="border-top: 1px solid var(--line-2);">
                     <a href="{{ route('batches.index') }}" class="mf-btn-ghost">Cancel</a>
                     <x-primary-button>{{ __('Create batch') }}</x-primary-button>
@@ -254,7 +269,7 @@
                     rawMilkNote.textContent = 'Raw milk used to produce the cheese wheels (enables yield tracking).';
                 } else if (productText && productText.includes('(Milk)')) {
                     variantInstructions.textContent = 'Specify how the raw milk was bottled into different sizes (1L, 2L bottles). Leave blank any variant not produced.';
-                    rawMilkNote.textContent = 'Raw milk that was bottled (for milk products this equals the finished volume).';
+                    rawMilkNote.textContent = 'Raw milk that was bottled — must be at least the total bottled volume.';
                 } else {
                     variantInstructions.textContent = 'Specify how the finished yoghurt was packaged into different tub sizes. Leave blank any variant not produced.';
                     rawMilkNote.textContent = 'Raw milk used to produce the yoghurt (enables yield tracking).';

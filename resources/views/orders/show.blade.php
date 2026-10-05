@@ -126,6 +126,26 @@
                                 Docket
                             </a>
                         @endif
+                        {{-- The loaded-onto-van tick (OrderPolicy::load — factory can tick
+                             too). Dispatch needs it, on this page as on the run sheet. --}}
+                        @if($order->status === 'ready')
+                            @can('load', $order)
+                                <form method="POST" action="{{ route('chilled-runs.toggle-loaded', $order) }}" class="inline scroll-mt-20" id="dispatch">
+                                    @csrf
+                                    <input type="hidden" name="return" value="order">
+                                    <button type="submit" class="mf-btn-secondary" data-loaded-tick
+                                            aria-label="{{ $order->loaded_at ? 'Loaded onto van — tap to unmark' : 'Mark loaded onto van' }}">
+                                        <span class="mf-run-check{{ $order->loaded_at ? ' on' : '' }}" aria-hidden="true">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+                                        </span>
+                                        Loaded onto van
+                                        @if($order->loaded_at)
+                                            <span class="font-mono text-[11px]" style="color: var(--muted);">{{ $order->loaded_at->format('d/m H:i') }}</span>
+                                        @endif
+                                    </button>
+                                </form>
+                            @endcan
+                        @endif
                         @can('update', $order)
                             {{-- An invoiced order is frozen (blockedByInvoice); say so
                                  rather than offer an Edit that refuses on save (F-34). --}}
@@ -147,6 +167,8 @@
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                                     </button>
                                 </form>
+                            @elseif($order->status === 'ready' && ! $order->loaded_at)
+                                <span class="text-[12px]" style="color: var(--muted);" data-dispatch-needs-loaded>Tick loaded onto van first</span>
                             @elseif($order->status === 'ready')
                                 <form method="POST" action="{{ route('orders.dispatch', $order) }}" class="inline">
                                     @csrf
@@ -276,6 +298,16 @@
                         <div><b>Notes:</b> {{ $order->notes }}</div>
                     </div>
                 @endif
+
+                {{-- Credit limit: warns, never blocks (OPEN_QUESTIONS #5). Open orders only. --}}
+                @can('see-financials')
+                    @if(in_array($order->status, ['pending', 'confirmed', 'preparing', 'ready'], true)
+                        && ($creditWarning = $order->customer->creditWarning((float) $order->total_amount)))
+                        <div class="mf-flash mf-flash-warn mb-4" data-credit-warning>
+                            <div><b>Over the credit limit.</b> {{ $creditWarning }}</div>
+                        </div>
+                    @endif
+                @endcan
 
                 {{-- Short supply — shown at every status, not just during picking:
                      the invoice and docket carry the shortfall long after the

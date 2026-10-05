@@ -71,7 +71,7 @@
             @endif
         </div>
 
-        <div class="mf-panel">
+        <div class="mf-panel mb-4">
             <div class="mf-panel-header">
                 <div class="flex-1">
                     <div class="text-[13px] font-semibold">
@@ -109,6 +109,50 @@
                                 <td class="mf-td">{{ $orders->count() }}</td>
                                 <td class="mf-td">{{ $orders->min(fn ($o) => $o->billing_date)?->format('d/m/Y') }}</td>
                                 <td class="mf-td text-right font-mono">€{{ number_format($orders->sum(fn ($o) => (float) $o->total_amount), 2) }}</td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            @endif
+        </div>
+
+        {{-- Ready orders can still change at the van, so they aren't billable
+             until dispatched (F-38a) — shown here so nothing is forgotten. --}}
+        <div class="mf-panel" data-awaiting-dispatch>
+            <div class="mf-panel-header">
+                <div class="text-[13px] font-semibold">
+                    Picked, awaiting dispatch
+                    <span style="color: var(--muted); font-weight: 400;">({{ $awaitingDispatch->count() }})</span>
+                </div>
+            </div>
+            @if($awaitingDispatch->isEmpty())
+                <div class="px-4 py-5 text-[13px]" style="color: var(--muted);">
+                    Nothing picked and waiting for the van.
+                </div>
+            @else
+                <div class="px-4 pt-3 text-[12.5px]" style="color: var(--muted);">
+                    Invoiced automatically when dispatched.
+                </div>
+                <table class="w-full">
+                    <thead>
+                        <tr>
+                            <th class="mf-th">Order</th>
+                            <th class="mf-th">Customer</th>
+                            <th class="mf-th">Delivery</th>
+                            <th class="mf-th">Loaded</th>
+                            <th class="mf-th text-right">Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach($awaitingDispatch as $order)
+                            <tr class="mf-tr-divide">
+                                <td class="mf-td">
+                                    <a href="{{ route('orders.show', $order) }}" class="mf-link font-mono">{{ $order->order_number }}</a>
+                                </td>
+                                <td class="mf-td">{{ $order->customer?->name }}</td>
+                                <td class="mf-td">{{ $order->delivery_date?->format('d/m/Y') }}</td>
+                                <td class="mf-td">{{ $order->loaded_at ? 'Yes' : 'Not yet' }}</td>
+                                <td class="mf-td text-right font-mono">€{{ number_format((float) $order->total_amount, 2) }}</td>
                             </tr>
                         @endforeach
                     </tbody>

@@ -211,6 +211,22 @@ class CheeseConversionTest extends TestCase
         $this->assertSame(0, Batch::where('product_id', $this->mature->id)->count());
     }
 
+    public function test_release_finds_the_conversion_only_product_even_when_renamed(): void
+    {
+        // The flag, not the name, marks the destination (OPEN_QUESTIONS #5).
+        $this->mature->update(['name' => 'Mossfield Aged Cheese', 'conversion_only' => true]);
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 2);
+
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 2])
+            ->assertRedirect(route('cheese-conversion.index'))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame(1, Batch::where('product_id', $this->mature->id)->count());
+        $this->assertSame(2, (int) BatchItem::where('product_variant_id', $this->matureWheel->id)->sum('quantity_remaining'));
+    }
+
     public function test_release_converts_held_wheels_to_mature(): void
     {
         $wheel = $this->farmhouseBatch(6, 5);

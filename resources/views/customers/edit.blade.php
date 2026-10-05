@@ -108,7 +108,7 @@
                     </div>
                     <div>
                         <label for="invoicing_mode" class="mf-label">Invoicing <span style="color: var(--danger);">*</span></label>
-                        <select name="invoicing_mode" id="invoicing_mode" required class="mf-select" x-ref="mode" x-on:change="mode = $event.target.value">
+                        <select name="invoicing_mode" id="invoicing_mode" required class="mf-select" x-ref="mode" x-on:change="mode = $event.target.value; if (mode !== 'per_order' && terms === 'immediate') { terms = 'net_14'; $refs.terms.value = 'net_14'; }">
                             @foreach (App\Enums\InvoicingMode::cases() as $case)
                                 <option value="{{ $case->value }}" {{ old('invoicing_mode', $customer->invoicing_mode?->value) === $case->value ? 'selected' : '' }}>{{ $case->label() }}</option>
                             @endforeach

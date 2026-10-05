@@ -188,8 +188,10 @@ to follow.
 ## 5. Decisions surfaced by the 2026-10-04 end-to-end run
 
 **Raised:** 2026-10-04 (findings in `archive/2026-10-04-e2e-browser-run/implemented.md`)
-· **Status:** **all eight decided** (seven on 2026-10-04, F-38 on 2026-10-05;
-below, per item); implementation is Plan/Implement cycle 8.
+· **Status:** **all eight decided and built 2026-10-05** — Plan/Implement
+cycle 8 (`archive/2026-10-05-policy-batch/`; write-up in
+`TESTING_AND_FIXES.md`). The batch-ceiling numbers in `config/mossfield.php`
+are the Planner's guesses and still want Jon's figures.
 
 ### Decisions (Jon, 2026-10-04)
 

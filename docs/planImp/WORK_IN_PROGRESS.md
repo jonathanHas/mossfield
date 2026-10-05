@@ -2,9 +2,26 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-10-04
+**Last Updated**: 2026-10-05
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](../../DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Policy batch (2026-10-05)
+
+Plan/Implement cycle 8 — Jon's decisions on OPEN_QUESTIONS #5, eight rules the app had no opinion on:
+
+- **Delivery charge once per drop** — a second same-day order for a fixed-charge customer is €0 (store, run sheet, create-form preview); percentage customers unchanged; imports (no date) unchanged. Cancelling the charged order doesn't move the charge — the office edits it.
+- **Credit limit warns, never blocks** — `Customer::creditWarning()` as a warning flash on create/confirm/Confirm all and a banner on the order page; 0 = no limit.
+- **Mature is conversion-only** — `products.conversion_only`; no production batches for it.
+- **Batch sanity ceiling** — `config/mossfield.php` `batch_ceilings` with a "Yes, this batch really is that big" confirm. **Starting numbers need Jon's figures.**
+- **Milk yield computed**; bottling more than the raw milk is refused.
+- **Order notes are internal** — off the dispatch confirmation and docket.
+- **Dispatch needs the loaded tick** — at the service; the order page has its own tick.
+- **Invoices only once dispatched/delivered**; ready orders listed as "Picked, awaiting dispatch". Consolidated customers default to Net 14 on the form.
+
+Tests: `CreditLimitWarningTest` (new) plus additions across DeliveryCharge, BatchCreate, BatchFinishedWeight, MatureProductSeed, CheeseConversion, DispatchConfirmation, OrderDocket, ChilledRun, OrderTransitions, InvoiceIssue, CustomerSpecialPrice.
 
 ---
 

@@ -19,18 +19,27 @@ use Illuminate\View\View;
  * What lands here: an order dispatched from the sheet or its own page whose
  * auto-issue failed; consolidated (weekly/monthly) customers' deliveries, which
  * wait for the period run; and anything picked to `ready` but not yet
- * dispatched. Issuing from here is the manual safety net, not the normal path.
+ * dispatched (listed separately, not billable until it leaves). Issuing from
+ * here is the manual safety net, not the normal path.
  */
 class UninvoicedOrderController extends Controller
 {
     public function __construct(private InvoiceService $invoices) {}
 
-    /** Orders picked and shipped but not yet on an invoice. */
+    /** Orders that have left but are not yet on an invoice — the billable ones. */
     public static function uninvoicedQuery(): Builder
     {
         return Order::query()
             ->whereNull('invoice_id')
-            ->whereIn('status', ['ready', 'dispatched', 'delivered']);
+            ->whereIn('status', ['dispatched', 'delivered']);
+    }
+
+    /** Picked but still in the yard: shown for awareness, not billable yet (F-38a). */
+    public static function awaitingDispatchQuery(): Builder
+    {
+        return Order::query()
+            ->whereNull('invoice_id')
+            ->where('status', 'ready');
     }
 
     public function index(): View
@@ -52,6 +61,8 @@ class UninvoicedOrderController extends Controller
         return view('invoicing.uninvoiced.index', [
             'perOrder' => $perOrder->values(),
             'consolidated' => $consolidated->groupBy('customer_id'),
+            'awaitingDispatch' => self::awaitingDispatchQuery()
+                ->with('customer')->orderBy('delivery_date')->orderBy('id')->get(),
         ]);
     }
 

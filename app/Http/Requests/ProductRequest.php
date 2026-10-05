@@ -41,6 +41,7 @@ class ProductRequest extends FormRequest
             'maturation_days' => 'nullable|integer|min:1|required_if:type,cheese',
             'shelf_life_days' => 'nullable|integer|min:1',
             'is_active' => 'boolean',
+            'conversion_only' => 'boolean',
         ];
     }
 
@@ -48,6 +49,7 @@ class ProductRequest extends FormRequest
     {
         $this->merge([
             'is_active' => $this->boolean('is_active'),
+            'conversion_only' => $this->boolean('conversion_only'),
         ]);
     }
 }

@@ -218,17 +218,21 @@ class CheeseConversionController extends Controller
         );
 
         abort_if(
-            $batchItem->batch->product->name === self::MATURE_PRODUCT_NAME,
+            $batchItem->batch->product_id === $this->matureProduct()?->id,
             404,
             'This batch is already mature cheese.'
         );
     }
 
+    /**
+     * The conversion destination: the cheese product flagged conversion_only
+     * (OPEN_QUESTIONS #5), falling back to the seeded name for an install
+     * whose migration hasn't flagged it.
+     */
     private function matureProduct(): ?Product
     {
-        return Product::where('name', self::MATURE_PRODUCT_NAME)
-            ->where('type', 'cheese')
-            ->first();
+        return Product::where('conversion_only', true)->where('type', 'cheese')->orderBy('id')->first()
+            ?? Product::where('name', self::MATURE_PRODUCT_NAME)->where('type', 'cheese')->first();
     }
 
     private function matureWheelVariant(Product $matureProduct): ?ProductVariant

@@ -120,12 +120,20 @@ class ChilledRunController extends Controller
 
         $order->update(['loaded_at' => $order->loaded_at ? null : now()]);
 
+        $message = $order->loaded_at
+            ? "{$order->customer->name} · {$order->order_number} marked loaded."
+            : "{$order->customer->name} · {$order->order_number} unmarked — back on the to-load list.";
+
+        // The order page's tick posts return=order: go back there, to the
+        // dispatch controls (no new route — OPEN_QUESTIONS #5, F-34).
+        if ($request->input('return') === 'order') {
+            return redirect()->route('orders.show', $order)->withFragment('dispatch')->with('success', $message);
+        }
+
         return redirect()->route('chilled-runs.index', array_filter([
             'run' => $request->input('run', $order->customer?->delivery_run_id),
             'date' => $request->input('date'),
-        ]))->with('success', $order->loaded_at
-            ? "{$order->customer->name} · {$order->order_number} marked loaded."
-            : "{$order->customer->name} · {$order->order_number} unmarked — back on the to-load list.");
+        ]))->with('success', $message);
     }
 
     /**
@@ -156,12 +164,23 @@ class ChilledRunController extends Controller
             $order->update(['status' => 'confirmed']);
         }
 
-        return redirect()->route('chilled-runs.index', array_filter([
+        $redirect = redirect()->route('chilled-runs.index', array_filter([
             'run' => $run->id,
             'date' => $request->input('date'),
         ]))->with('success', $pending->isEmpty()
             ? 'No pending orders to confirm on this run.'
             : $pending->count().' '.str('order')->plural($pending->count()).' confirmed — now on the picking queue.');
+
+        // Credit limit: one line per customer the confirmed orders take over
+        // (their orders summed) — a warning, never a refusal.
+        $warnings = $pending->load('customer')->groupBy('customer_id')
+            ->map(fn ($orders) => $orders->first()->customer->creditWarning((float) $orders->sum('total_amount')))
+            ->filter();
+        if ($warnings->isNotEmpty()) {
+            $redirect->with('warning', $warnings->implode(' '));
+        }
+
+        return $redirect;
     }
 
     /**
@@ -480,7 +499,8 @@ class ChilledRunController extends Controller
         $notesPosted = array_key_exists('notes', $validated);
         $notes = $notesPosted && trim((string) $validated['notes']) !== '' ? trim($validated['notes']) : null;
 
-        DB::transaction(function () use (&$order, $customer, $runDate, $posted, $postedPositive, $reference, $notesPosted, $notes) {
+        $chargeCarrier = null;
+        DB::transaction(function () use (&$order, &$chargeCarrier, $customer, $runDate, $posted, $postedPositive, $reference, $notesPosted, $notes) {
             // The edit zeroes everything and no lines exist outside the posted
             // set: an order can't go empty, so cancel it (keeping the lines as
             // history, returning all committed stock).
@@ -492,11 +512,15 @@ class ChilledRunController extends Controller
             }
 
             if (! $order) {
+                // Once per drop: the run date's charge is only taken once.
+                $chargeCarrier = $customer->currentDeliveryCharge() > 0
+                    ? $customer->deliveryChargeCarrierFor($runDate)
+                    : null;
                 $order = Order::create([
                     'customer_id' => $customer->id,
                     'order_date' => now()->toDateString(),
                     'delivery_date' => $runDate->toDateString(),
-                    'delivery_charge' => $customer->currentDeliveryCharge(),
+                    'delivery_charge' => $customer->currentDeliveryCharge($runDate),
                     'delivery_charge_percent' => $customer->deliveryChargePercent(),
                     'status' => 'pending',
                     'payment_status' => 'pending',
@@ -532,6 +556,9 @@ class ChilledRunController extends Controller
         $message = $order->status === 'cancelled'
             ? "Order for {$customer->name} cancelled — all quantities cleared. Any reserved or picked stock has been returned."
             : "Order for {$customer->name} saved ({$order->order_number}).";
+        if ($chargeCarrier && $order->status !== 'cancelled') {
+            $message .= " Delivery charge already on {$chargeCarrier->order_number} for that day.";
+        }
 
         return $backToSheet()->with('success', $message);
     }

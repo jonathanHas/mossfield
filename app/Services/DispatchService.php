@@ -47,6 +47,11 @@ class DispatchService
             if ($locked->status !== 'ready') {
                 throw new DispatchException('Only ready orders can be dispatched.');
             }
+            // Both buttons (the order page and the run sheet) share this rule:
+            // an order goes out only once it's ticked as loaded (OPEN_QUESTIONS #5, F-34).
+            if ($locked->loaded_at === null) {
+                throw new DispatchException('Tick the order as loaded onto the van first.');
+            }
 
             $locked->update(['status' => 'dispatched', 'dispatched_at' => now()]);
         });

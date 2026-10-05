@@ -126,12 +126,8 @@
         </tr>
     </table>
 
-    @if(filled($order->notes))
-        <div class="notes">
-            <div class="block-label">Notes</div>
-            <div>{!! nl2br(e($order->notes)) !!}</div>
-        </div>
-    @endif
+    {{-- No order notes: they are internal (OPEN_QUESTIONS #5, F-33) — the
+         office reads them on the order page and the run sheet. --}}
 
     @include('documents._seller-footer', ['showPayment' => false])
 </body>

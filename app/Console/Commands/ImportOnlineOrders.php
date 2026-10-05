@@ -208,7 +208,7 @@ class ImportOnlineOrders extends Command
                 'delivery_date' => null, // Will be set later if needed
                 'status' => 'pending', // All imported orders start as pending
                 'payment_status' => 'pending',
-                'delivery_charge' => $customer->currentDeliveryCharge(),
+                'delivery_charge' => $customer->currentDeliveryCharge(null), // imports carry no delivery date, so no drop to share a charge with (once-per-drop needs one)
                 'delivery_charge_percent' => $customer->deliveryChargePercent(),
                 'subtotal' => $payload['totals']['subtotal'] ?? 0,
                 'tax_amount' => $payload['totals']['tax'] ?? 0,

@@ -394,4 +394,80 @@ class BatchCreateTest extends TestCase
         $line = $order->orderItems()->create(['product_variant_id' => $item->product_variant_id, 'quantity_ordered' => 1, 'unit_price' => 1]);
         $this->assertNotNull($line->allocateFromBatchItem($item, 1));
     }
+
+    // ── Policy batch (OPEN_QUESTIONS #5) ─────────────────────────────
+
+    private function postBatch(Product $product, array $items, float $raw = 100, bool $confirm = false)
+    {
+        return $this->actingAs(User::factory()->admin()->create())->post(route('batches.store'), array_filter([
+            'product_id' => $product->id,
+            'production_date' => today()->toDateString(),
+            'raw_milk_litres' => $raw,
+            'batch_items' => $items,
+            'confirm_large' => $confirm ? '1' : null,
+        ], fn ($v) => $v !== null));
+    }
+
+    public function test_a_conversion_only_product_gets_no_production_batch(): void
+    {
+        [$cheese, $wheel] = $this->cheese();
+        $cheese->update(['name' => 'Mossfield Mature Cheese', 'conversion_only' => true]);
+        [$farm] = $this->cheese();
+
+        $this->actingAs(User::factory()->admin()->create())->get(route('batches.create'))
+            ->assertOk()
+            ->assertDontSee('Mossfield Mature Cheese (Cheese)')
+            ->assertSee($farm->name.' (Cheese)');
+
+        $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 4]])
+            ->assertSessionHasErrors(['product_id' => 'Mossfield Mature Cheese is only made by releasing matured wheels — use Mature Conversion.']);
+        $this->assertSame(0, Batch::where('product_id', $cheese->id)->count());
+    }
+
+    public function test_a_batch_above_the_ceiling_needs_an_explicit_yes(): void
+    {
+        [$cheese, $wheel] = $this->cheese();
+
+        $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 3000]], 30000)
+            ->assertSessionHas('warning')
+            ->assertSessionHasErrors(['batch_items.0.quantity_produced' => "3,000 × Whole Wheel — the usual ceiling is 200. Tick 'Yes, this batch really is that big' to save it."]);
+        $this->assertSame(0, Batch::count());
+
+        // The form, re-rendered with that error, offers the box.
+        $this->actingAs(User::factory()->admin()->create())->get(route('batches.create'))
+            ->assertSee('data-confirm-large', false)
+            ->assertSee('Yes, this batch really is that big');
+
+        $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 3000]], 30000, confirm: true)
+            ->assertSessionHasNoErrors()
+            ->assertSessionHas('success', fn ($m) => str_contains($m, '(large batch confirmed)'));
+        $this->assertSame(3000, (int) BatchItem::sole()->quantity_produced);
+    }
+
+    public function test_at_or_under_the_ceiling_saves_without_asking(): void
+    {
+        [$cheese, $wheel] = $this->cheese();
+        $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 200]], 2000)
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        [, $oneLitre] = $this->makeMilkProductWithTwoVariants();
+        $this->postBatch($oneLitre->product, [['variant_id' => $oneLitre->id, 'quantity_produced' => 4999]], 5000)
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+        $this->assertSame(2, Batch::count());
+    }
+
+    public function test_milk_cannot_bottle_more_than_its_raw_milk(): void
+    {
+        [$milk, $oneLitre] = $this->makeMilkProductWithTwoVariants();
+
+        $this->postBatch($milk, [['variant_id' => $oneLitre->id, 'quantity_produced' => 120]], 100)
+            ->assertSessionHasErrors(['raw_milk_litres' => 'Bottled 120 L is more than the 100 L of raw milk entered.']);
+        $this->assertSame(0, Batch::count());
+
+        $this->postBatch($milk, [['variant_id' => $oneLitre->id, 'quantity_produced' => 100]], 100)
+            ->assertSessionHasNoErrors();
+        $this->assertSame(1, Batch::count());
+    }
 }

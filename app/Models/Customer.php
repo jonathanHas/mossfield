@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Casts\EncryptedNullable;
 use App\Enums\InvoiceDelivery;
 use App\Enums\InvoicingMode;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -93,7 +94,7 @@ class Customer extends Model
      * changing the run's charge later never touches existing orders. This is
      * the single leverage point applied at every order-creation site.
      */
-    public function currentDeliveryCharge(): float
+    public function currentDeliveryCharge(?CarbonInterface $deliveryDate = null, ?int $exceptOrderId = null): float
     {
         // A negotiated percentage overrides the fixed run charge; its € amount
         // is computed in Order::calculateTotals() (it needs the order subtotal).
@@ -105,7 +106,30 @@ class Customer extends Model
             return 0.0;
         }
 
+        // Once per drop (OPEN_QUESTIONS #5, F-24): a second order for the same
+        // delivery day rides on the van stop the first one already paid for.
+        if ($deliveryDate !== null && $this->deliveryChargeCarrierFor($deliveryDate, $exceptOrderId) !== null) {
+            return 0.0;
+        }
+
         return round(max(0, (float) ($this->deliveryRun?->delivery_charge ?? 0)), 2);
+    }
+
+    /**
+     * The order that already carries the delivery charge for this customer's
+     * drop on $deliveryDate (non-cancelled, charge > 0), or null. Snapshot
+     * semantics: cancelling it later does not move the charge to another
+     * order — the office edits the charge on the surviving one.
+     */
+    public function deliveryChargeCarrierFor(CarbonInterface $deliveryDate, ?int $exceptOrderId = null): ?Order
+    {
+        return $this->orders()
+            ->whereDate('delivery_date', $deliveryDate->toDateString())
+            ->where('status', '!=', 'cancelled')
+            ->where('delivery_charge', '>', 0)
+            ->when($exceptOrderId, fn ($q) => $q->whereKeyNot($exceptOrderId))
+            ->orderBy('id')
+            ->first();
     }
 
     /**
@@ -198,15 +222,34 @@ class Customer extends Model
         return app(\App\Services\StatementService::class)->agedBalances($this);
     }
 
+    /** Same arithmetic as creditWarning(): a credit limit of 0 means no limit. */
     public function canPlaceOrder(float $orderAmount): bool
     {
-        if (! $this->is_active) {
-            return false;
+        return $this->is_active && $this->creditWarning($orderAmount) === null;
+    }
+
+    /**
+     * The credit limit WARNS, never blocks (OPEN_QUESTIONS #5, F-25): the
+     * sentence to show when this order would take the customer over their
+     * limit, or null when it wouldn't. A credit_limit of 0 means "no limit"
+     * (it's the default, so every customer has it until the office sets one).
+     */
+    public function creditWarning(float $orderTotal): ?string
+    {
+        $limit = (float) $this->credit_limit;
+        if ($limit <= 0) {
+            return null;
         }
 
-        $currentOutstanding = $this->getOutstandingBalanceAttribute();
+        $outstanding = (float) $this->outstanding_balance;
+        $after = $outstanding + $orderTotal;
+        if ($after <= $limit + 0.0001) {
+            return null;
+        }
 
-        return ($currentOutstanding + $orderAmount) <= $this->credit_limit;
+        $eur = fn (float $v) => '€'.number_format($v, 2);
+
+        return "{$this->name} is at {$eur($outstanding)} outstanding against a {$eur($limit)} credit limit — this order takes it to {$eur($after)}.";
     }
 
     public function hasOnlineAccount(): bool

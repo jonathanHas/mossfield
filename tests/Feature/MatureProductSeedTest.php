@@ -29,6 +29,8 @@ class MatureProductSeedTest extends TestCase
 
         $mature = Product::where('name', 'Mossfield Mature Cheese')->where('type', 'cheese')->get();
         $this->assertCount(1, $mature, 'running the seeder twice must not duplicate the product');
+        $this->assertTrue($mature->first()->conversion_only, 'Mature is made by conversion only (OPEN_QUESTIONS #5)');
+        $this->assertFalse(Product::where('name', 'Mossfield Farmhouse Cheese')->value('conversion_only'));
 
         $wheel = ProductVariant::where('product_id', $mature->first()->id)
             ->where('name', 'like', '%wheel%')->where('is_active', true)->get();

@@ -10,6 +10,7 @@ use App\Models\OrderItem;
 use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
@@ -251,8 +252,22 @@ class OrderController extends Controller
                 return [$customer->id => $date->toDateString()];
             });
 
+        // Drops already carrying the run's charge in the next 14 days (one
+        // query): [customer_id => [Y-m-d => order_number]], so the preview
+        // shows €0 delivery for a second order on the same day (once per drop).
+        $customerChargedDates = Order::query()
+            ->whereIn('customer_id', $customers->pluck('id'))
+            ->whereBetween('delivery_date', [today()->toDateString(), today()->addDays(14)->toDateString()])
+            ->where('status', '!=', 'cancelled')
+            ->where('delivery_charge', '>', 0)
+            ->orderBy('id')
+            ->get(['customer_id', 'delivery_date', 'order_number'])
+            ->groupBy('customer_id')
+            ->map(fn ($orders) => $orders->unique(fn ($o) => $o->delivery_date->toDateString())
+                ->mapWithKeys(fn ($o) => [$o->delivery_date->toDateString() => $o->order_number]));
+
         return view('orders.create', compact(
-            'customers', 'productVariants', 'customerPrices', 'customerCharges', 'customerPriceLabels', 'customerRunDates'
+            'customers', 'productVariants', 'customerPrices', 'customerCharges', 'customerPriceLabels', 'customerRunDates', 'customerChargedDates'
         ));
     }
 
@@ -312,10 +327,18 @@ class OrderController extends Controller
             ->values()
             ->all();
 
-        $order = DB::transaction(function () use ($validated) {
+        $chargeCarrier = null;
+        $order = DB::transaction(function () use ($validated, &$chargeCarrier) {
             // Price lines at the customer's rate and snapshot their delivery
             // charge (a per-variant special price if set, else base_price).
             $customer = Customer::find($validated['customer_id']);
+
+            // Once per drop: a second order for a day that already carries the
+            // run's charge gets none (no date → no drop to compare).
+            $deliveryDate = isset($validated['delivery_date']) ? Carbon::parse($validated['delivery_date']) : null;
+            $chargeCarrier = $deliveryDate && $customer->currentDeliveryCharge() > 0
+                ? $customer->deliveryChargeCarrierFor($deliveryDate)
+                : null;
 
             // Create the order
             $order = Order::create([
@@ -324,7 +347,7 @@ class OrderController extends Controller
                 // Optional keys are absent (not null) when a client omits them —
                 // validate() drops what was never submitted (finding 11).
                 'delivery_date' => $validated['delivery_date'] ?? null,
-                'delivery_charge' => $customer->currentDeliveryCharge(),
+                'delivery_charge' => $customer->currentDeliveryCharge($deliveryDate),
                 'delivery_charge_percent' => $customer->deliveryChargePercent(),
                 'delivery_address' => $validated['delivery_address'] ?? null,
                 'notes' => $validated['notes'] ?? null,
@@ -350,8 +373,19 @@ class OrderController extends Controller
             return $order;
         });
 
-        return redirect()->route('orders.show', $order)
-            ->with('success', 'Order '.$order->order_number.' created successfully!');
+        $message = 'Order '.$order->order_number.' created successfully!';
+        if ($chargeCarrier) {
+            $message .= " Delivery charge already on {$chargeCarrier->order_number} for that day.";
+        }
+
+        $redirect = redirect()->route('orders.show', $order)->with('success', $message);
+
+        // Over the credit limit: a warning alongside, never a refusal.
+        if ($warning = $order->customer->creditWarning((float) $order->total_amount)) {
+            $redirect->with('warning', $warning);
+        }
+
+        return $redirect;
     }
 
     public function edit(Order $order): View
@@ -436,8 +470,15 @@ class OrderController extends Controller
                 : 'Order cancelled.';
         }
 
-        return redirect()->route('orders.show', $order)
-            ->with('success', $message);
+        $redirect = redirect()->route('orders.show', $order)->with('success', $message);
+
+        // Confirming an order that takes the customer over their credit limit
+        // warns alongside — never a refusal (OPEN_QUESTIONS #5).
+        if ($isConfirming && ($warning = $order->customer->creditWarning((float) $order->fresh()->total_amount))) {
+            $redirect->with('warning', $warning);
+        }
+
+        return $redirect;
     }
 
     /** Unchanged, pending → confirmed, or → cancelled while the order can be. */

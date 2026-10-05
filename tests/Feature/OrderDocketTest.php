@@ -136,4 +136,19 @@ class OrderDocketTest extends TestCase
 
         $this->actingAs($driver)->get(route('orders.docket', $this->order))->assertForbidden();
     }
+
+    public function test_order_notes_are_internal_and_stay_off_the_docket(): void
+    {
+        $this->order->update(['notes' => 'SECRET INTERNAL — ring before delivering']);
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->get(route('orders.docket', $this->order))
+            ->assertOk()
+            ->assertDontSee('SECRET INTERNAL');
+
+        // The office still reads them on the order page.
+        $this->actingAs($office)->get(route('orders.show', $this->order))
+            ->assertOk()
+            ->assertSee('SECRET INTERNAL');
+    }
 }

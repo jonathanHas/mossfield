@@ -377,12 +377,10 @@ class Batch extends Model
             return null;
         }
 
-        // For milk, yield is 1:1 (just bottled)
-        if ($this->product->type === 'milk') {
-            return 1.0;
-        }
-
-        // For cheese/yoghurt, calculate yield as finished weight / raw milk
+        // Finished weight ÷ raw milk, for every type. For milk a variant's
+        // weight_kg is its volume in litres, so this is bottled ÷ raw — no
+        // longer a hard-coded 1:1 (OPEN_QUESTIONS #5, F-06); the batch form
+        // refuses bottling more than the raw milk entered.
         $finishedWeight = $this->getFinishedProductWeightAttribute();
 
         return $finishedWeight / $this->raw_milk_litres;

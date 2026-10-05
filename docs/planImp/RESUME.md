@@ -84,14 +84,21 @@ worth returning to.
   Suite **647 passed, 0 failed**. Write-up in `TESTING_AND_FIXES.md` →
   2026-10-05. Jon archives `plan.md` + `implemented.md` to
   `archive/2026-10-05-write-offs/`.
-- **Next: cycle 8 — the policy batch** from OPEN_QUESTIONS #5 (decided
-  2026-10-04): one delivery charge per drop; credit-limit warning; Mature
-  conversion-only; sanity ceiling; milk yield computed, bottled > raw
-  refused; order notes off customer documents; Mark dispatched requires the
-  loaded tick. **F-38 still needs Jon's answer** (Planner's recommendation in
-  the chat: restrict Issue to dispatched/delivered; default terms from
-  invoicing mode). Then a small polish batch (follow-ups under the cycle-6
-  and cycle-7 sections) and `FULFILMENT_PLAN.md` Phase 4 when wanted.
+- **Cycle 8 "The policy batch" — ACCEPTED 2026-10-05:** all eight
+  OPEN_QUESTIONS #5 rules built (one delivery charge per drop; credit limit
+  warns; Mature conversion-only; sanity ceiling; milk yield computed and
+  bottled ≤ raw; notes internal; dispatch needs the loaded tick; issue only
+  dispatched/delivered; Net 14 default). Suite **674 passed, 0 failed**.
+  Write-up in `TESTING_AND_FIXES.md` → 2026-10-05 Policy batch. Jon archives
+  `plan.md` + `implemented.md` to `archive/2026-10-05-policy-batch/`.
+- **Open for Jon:** the batch-ceiling numbers (`config/mossfield.php`
+  `batch_ceilings`: milk 5 000, yoghurt 3 000, cheese 200 — guesses).
+- **Next:** **cycle 9 — polish** (the follow-ups under the cycle-6, -7 and -8
+  records: card items table lumps cut/converted into "Sold"; a "written off"
+  tag on fully written-off expired cards; order-page "Awaiting dispatch";
+  `issue()`'s `back()`; sticky header by column count; `scroll-mt` from the
+  flash height; `· special` option labels are done). Then
+  `FULFILMENT_PLAN.md` Phase 4 (driver route + proof of delivery) when wanted.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -142,7 +149,13 @@ has 2) — reversible from the Mature batch page. Cycles 5–6 added orders
 invoices, 13 batches, 18 customers; no customer is linked to Mossorders.
 **Cycle 7 wrote off M230726's expired stock** (951 units, reason Expired —
 correct, kept) and left 4 `stock_write_offs` rows (2 active, 2 reversed
-probes); the dashboard Expired tile now reads 4 batches / 4,956 units. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+probes); the dashboard Expired tile now reads 4 batches / 4,956 units.
+**Cycle 8's probe** ORD-20261005-001 (id 26, E2E Corner Shop, 2 × 1L, €0
+delivery — the once-per-drop rule) was confirmed, picked, loaded and
+**dispatched → INV-000008** (€2.50, not emailed); it can't be cancelled now
+— void INV-000008 from Finance if it should go. Counts: 25 orders, 8
+invoices. Two July `ready` orders (ORD-20260710-001, ORD-20260723-001) are
+stale and now show under "Picked, awaiting dispatch" — dispatch or cancel. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.

@@ -90,6 +90,73 @@ baseline.
 
 ---
 
+## 2026-10-05 — The policy batch (Plan/Implement cycle 8)
+
+**Scope:** `OPEN_QUESTIONS.md` #5 — eight rules the end-to-end run found the
+app had no opinion on, decided by Jon (seven on 2026-10-04, F-38 on
+2026-10-05) and built in one cycle. Suite afterwards: **674 passed, 0 failed**
+(+27 net; `CreditLimitWarningTest` is new).
+
+### The rules, as built
+
+- **One delivery charge per drop** (F-24). `Customer::currentDeliveryCharge()`
+  takes the delivery date; a second non-cancelled order for the same
+  customer and day with a charge already on it gets €0, at every creation
+  site (the two Mossorders imports carry no date, so nothing changes there
+  until the payload does). The flash names the order carrying the charge;
+  the order form's preview shows €0 "(already charged on ORD-… that day)".
+  Percentage customers are unaffected. **Caveat:** cancelling the charged
+  order leaves the other at €0 — the office edits the surviving one.
+- **The credit limit warns, never blocks** (F-25). `Customer::creditWarning()`
+  — "{name} is at €X outstanding against a €L credit limit — this order
+  takes it to €Y." — as a warning flash at create, at confirm and at
+  Confirm all (one line per customer), and as a banner on open orders
+  (`see-financials`). `credit_limit = 0` means no limit.
+- **Mature is made by conversion only** (F-10). `products.conversion_only`,
+  set on Mature **by the migration**; the batch form omits such products
+  and `store()` refuses them; the conversion controller finds Mature by the
+  flag (name as fallback) and refuses it as a *source* by id.
+- **A sanity ceiling** (F-09). `config('mossfield.batch_ceilings')` per type
+  (milk 5 000, yoghurt 3 000, cheese 200 units per variant — starting
+  guesses; Jon sets them); above it the form comes back with "{N} × {variant}
+  — the usual ceiling is {C}. Tick 'Yes, this batch really is that big' to
+  save it."
+- **Milk yield is computed** (F-06) — bottled ÷ raw like every other type —
+  and bottling more litres than the raw milk entered is refused.
+- **Order notes are internal** (F-33) — gone from the dispatch confirmation
+  and the docket (PDF text verified); the order form says so.
+- **Mark dispatched requires the loaded tick** (F-34) — enforced in
+  `DispatchService::dispatch()` so the order page and the run button share
+  the rule; the order page gains a "Loaded onto van" tick (`OrderPolicy::load`,
+  factory may) via `toggleLoaded(return=order)`.
+- **Issue only for dispatched/delivered** (F-38a) — the `InvoiceService`
+  guard; `ready` orders sit in the To-Invoice queue under "Picked, awaiting
+  dispatch" with no Issue button, and the dashboard tile counts only
+  billable orders.
+- **Weekly/monthly customers default to Net 14** (F-38b) on the customer
+  form when the mode is chosen; the cycle-5 hint still shows if the office
+  sets Immediate back.
+
+### Follow-ups (cycle 9, polish)
+
+- The order page's billing line says "Awaiting invoice" for a `ready` order;
+  "Awaiting dispatch" is now the truth.
+- `UninvoicedOrderController::issue()` refuses with `back()`.
+- Two July `ready` orders on dev (ORD-20260710-001, ORD-20260723-001) are
+  stale test data — dispatch or cancel them.
+
+### Invariants worth keeping
+
+- **Dispatch and issue rules live in the services**, not the controllers:
+  `DispatchService` requires `ready` + `loaded_at`; `InvoiceService` requires
+  `dispatched|delivered`. A new button inherits both.
+- **The credit limit never blocks.** If that ever changes, it is a decision
+  for Jon, not a code review.
+- **Conversion-only products have no production batches.** The flag, not
+  the name, is the rule.
+
+---
+
 ## 2026-10-05 — Stock write-offs (Plan/Implement cycle 7)
 
 **Scope:** `OPEN_QUESTIONS.md` #1, decided by Jon on 2026-10-04 and built in

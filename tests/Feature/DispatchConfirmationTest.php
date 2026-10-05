@@ -25,9 +25,13 @@ class DispatchConfirmationTest extends InvoicingTestCase
         Mail::fake();
     }
 
+    /** A ready order, ticked loaded — dispatch requires it (OPEN_QUESTIONS #5, F-34). */
     private function readyOrder(int $qty = 10): Order
     {
-        return $this->deliveredOrder($qty, 'ready');
+        $order = $this->deliveredOrder($qty, 'ready');
+        $order->update(['loaded_at' => now()]);
+
+        return $order;
     }
 
     // ── The document ──────────────────────────────────────────────────
@@ -45,6 +49,29 @@ class DispatchConfirmationTest extends InvoicingTestCase
             ->assertSee('Net 30 days')
             ->assertSee('€15.00')
             ->assertDontSee('INV-');
+    }
+
+    public function test_order_notes_stay_off_the_confirmation(): void
+    {
+        $order = $this->readyOrder();
+        $order->update(['notes' => 'SECRET INTERNAL — customer owes for crates']);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('orders.dispatch-confirmation', $order))
+            ->assertOk()
+            ->assertDontSee('SECRET INTERNAL');
+
+        // And the PDF that is actually emailed.
+        $pdf = (new \App\Documents\DispatchConfirmation($order->fresh()))->documentPdfData();
+        if (! is_executable('/usr/bin/pdftotext')) {
+            $this->markTestSkipped('pdftotext not installed — HTML checked above.');
+        }
+        $path = tempnam(sys_get_temp_dir(), 'dc').'.pdf';
+        file_put_contents($path, $pdf);
+        $text = (string) shell_exec('/usr/bin/pdftotext '.escapeshellarg($path).' -');
+        @unlink($path);
+        $this->assertStringContainsString('Dispatch confirmation', $text, 'the PDF text was extracted');
+        $this->assertStringNotContainsString('SECRET INTERNAL', $text);
     }
 
     public function test_it_downloads_as_a_pdf(): void
@@ -159,8 +186,11 @@ class DispatchConfirmationTest extends InvoicingTestCase
 
     public function test_an_already_invoiced_order_dispatches_without_a_second_invoice(): void
     {
+        // A pre-F-38a row: invoiced while ready (issue now needs dispatched).
         $order = $this->readyOrder();
+        $order->update(['status' => 'dispatched']);
         $invoice = $this->issue($order);
+        $order->update(['status' => 'ready']);
 
         $this->actingAs(User::factory()->create())->post(route('orders.dispatch', $order))
             ->assertSessionHas('success', fn ($m) => str_contains($m, 'Already on invoice '.$invoice->number));

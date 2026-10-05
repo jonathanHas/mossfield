@@ -338,4 +338,14 @@ class CustomerSpecialPriceTest extends TestCase
         $this->actingAs($office)->delete(route('customers.destroy', ['customer' => $new, 'search' => 'Brand', 'is_active' => '1']))
             ->assertRedirect(route('customers.index', ['search' => 'Brand', 'is_active' => '1']));
     }
+
+    public function test_choosing_consolidated_billing_defaults_immediate_terms_to_net_14(): void
+    {
+        // OPEN_QUESTIONS #5, F-38b: client-side only; the flip itself is a browser check.
+        $handler = "if (mode !== 'per_order' && terms === 'immediate') { terms = 'net_14'; \$refs.terms.value = 'net_14'; }";
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->get(route('customers.create'))->assertOk()->assertSee($handler, false);
+        $this->actingAs($office)->get(route('customers.edit', $this->customer))->assertOk()->assertSee($handler, false);
+    }
 }

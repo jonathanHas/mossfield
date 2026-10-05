@@ -57,6 +57,7 @@
                 <div class="mb-5">
                     <x-input-label for="notes" :value="__('Notes')" />
                     <textarea id="notes" name="notes" rows="3" class="mf-textarea">{{ old('notes') }}</textarea>
+                    <p class="text-[12px] mt-1" style="color: var(--muted);">Internal — not printed on customer documents.</p>
                     <x-input-error :messages="$errors->get('notes')" class="mt-1" />
                 </div>
 
@@ -152,7 +153,7 @@
                         <span id="orderItemsTotal" class="font-mono">€0.00</span>
                     </div>
                     <div class="px-4 pt-1 flex justify-between items-center text-[13px]">
-                        <span>Delivery (incl. VAT)</span>
+                        <span>Delivery (incl. VAT) <span id="orderDeliveryNote" class="text-[11.5px]" style="color: var(--muted);"></span></span>
                         <span id="orderDelivery" class="font-mono">€0.00</span>
                     </div>
                     <div class="px-4 py-3 flex justify-between items-center">
@@ -261,6 +262,8 @@
         // delivery settings, so the preview matches what will be saved.
         const customerPrices = @json($customerPrices);
         const customerCharges = @json($customerCharges);
+        // Once per drop: dates (next 14 days) whose drop already carries the charge.
+        const customerChargedDates = @json($customerChargedDates);
         const customerPriceLabels = @json($customerPriceLabels);
         const customerRunDates = @json($customerRunDates);
 
@@ -330,9 +333,12 @@
             });
 
             const settings = customerCharges[currentCustomerId()] || { charge: 0, percent: null };
-            const delivery = total > 0
+            const chargedOn = (customerChargedDates[currentCustomerId()] || {})[document.getElementById('delivery_date').value];
+            const waived = ! settings.percent && parseFloat(settings.charge) > 0 && chargedOn;
+            const delivery = total > 0 && ! waived
                 ? (settings.percent ? Math.round(total * settings.percent) / 100 : parseFloat(settings.charge) || 0)
                 : 0;
+            document.getElementById('orderDeliveryNote').textContent = waived ? '(already charged on ' + chargedOn + ' that day)' : '';
 
             document.getElementById('orderItemsTotal').textContent = '€' + total.toFixed(2);
             document.getElementById('orderDelivery').textContent = '€' + delivery.toFixed(2);
@@ -386,6 +392,7 @@
                 fillDeliveryDate();
                 repriceAllLines();
             });
+            document.getElementById('delivery_date').addEventListener('change', updateOrderTotal);
             relabelOptions();
             if (currentCustomerId()) {
                 fillDeliveryDate();

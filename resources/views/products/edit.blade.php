@@ -100,6 +100,15 @@
                     <x-input-error :messages="$errors->get('is_active')" class="mt-1" />
                 </div>
 
+                <div class="mb-5">
+                    <div class="flex items-center">
+                        <input id="conversion_only" name="conversion_only" type="checkbox" value="1"
+                               {{ old('conversion_only', $product->conversion_only) ? 'checked' : '' }} class="mf-checkbox">
+                        <label for="conversion_only" class="ml-2 text-[13px]">Made only by conversion — no production batches (e.g. Mature)</label>
+                    </div>
+                    <x-input-error :messages="$errors->get('conversion_only')" class="mt-1" />
+                </div>
+
                 <div class="flex items-center justify-end gap-2 pt-4" style="border-top: 1px solid var(--line-2);">
                     <a href="{{ route('products.show', array_merge($listFilters, ['product' => $product->id])) }}" class="mf-btn-ghost">Cancel</a>
                     <x-primary-button>{{ __('Update product') }}</x-primary-button>

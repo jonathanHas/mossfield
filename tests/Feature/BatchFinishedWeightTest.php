@@ -348,21 +348,22 @@ class BatchFinishedWeightTest extends TestCase
         $this->assertSame(49.07, $batch->finished_product_weight, '8 × 5.000 + 9.070');
     }
 
-    public function test_a_milk_batch_is_unchanged_and_wholly_nominal(): void
+    public function test_a_milk_batch_is_wholly_nominal_and_its_yield_is_bottled_over_raw(): void
     {
         $milk = Product::create(['name' => 'Milk', 'type' => 'milk', 'is_active' => true]);
         $bottle = ProductVariant::create([
             'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle', 'weight_kg' => 1.000, 'base_price' => 2.00, 'is_active' => true,
         ]);
-        $batch = Batch::create(['product_id' => $milk->id, 'production_date' => today()->toDateString(), 'raw_milk_litres' => 200, 'status' => 'active']);
-        BatchItem::create(['batch_id' => $batch->id, 'product_variant_id' => $bottle->id, 'quantity_produced' => 200, 'quantity_remaining' => 150, 'unit_weight_kg' => 1.000]);
+        $batch = Batch::create(['product_id' => $milk->id, 'production_date' => today()->toDateString(), 'raw_milk_litres' => 500, 'status' => 'active']);
+        BatchItem::create(['batch_id' => $batch->id, 'product_variant_id' => $bottle->id, 'quantity_produced' => 432, 'quantity_remaining' => 300, 'unit_weight_kg' => 1.000]);
 
         $batch = $this->loaded($batch);
         $this->assertSame('unit', $batch->batchItems->first()->weight_breakdown['kind']);
-        $this->assertSame(200.0, $batch->finished_product_weight, 'produced × unit weight, as before');
-        $this->assertSame(1.0, $batch->production_yield);
+        $this->assertSame(432.0, $batch->finished_product_weight, 'produced × unit weight, as before');
+        // Computed, no longer a hard-coded 1.0 (OPEN_QUESTIONS #5, F-06).
+        $this->assertSame(0.864, round($batch->production_yield, 3));
         $this->assertFalse($batch->weight_coverage['has_wheels']);
-        $this->assertSame(200.0, $batch->weight_coverage['nominal_kg']);
+        $this->assertSame(432.0, $batch->weight_coverage['nominal_kg']);
     }
 
     public function test_the_batch_page_states_how_much_is_measured(): void

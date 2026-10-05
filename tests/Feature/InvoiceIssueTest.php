@@ -66,6 +66,49 @@ class InvoiceIssueTest extends InvoicingTestCase
         $this->issue($order);
     }
 
+    // ── Issue only once it has left (OPEN_QUESTIONS #5, F-38a) ─────────
+
+    public function test_a_ready_order_cannot_be_invoiced_until_dispatched(): void
+    {
+        $order = $this->deliveredOrder(10, 'ready');
+
+        try {
+            $this->issue($order);
+            $this->fail('a ready order was invoiced');
+        } catch (InvoicingException $e) {
+            $this->assertSame("An invoice is issued when the order is dispatched — this one hasn't left yet.", $e->getMessage());
+        }
+        $this->assertNull($order->fresh()->invoice_id);
+
+        $order->update(['status' => 'dispatched']);
+        $this->assertNotNull($this->issue($order)->number);
+    }
+
+    public function test_the_queue_lists_ready_orders_apart_with_no_issue_button_and_issue_all_skips_them(): void
+    {
+        $ready = $this->deliveredOrder(10, 'ready');
+        $shipped = $this->deliveredOrder(4, 'dispatched');
+        $office = User::factory()->create();
+
+        $this->assertSame(1, \App\Http\Controllers\Invoicing\InvoiceController::headlineStats()['uninvoiced']);
+
+        $page = $this->actingAs($office)->get(route('invoicing.uninvoiced.index'))->assertOk()
+            ->assertSee('Picked, awaiting dispatch')
+            ->assertSee('Issue all 1')
+            ->assertSee(route('invoicing.invoices.issue-order', $shipped), false)
+            ->assertDontSee(route('invoicing.invoices.issue-order', $ready), false);
+        $this->assertStringContainsString($ready->order_number, $page->getContent());
+
+        $this->actingAs($office)->post(route('invoicing.uninvoiced.issue-all'))
+            ->assertSessionHas('success', '1 invoice issued.');
+        $this->assertNull($ready->fresh()->invoice_id);
+        $this->assertNotNull($shipped->fresh()->invoice_id);
+
+        // The per-order Issue route refuses too.
+        $this->actingAs($office)->post(route('invoicing.invoices.issue-order', $ready))
+            ->assertSessionHas('error', "An invoice is issued when the order is dispatched — this one hasn't left yet.");
+    }
+
     public function test_due_date_comes_from_the_customers_payment_terms(): void
     {
         $order = $this->deliveredOrder();
@@ -221,10 +264,20 @@ class InvoiceIssueTest extends InvoicingTestCase
             ->assertSee('Kerry Organic Store');
     }
 
+    /** A pre-F-38a row: invoiced while still ready (issue now needs dispatched). */
+    private function invoicedReadyOrder(): \App\Models\Order
+    {
+        $order = $this->deliveredOrder(10, 'dispatched');
+        $this->issue($order);
+        $order->update(['status' => 'ready']);
+
+        return $order->fresh(['orderItems', 'invoice']);
+    }
+
     public function test_an_invoiced_order_refuses_line_edits(): void
     {
-        $order = $this->deliveredOrder(10, 'ready');
-        $invoice = $this->issue($order);
+        $order = $this->invoicedReadyOrder();
+        $invoice = $order->invoice;
         $item = $order->orderItems->first();
 
         $this->actingAs(User::factory()->create())
@@ -238,8 +291,7 @@ class InvoiceIssueTest extends InvoicingTestCase
 
     public function test_an_invoiced_order_refuses_cancellation(): void
     {
-        $order = $this->deliveredOrder(10, 'ready');
-        $this->issue($order);
+        $order = $this->invoicedReadyOrder();
 
         $this->actingAs(User::factory()->create())
             ->patch(route('orders.update', $order), ['status' => 'cancelled'])

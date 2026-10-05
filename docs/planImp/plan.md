@@ -1,6 +1,6 @@
 # The policy batch: eight rules the app had no opinion on
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-05
@@ -386,4 +386,60 @@ Check: `grep -n "once per drop\|creditWarning\|conversion_only\|batch_ceilings\|
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-05 against `implemented.md` (Status: DONE, 561 lines, read
+to the end) and the full diff of models, services, controllers, config,
+migration and views. Planner reran: `php artisan test` → **674 passed, 0
+failed** (+27 net); `pint --test … config` → PASS 291 files; `npm run build`
+ok; `Product::where('conversion_only', 1)` → Mossfield Mature Cheese; dev
+DB: order 26 `dispatched`, `delivery_charge 0.00`, on INV-000008; Corner
+Shop `credit_limit 2000`; batch item 42 at 212; 25 orders, 8 invoices.
+
+### Criteria — all ten pass
+
+1 Date-aware `currentDeliveryCharge()` + `deliveryChargeCarrierFor()`;
+`store()` and `saveStop()` pass the date inside the creating transaction and
+name the carrier in the flash; the form preview shows €0 "(already charged
+on ORD-… that day)" from a 14-day map; percentage customers unaffected;
+seven tests. 2 `creditWarning()` (0 = no limit), warnings at `store()`,
+confirm and `confirmAll` (one line per customer), the order-page banner;
+`canPlaceOrder()` rewritten on the same arithmetic; six tests. 3
+`products.conversion_only` set in the migration, form checkbox, batch form
+omits it, `store()` refuses with the message, `matureProduct()` by flag with
+name fallback, **and** `guardSourceWheel()` by id (a renamed Mature could
+otherwise be converted into itself — good catch). 4 Config ceilings,
+per-item errors + `confirm_large` box, "(large batch confirmed)". 5 Yield
+computed for every type; milk bottled > raw refused. 6 NOTES gone from
+both documents (PDF text checked with `pdftotext`), hint on the order form.
+7 `DispatchService` requires `loaded_at`; `toggleLoaded(return=order)`;
+order-page tick (factory may); Mark dispatched hidden until loaded; 12
+fixture-only test changes, assertions untouched. 8 `issueForOrder()` guard
+is dispatched/delivered; the queue's "Picked, awaiting dispatch" panel; the
+dashboard tile counts billable only. 9 Net 14 default on mode change. 10
+Docs, six grep hits.
+
+### Deviations — all accepted
+
+1 imports have no date (true — and the comment says what to do if they
+ever do); 2 the sheet can't create a second same-day order, so its dedupe is
+defensive; 3 `guardSourceWheel()` by id; 4 checks after `validate()` with
+the Implementer's warning wording; 5 three fixtures build a legacy
+invoiced-ready order by issuing while dispatched then resetting — right,
+the guards they test still protect pre-change data; 6 one more fixture
+(`OrderShortSupplyTest`); 7 `canPlaceOrder()` kept; 8 shared `.notes` CSS
+kept for the invoice PDF.
+
+### Notes for Planner — decisions
+
+- Order-page billing line says "Awaiting invoice" for a `ready` order →
+  **cycle 9 (polish)**: "Awaiting dispatch".
+- Two July `ready` orders (ORD-20260710-001, ORD-20260723-001) now sit
+  under "Picked, awaiting dispatch" and no longer count as awaiting invoice
+  → **dev data for Jon/the browser session** to dispatch or cancel; noted in
+  `RESUME.md` and `REPORT.md`.
+- Ceiling numbers are guesses → **Jon** (asked in the chat).
+- Concurrency on the drop dedupe → accepted as the plan said.
+- `UninvoicedOrderController::issue()` uses `back()` on refusal →
+  **cycle 9**.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-05-policy-batch`
+and move `plan.md` + `implemented.md` there.

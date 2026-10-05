@@ -38,6 +38,7 @@ class OrderTransitionsTest extends TestCase
         ]);
     }
 
+    /** A ready order comes ticked loaded — dispatch requires it (OPEN_QUESTIONS #5, F-34). */
     private function makeOrder(string $status = 'ready'): Order
     {
         return Order::create([
@@ -48,6 +49,7 @@ class OrderTransitionsTest extends TestCase
             'subtotal' => 0,
             'tax_amount' => 0,
             'total_amount' => 0,
+            'loaded_at' => $status === 'ready' ? now() : null,
         ]);
     }
 
@@ -403,5 +405,63 @@ class OrderTransitionsTest extends TestCase
             ->assertOk()
             ->assertDontSee(route('orders.edit', $order), false)
             ->assertSee('On invoice '.$order->invoice->number.' — void it to edit.');
+    }
+
+    // ── Dispatch needs the loaded tick (OPEN_QUESTIONS #5, F-34) ───────
+
+    public function test_an_unloaded_ready_order_cannot_be_dispatched(): void
+    {
+        $order = $this->makeOrder('ready');
+        $order->update(['loaded_at' => null]);
+
+        $this->actingAs(User::factory()->create())
+            ->from(route('orders.show', $order))
+            ->post(route('orders.dispatch', $order))
+            ->assertSessionHas('error', 'Tick the order as loaded onto the van first.');
+
+        $this->assertSame('ready', $order->fresh()->status);
+        $this->assertNull($order->fresh()->dispatched_at);
+    }
+
+    public function test_the_page_shows_the_tick_and_hides_mark_dispatched_until_loaded(): void
+    {
+        $order = $this->makeOrder('ready');
+        $order->update(['loaded_at' => null]);
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('data-loaded-tick', false)
+            ->assertSee('Tick loaded onto van first')
+            ->assertDontSee(route('orders.dispatch', $order), false);
+
+        $this->actingAs($office)->post(route('chilled-runs.toggle-loaded', $order), ['return' => 'order'])
+            ->assertRedirect(route('orders.show', $order).'#dispatch');
+        $this->assertNotNull($order->fresh()->loaded_at);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee(route('orders.dispatch', $order), false)
+            ->assertDontSee('Tick loaded onto van first')
+            ->assertSee($order->fresh()->loaded_at->format('d/m H:i'));
+    }
+
+    public function test_factory_can_tick_loaded_from_the_order_page_but_not_dispatch(): void
+    {
+        $order = $this->makeOrder('ready');
+        $order->update(['loaded_at' => null]);
+        $factory = User::factory()->factoryWorker()->create();
+
+        $this->actingAs($factory)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('data-loaded-tick', false)
+            ->assertDontSee(route('orders.dispatch', $order), false);
+
+        $this->actingAs($factory)->post(route('chilled-runs.toggle-loaded', $order), ['return' => 'order'])
+            ->assertRedirect(route('orders.show', $order).'#dispatch')
+            ->assertSessionHas('success', fn ($m) => str_contains($m, 'marked loaded'));
+        $this->assertNotNull($order->fresh()->loaded_at);
+
+        $this->actingAs($factory)->post(route('orders.dispatch', $order))->assertForbidden();
     }
 }

@@ -49,8 +49,6 @@
         .muted { color: #999; }
         .batch { font-size: 10px; color: #666; margin-top: 2px; font-family: 'DejaVu Sans Mono', monospace; }
 
-        .notes { margin-top: 22px; padding: 10px 12px; background: #f6f6f4; border: 1px solid #e2e2dd; }
-        .notes .block-label { margin-bottom: 3px; }
 
         .footer { margin-top: 34px; font-size: 10px; color: #999; border-top: 1px solid #ddd; padding-top: 8px; }
 
@@ -168,12 +166,8 @@
         </tbody>
     </table>
 
-    @if(filled($order->notes))
-        <div class="notes">
-            <div class="block-label">Notes</div>
-            <div>{!! nl2br(e($order->notes)) !!}</div>
-        </div>
-    @endif
+    {{-- No order notes: they are internal (OPEN_QUESTIONS #5, F-33) — the
+         office reads them on the order page and the run sheet. --}}
 
     <div class="footer">
         Generated {{ now()->format('d/m/Y H:i') }} · Mossfield Organic Farm

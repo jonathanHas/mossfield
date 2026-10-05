@@ -106,6 +106,7 @@
                 <div class="mb-5">
                     <x-input-label for="notes" :value="__('Order notes')" />
                     <textarea id="notes" name="notes" rows="4" class="mf-textarea">{{ old('notes', $order->notes) }}</textarea>
+                    <p class="text-[12px] mt-1" style="color: var(--muted);">Internal — not printed on customer documents.</p>
                     <x-input-error :messages="$errors->get('notes')" class="mt-1" />
                 </div>
 
