@@ -35,6 +35,20 @@
                 </div>
             </div>
             <div class="flex gap-2">
+                {{-- Expired stock: one click writes off everything that isn't owed to an order. --}}
+                @if($batch->isExpired() && ($writableUnits = $batch->writableUnits()) > 0)
+                    @can('create', App\Models\StockWriteOff::class)
+                        <form method="POST" action="{{ route('batches.write-offs.expired', $batch) }}">
+                            @csrf
+                            <button type="submit" class="mf-btn-danger"
+                                    data-confirm-title="Write off expired stock?"
+                                    data-confirm="Write off {{ $writableUnits }} {{ Str::plural('unit', $writableUnits) }} of {{ $batch->batch_code }} as Expired? Anything reserved for orders stays. You can reverse it from the Write-offs panel."
+                                    data-confirm-label="Write off" data-confirm-danger>
+                                Write off expired stock ({{ $writableUnits }} {{ Str::plural('unit', $writableUnits) }})
+                            </button>
+                        </form>
+                    @endcan
+                @endif
                 <a href="{{ route('batches.index') }}" class="mf-btn-ghost">← All batches</a>
                 @can('update', $batch)
                     <a href="{{ route('batches.edit', $batch) }}" class="mf-btn-secondary">Edit</a>
@@ -82,7 +96,7 @@
                         <div class="text-[11.5px] mt-0.5" style="color: var(--muted);">
                             {{ $coverage['wheels_weighed'] }} of {{ $coverage['wheels_produced'] }} wheels weighed
                             @unless($coverage['reconciles'])
-                                · <span style="color: var(--danger);" title="on hand + dispatched + cut + converted ≠ produced">does not reconcile</span>
+                                · <span style="color: var(--danger);" title="on hand + dispatched + cut + converted + written off ≠ produced">does not reconcile</span>
                             @endunless
                         </div>
                     @endif
@@ -121,6 +135,15 @@
                         {{ $batch->remaining_label }}
                     </dd>
                 </div>
+                @php $writtenOff = $batch->writtenOffSummary(); @endphp
+                @if($writtenOff['units'] > 0)
+                    <div>
+                        <dt style="color: var(--muted);" class="text-[11.5px] uppercase font-medium" style="letter-spacing: 0.4px;">Written off</dt>
+                        <dd class="mt-0.5 font-mono">
+                            <a href="#write-offs" class="mf-link">{{ $writtenOff['units'] }} {{ Str::plural('unit', $writtenOff['units']) }}</a>@if($writtenOff['weighed_kg'] > 0) · {{ number_format($writtenOff['weighed_kg'], 3) }} kg measured @endif
+                        </dd>
+                    </div>
+                @endif
             </dl>
 
             @if($batch->notes)
@@ -149,6 +172,7 @@
                                 <th class="mf-th text-right">Sold</th>
                                 <th class="mf-th text-right" title="Wheels cut into vacuum packs">Cut</th>
                                 <th class="mf-th text-right" title="Wheels released into the Mature product">Converted</th>
+                                <th class="mf-th text-right" title="Lost — spoiled, damaged, sampled, expired (see Write-offs)">Written off</th>
                                 <th class="mf-th text-right" title="Remaining units × the variant's unit weight — nothing on the shelf has been weighed yet">On hand (nominal)</th>
                             </tr>
                         </thead>
@@ -165,7 +189,8 @@
                                         // (and agree with /stock). Finding 8: "Sold" used to be
                                         // produced − remaining, which swallowed cut and converted.
                                         $wb = $item->weight_breakdown;
-                                        $soldUnits = $wb['kind'] === 'wheel' ? $wb['dispatched'] : max(0, $wb['produced'] - $wb['on_hand']);
+                                        // Written-off units left the shelf but weren't sold.
+                                        $soldUnits = $wb['kind'] === 'wheel' ? $wb['dispatched'] : max(0, $wb['produced'] - $wb['on_hand'] - $wb['written_off']);
                                     @endphp
                                     <td class="mf-td font-mono text-right">{{ number_format($item->quantity_produced) }}</td>
                                     <td class="mf-td font-mono text-right font-medium" style="color: {{ $item->quantity_remaining > 0 ? 'var(--accent-ink)' : 'var(--danger)' }};">
@@ -174,6 +199,7 @@
                                     <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ number_format($soldUnits) }}</td>
                                     <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $wb['kind'] === 'wheel' ? number_format($wb['cut']) : '—' }}</td>
                                     <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $wb['kind'] === 'wheel' ? number_format($wb['converted']) : '—' }}</td>
+                                    <td class="mf-td font-mono text-right" style="color: {{ $wb['written_off'] > 0 ? 'var(--danger)' : 'var(--muted)' }};">{{ $wb['written_off'] > 0 ? number_format($wb['written_off']) : '—' }}</td>
                                     <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $item->unit_weight_kg ? '~' . number_format($item->total_weight, 2) . ' kg' : '—' }}</td>
                                 </tr>
                             @endforeach
@@ -244,6 +270,8 @@
                 </div>
             </div>
         @endif
+
+        @include('batches.partials._write-offs')
 
         <div class="mf-panel">
             <div class="mf-panel-header">

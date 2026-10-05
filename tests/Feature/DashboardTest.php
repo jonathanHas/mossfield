@@ -63,7 +63,7 @@ class DashboardTest extends TestCase
         $office->assertViewHas('expiredUnits', 12);
         $office->assertSee('1 ready now');
         $office->assertSee('Expired stock');
-        $office->assertSee('12 units · write off or close');
+        $office->assertSee('12 units · write off'); // cycle 7: write-offs exist now
         $office->assertSee(route('batches.index', ['status' => 'expired']), false);
 
         $this->actingAs(User::factory()->factoryWorker()->create())->get('/dashboard')

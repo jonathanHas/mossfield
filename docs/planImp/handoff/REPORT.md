@@ -14,7 +14,9 @@ Suite **598 passed, 0 failed** — any failure is real. Nothing pushed or deploy
 
 **Cycle 6 — Loose ends**: allocating a second time from the *same* batch on the order page (6 from M041026, then 4 more from M041026) now **tops up the existing reservation** instead of crashing; the mature-conversion allocator counts reserved wheels the same way every other screen does; `/batches` and `/cheese-cutting` cost a flat number of queries; the run sheet's column headers **stay visible while you scroll** at desktop width (≥ 1280 px) and a saved row lands just under them.
 
-All four are written up in `TESTING_AND_FIXES.md` (2026-10-04 sections); cycle files in `docs/planImp/archive/`.
+**Cycle 7 — Stock write-offs** (new feature, Jon's decisions on OPEN_QUESTIONS #1): the batch page has a **Write-offs** panel — units, reason (extendable list under Miscellaneous → Write-off reasons), optional note, and for weighed stock the measured weight; reserved stock can't be written off; a write-off is reversible and stays on the record; an expired batch offers **"Write off expired stock (N units)"** in its header. Written-off units leave sellable stock everywhere, show as a red state on wheel strips and a `written off` segment on `/stock`, and still count in finished weight.
+
+All five are written up in `TESTING_AND_FIXES.md` (2026-10-04/05 sections); cycle files in `docs/planImp/archive/`.
 
 ## What to verify in the browser
 
@@ -24,6 +26,7 @@ The Implementer drove every change with real input at 1408 px and 500 × 659, bu
 2. **Real phone (≤ 390 px) on `/picking`**: the day header with ◀ ▶, the stale bucket, a per-piece wheel line (type `5,210` → `5.210`; `52.10` → amber **Check**), a **bulk-weighed vacuum-pack line** (still never exercised on a phone), Skip cycling, `+` greyed at the cap, the short button clear of the footer.
 3. **Fragment landings**: change a line qty on `/orders/{id}` → the page reloads scrolled to that line **with the green flash pinned at the top of the viewport** and the line tinted briefly; × dismisses it. Save a sheet row at desktop width → `#stop-N` lands under the flash **and** under the column headers, which stay put while you scroll; dismiss the flash and the headers sit flush at the top. Add a special price → the panel.
 3a. **Same-batch top-up** (cycle 6): on a confirmed order, allocate part of a line from a batch, then the rest from the **same** batch → "Allocated N units", one row in the allocations table, no error.
+3b. **Write-offs** (cycle 7): on `/batches/26` (G010426) write off 1 wheel, reason Spoiled, weight `4,900` (comma → `4.900`) → the strip gets a red circle, `/cheese-cutting` shows one fewer free wheel, the batch's "N of 12 wheels weighed" goes up by one; try to write off more than the free count on a batch with a reservation → refused naming the reserved units; **Reverse** it → everything back, the row struck through. On an expired batch (M220626 / Y220626 still have stock) press **Write off expired stock** → one row per item, the dashboard tile and `/stock` note drop by one batch. Deactivate a reason under Miscellaneous → Write-off reasons → it disappears from the panel's select but stays on old rows. Factory sees the history, no forms.
 4. **Run reorder**: set a stop's Position box to the last number and Save order → it's last and in view; ↑ once → back on that row. Try a number above the stop count (clamped to last).
 5. **Partial release** on `/cheese-conversion`: with 2 held, release 1; move a wheel without saving → Release disabled with "Save maturing first".
 6. **Expired stock**: dashboard tile count equals `/batches?status=expired`; `/stock` milk card note names 4 batches / 4,437 units.
@@ -44,8 +47,8 @@ None with a brief. The cycle-4 plan's reorder semantics and landing fragment wer
 
 ## Test results
 
-617 passed, 0 failed (536 → 557 → 598 → 612 → 617 across cycles 3–6). New suites: `DashboardTest`, `ErrorPagesTest`.
+647 passed, 0 failed (536 → 557 → 598 → 612 → 617 → 647 across cycles 3–7). New suites: `DashboardTest`, `ErrorPagesTest`, `StockWriteOffTest`.
 
 ## Dev database state
 
-See `RESUME.md` → *Dev database*. Orders 24 (19–25 are cancelled cycle probes), payments 4, invoices 7, run #1 positions 1…17 with the E2E customers at 1–2. **Mail is the `log` driver — do not point dev at SMTP.**
+See `RESUME.md` → *Dev database*. Orders 24 (19–25 are cancelled cycle probes), payments 4, invoices 7, run #1 positions 1…17 with the E2E customers at 1–2. **M230726's expired stock is written off** (951 units); the dashboard Expired tile reads 4 batches / 4,956 units. **Mail is the `log` driver — do not point dev at SMTP.**

@@ -1,6 +1,6 @@
 # Stock write-offs: a fifth state for stock that is lost
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-04
@@ -443,4 +443,61 @@ Check: `grep -n "Stock Write-offs\|written_off_units\|writeOffExpired" CLAUDE.md
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-05 against `implemented.md` (Status: DONE, 617 lines, read
+to the end) and the diff: service, request, controller, both migrations,
+both models, `BatchItem`/`Batch`/`StockOverviewService`/`BackupService`,
+routes, policies, the write-offs panel and the batch-page header. Planner
+reran: `php artisan test` → **647 passed, 0 failed** (+30); `pint --test …
+config` → PASS 289 files; `npm run build` ok; both migrations `[6] Ran`; 7
+reasons; dev DB: 4 write-off rows (2 active), M230726 at 0/0/0, G010426
+back at `remaining 7 · hold 1`, `reconciles = y`, finished weight 60.31;
+orders/payments/invoices unchanged. Checked that the only consumer of
+`weight_breakdown` (the batch page) loads `writeOffs`, so the
+"unloaded reads as none" rule cannot mislead.
+
+### Criteria — all eight pass
+
+1 Schema and defaults in the migration (`insertOrIgnore`), FKs as specified,
+models with `active()`; `quantity_sold` excludes write-offs. 2 One service
+path, locked, with every refusal the plan listed and the exact over-reserved
+message; maturing clamp with `holdReducedTo`; reverse keeps the row;
+`writeOffExpired()` skips reserved units. Ten service tests incl. the five
+free-stock sites. 3 Fifth state everywhere: `wheelStates()`, strip, legend,
+`weight_breakdown` (measured where weighed), `/stock` segments, one
+key→token/label mapping across the three stock components; the index
+query count stays flat. 4 Routes in the office group, FormRequest carrying
+the policy and the belongs-to-batch closure, flashes as specified,
+boundary-test fixtures. 5 Reasons page (no destroy; deactivate), slug codes,
+nav in Miscellaneous — right call, office needs it. 6 Panel with the form
+(weight only for weighed items), history with reverse, the expired
+one-click, the Written-off info row, the card link, `deletionBlocker()`
+counting write-offs. 7 Reset and backup tables classified; **plus**
+`BackupService::ADDED_LATER` so pre-deploy backups stay restorable — a real
+deployment hazard the plan missed, found and fixed with tests. 8 Docs.
+
+### Deviations — all accepted
+
+1 baseline; 2 the two index views' `array_fill_keys` and `StockException`;
+3 the key/token mapping; **4–5 two more "sold = produced − remaining" sites
+found in the browser** (batch-page variant table, card pack bar) and fixed
+with tests; 6 comma handler on the weight box (F-29 pattern); **7 corrects
+the plan**: finished weight *does* move when a write-off is weighed — from
+nominal to measured for that wheel, exactly as a dispatched or cut wheel —
+and that is the model working; 8 `ADDED_LATER`; 9 Miscellaneous nav; 10–12
+fine.
+
+### Notes for Planner — decisions
+
+- Card items table lumps cut/converted into "Sold" (pre-existing) → **next
+  polish batch**: use `wheelStates()['sold']` for wheels.
+- `isExpired()` (`< now()`) vs tile (`<= today`) agree in practice → leave.
+- `ADDED_LATER` convention → documented in CLAUDE.md by the Implementer;
+  `DEPLOYMENT.md` has no backup section to amend → nothing more.
+- `/batches?status=expired` still lists a fully written-off batch → **next
+  polish batch**: a "written off" tag on such cards (the filter is right —
+  it *is* expired; what's missing is the state).
+- Dev data: M230726 written off (correct, kept); G010426 probe reversed as
+  the plan asked.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-05-write-offs`
+and move `plan.md` + `implemented.md` there.

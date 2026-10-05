@@ -90,6 +90,77 @@ baseline.
 
 ---
 
+## 2026-10-05 — Stock write-offs (Plan/Implement cycle 7)
+
+**Scope:** `OPEN_QUESTIONS.md` #1, decided by Jon on 2026-10-04 and built in
+one cycle. Stock can now leave a batch a fifth way — **written off** — with a
+reason from an extendable list, an optional note, and for weighed stock the
+measured weight of the lost units. Suite afterwards: **647 passed, 0 failed**
+(+30; `StockWriteOffTest` is new with 26 cases).
+
+### What it does
+
+- **Record** (office/admin, batch page → Write-offs panel): units come off
+  `batch_items.quantity_remaining`, which every free-stock surface already
+  reads — so the allocator, picker, `/stock`, cutting index and the mossorders
+  export all exclude them with no change at those sites (pinned, one
+  assertion per site). The bound is `holdable_quantity` (remaining − units
+  still owed to orders): reserved stock can't be written off ("Only N units
+  can be written off — M are reserved for orders. Release them first.");
+  **held maturing wheels can**, and the hold is clamped with the flash saying
+  so. Weight is refused on fixed-weight variants and above 3 × nominal.
+- **Reverse**: the row stays, stamped `reversed_at/by`; units return to free
+  stock (not to a hold).
+- **Reasons**: `write_off_reasons`, seeded **by the migration** (spoiled,
+  damaged, sample, own use, stocktake, expired, returned) so no deploy step
+  is forgotten; managed at `/write-off-reasons` (Miscellaneous nav,
+  office/admin): add (slug code), rename, deactivate — never delete
+  (`restrictOnDelete` is the backstop).
+- **Expired one-click**: an expired batch's page offers "Write off expired
+  stock (N units)"; it writes off each item's holdable units with reason
+  `expired` and names what it kept for orders. On dev M230726's 951 ghost
+  units are gone; the dashboard tile dropped 5 → 4 batches.
+- **The model**: `on hand + dispatched + cut + converted + written off =
+  produced`. A weighed write-off is measured (counts toward "N of M wheels
+  weighed"), an unweighed one nominal; written-off units stay in finished
+  weight and yield (the make produced them). `wheelStates()` gains
+  `written_off` (red circle, `--state-written-off`); `/stock` cards gain a
+  `written off` segment; `quantity_sold` and the two other
+  "sold = produced − remaining" sites (batch-page variant table, card pack
+  bar) subtract write-offs.
+- **Housekeeping**: `ResetTradingData` wipes `stock_write_offs`, keeps
+  `write_off_reasons`; `BackupService::TABLES` carries both — and gained
+  **`ADDED_LATER`**, because otherwise every backup taken before this deploy
+  would have been refused as "missing the write_off_reasons table". A
+  missing `stock_write_offs` restores as empty; a missing
+  `write_off_reasons` keeps the current rows. **Any table added to
+  `TABLES` from now on goes in `ADDED_LATER` too.**
+
+### Interpretation recorded
+
+"Units and kilograms" = whole units, with kg as the measured weight of
+those units. Partial-weight loss on a unit that stays on the shelf is out
+of scope (a sixth state); raise it if it matters.
+
+### Follow-ups (next polish batch)
+
+- The card's items table lumps cut and converted wheels into "Sold"
+  (pre-existing) — use `wheelStates()['sold']`.
+- `/batches?status=expired` lists a fully written-off batch with no sign
+  that it's been dealt with — a "written off" tag on the card.
+
+### Invariants worth keeping
+
+- **Write-offs go through `StockWriteOffService`** — the only place that
+  moves `quantity_remaining` for a loss; the row is never deleted.
+- **Aggregates read active write-offs only** (`whereNull('reversed_at')`) —
+  a legitimate filter; it is not the `fulfilled_at` mistake.
+- **Five states reconcile.** A new way for stock to leave is a sixth state
+  in `weight_breakdown` and `wheelStates()`, not a tweak to "sold".
+- **New backup tables go in `ADDED_LATER`.**
+
+---
+
 ## 2026-10-04 — Loose ends (Plan/Implement cycle 6)
 
 **Scope:** the cycle-5 finding, two defects the Planner found reading for the

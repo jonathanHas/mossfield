@@ -167,6 +167,15 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
     Route::get('/orders/{order}/dispatch-confirmation', [\App\Http\Controllers\OrderController::class, 'dispatchConfirmation'])->name('orders.dispatch-confirmation');
     Route::post('/orders/{order}/dispatch-confirmation/email', [\App\Http\Controllers\OrderController::class, 'emailDispatchConfirmation'])->name('orders.dispatch-confirmation.email');
 
+    // Stock write-offs (lost units — spoiled, dropped, sampled, expired …),
+    // recorded and reversed from the batch page.
+    Route::post('/batches/{batch}/write-offs', [\App\Http\Controllers\StockWriteOffController::class, 'store'])->name('batches.write-offs.store');
+    Route::post('/batches/{batch}/write-offs/expired', [\App\Http\Controllers\StockWriteOffController::class, 'storeExpired'])->name('batches.write-offs.expired');
+    Route::post('/write-offs/{writeOff}/reverse', [\App\Http\Controllers\StockWriteOffController::class, 'reverse'])->name('write-offs.reverse');
+    // The extendable list of reasons. No destroy: a used reason is deactivated.
+    Route::resource('write-off-reasons', \App\Http\Controllers\WriteOffReasonController::class)
+        ->only(['index', 'store', 'update']);
+
     Route::resource('customers', CustomerController::class);
     // Per-customer alternative prices (managed from the customer show page).
     Route::resource('customers.special-prices', CustomerSpecialPriceController::class)

@@ -60,6 +60,7 @@ class ResetTradingData extends Command
         'order_allocations',
         'cheese_cutting_logs',
         'cheese_conversion_logs',
+        'stock_write_offs',
         'order_items',
         'orders',
         'batch_items',
@@ -74,6 +75,7 @@ class ResetTradingData extends Command
         'products',
         'product_variants',
         'delivery_runs',
+        'write_off_reasons',
     ];
 
     /** Framework/infra tables — neither trading data nor reference data. */

@@ -22,6 +22,9 @@ class StockOverviewService
             // Wheels converted out, not conversion LOGS — one release can move
             // several wheels under a single log row.
             ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
+                // Active write-offs only — a reversed write-off isn't one
+                // (a legitimate filter, unlike fulfilled_at on reservations).
+            ->withSum(['writeOffs as written_off_units' => fn ($q) => $q->whereNull('reversed_at')], 'quantity')
             ->withSum([
                 'orderAllocations as quantity_currently_allocated',
             ], DB::raw('quantity_allocated - quantity_fulfilled'))
@@ -118,7 +121,9 @@ class StockOverviewService
                 return max(0, min((int) $i->quantity_remaining, $alloc));
             });
             $available = max(0, $remaining - $allocated);
-            $sold = max(0, $produced - $remaining);
+            // Written-off units left the shelf but weren't sold.
+            $writtenOff = (int) $group->sum(fn ($i) => (int) ($i->written_off_units ?? 0));
+            $sold = max(0, $produced - $remaining - $writtenOff);
 
             $expiry = $batch->expiry_date;
             $daysToExpiry = $expiry ? (int) now()->startOfDay()->diffInDays($expiry, false) : null;
@@ -131,6 +136,7 @@ class StockOverviewService
                 'segments' => [
                     'available' => $available,
                     'allocated' => $allocated,
+                    'written_off' => $writtenOff,
                     'sold' => $sold,
                 ],
                 'expiry' => $expiry,
@@ -193,8 +199,9 @@ class StockOverviewService
                 $cut = (int) $group->sum(fn ($i) => (int) ($i->source_cutting_logs_count ?? 0));
                 $converted = (int) $group->sum(fn ($i) => (int) ($i->converted_wheels ?? 0));
                 $maturing = (int) $group->sum(fn ($i) => (int) $i->quantity_maturing);
-                $sold = max(0, $produced - $remaining - $cut - $converted);
-                $remainingClamped = max(0, $produced - $cut - $converted - $sold);
+                $writtenOff = (int) $group->sum(fn ($i) => (int) ($i->written_off_units ?? 0));
+                $sold = max(0, $produced - $remaining - $cut - $converted - $writtenOff);
+                $remainingClamped = max(0, $produced - $cut - $converted - $sold - $writtenOff);
                 // Held-for-maturing wheels are part of remaining stock but set
                 // aside — never available to sell or allocate.
                 $maturing = min($maturing, $remainingClamped);
@@ -208,6 +215,7 @@ class StockOverviewService
                         'maturing' => $maturing,
                         'cut' => $cut,
                         'converted' => $converted,
+                        'written_off' => $writtenOff,
                         'sold' => $sold,
                     ],
                     'batch_code' => $batch->batch_code,
@@ -216,7 +224,8 @@ class StockOverviewService
                 if ($produced <= 0) {
                     continue;
                 }
-                $sold = max(0, $produced - $remaining);
+                $writtenOff = (int) $group->sum(fn ($i) => (int) ($i->written_off_units ?? 0));
+                $sold = max(0, $produced - $remaining - $writtenOff);
                 $available = max(0, $remaining - $allocated);
                 $packs[] = [
                     'label' => $label,
@@ -224,6 +233,7 @@ class StockOverviewService
                     'segments' => [
                         'available' => $available,
                         'allocated' => $allocated,
+                        'written_off' => $writtenOff,
                         'sold' => $sold,
                     ],
                     'batch_code' => $batch->batch_code,

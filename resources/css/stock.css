@@ -6,7 +6,8 @@
     --state-available: var(--accent);
     --state-allocated: var(--warn);
     --state-reserved: #C9C5B8;
-    --state-damaged: var(--danger);
+    --state-written-off: var(--danger);
+    --state-damaged: var(--state-written-off); /* old name, kept as an alias */
     --state-empty: var(--line-2);
     --state-cut: #9CA3AF;
     --state-maturing: oklch(0.55 0.11 56);

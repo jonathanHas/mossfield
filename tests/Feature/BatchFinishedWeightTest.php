@@ -137,6 +137,7 @@ class BatchFinishedWeightTest extends TestCase
         return Batch::with([
             'product', 'batchItems.productVariant', 'batchItems.orderAllocations',
             'batchItems.sourceCuttingLogs', 'batchItems.sourceConversionLogs', 'batchItems.targetCuttingLogs',
+            'batchItems.writeOffs',
         ])->findOrFail($batch->id);
     }
 
@@ -181,6 +182,80 @@ class BatchFinishedWeightTest extends TestCase
         $this->assertSame(15.12, $coverage['measured_kg']);
         $this->assertSame(35.0, $coverage['nominal_kg']);
         $this->assertTrue($coverage['reconciles']);
+    }
+
+    /** Write off $qty units of $item (weighed when $kg is given). */
+    private function writeOff(BatchItem $item, int $qty, ?float $kg = null): \App\Models\StockWriteOff
+    {
+        return app(\App\Services\StockWriteOffService::class)->record(
+            $item->fresh(), \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(),
+            $qty, $kg, null, today(), $this->office,
+        );
+    }
+
+    public function test_written_off_wheels_are_the_fifth_state_and_still_count_in_the_weight(): void
+    {
+        $wheelItem = $this->wheels(10);
+
+        $this->pick($wheelItem, [4.8, 5.2]);                 // 2 dispatched, measured 10.000
+        $this->cut($wheelItem->fresh(), 5.120);              // 1 cut, measured 5.120
+        $this->convert($wheelItem->fresh(), 1);              // 1 converted, nominal 5.000
+        $this->writeOff($wheelItem, 1, 4.900);               // 1 written off, measured 4.900
+        $this->writeOff($wheelItem, 1);                      // 1 written off, unweighed → nominal
+        $reversed = $this->writeOff($wheelItem, 1);          // reversed: not a write-off
+        app(\App\Services\StockWriteOffService::class)->reverse($reversed, $this->office);
+
+        $batch = $this->loaded($wheelItem->batch);
+        $wheel = $batch->batchItems->firstWhere('id', $wheelItem->id)->weight_breakdown;
+
+        $this->assertSame(4, $wheel['on_hand']);
+        $this->assertSame(2, $wheel['dispatched']);
+        $this->assertSame(1, $wheel['cut']);
+        $this->assertSame(1, $wheel['converted']);
+        $this->assertSame(2, $wheel['written_off']);
+        $this->assertTrue($wheel['reconciles'], '4 + 2 + 1 + 1 + 2 = 10');
+
+        $this->assertSame(4, $wheel['weighed'], '2 dispatched + 1 measured cut + 1 weighed write-off');
+        $this->assertSame(20.02, $wheel['measured_kg']);
+        $this->assertSame(30.0, $wheel['nominal_kg'], '(4 on hand + 1 converted + 1 unweighed write-off) × 5.000');
+
+        // The make produced them: written-off wheels stay in the finished weight.
+        $this->assertSame(50.02, $batch->finished_product_weight);
+        $this->assertSame(4, $batch->weight_coverage['wheels_weighed']);
+        $this->assertTrue($batch->weight_coverage['reconciles']);
+    }
+
+    public function test_a_milk_write_off_is_counted_but_does_not_change_the_weight(): void
+    {
+        $milk = Product::create(['name' => 'Milk', 'type' => 'milk', 'is_active' => true]);
+        $bottle = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle', 'weight_kg' => 1.000, 'base_price' => 2.00, 'is_active' => true,
+        ]);
+        $batch = Batch::create(['product_id' => $milk->id, 'production_date' => today()->toDateString(), 'raw_milk_litres' => 200, 'status' => 'active']);
+        $item = BatchItem::create(['batch_id' => $batch->id, 'product_variant_id' => $bottle->id, 'quantity_produced' => 200, 'quantity_remaining' => 200, 'unit_weight_kg' => 1.000]);
+        $this->writeOff($item, 10);
+
+        $breakdown = $this->loaded($batch)->batchItems->first()->weight_breakdown;
+        $this->assertSame(10, $breakdown['written_off']);
+        $this->assertSame(190, $breakdown['on_hand']);
+        $this->assertSame(200.0, $breakdown['nominal_kg'], 'produced × unit — they were made');
+        $this->assertSame(200.0, $this->loaded($batch)->finished_product_weight);
+    }
+
+    public function test_an_unloaded_write_off_relation_reads_as_none_not_a_query(): void
+    {
+        $wheelItem = $this->wheels(4);
+        $this->writeOff($wheelItem, 1);
+
+        $item = BatchItem::with(['batch.product', 'productVariant', 'orderAllocations', 'sourceCuttingLogs', 'sourceConversionLogs', 'targetCuttingLogs'])
+            ->findOrFail($wheelItem->id);
+        \Illuminate\Support\Facades\DB::enableQueryLog();
+        $breakdown = $item->weight_breakdown;
+        $queries = count(\Illuminate\Support\Facades\DB::getQueryLog());
+        \Illuminate\Support\Facades\DB::disableQueryLog();
+
+        $this->assertSame(0, $queries);
+        $this->assertSame(0, $breakdown['written_off']);
     }
 
     public function test_a_cut_never_adds_the_pack_weight(): void

@@ -436,6 +436,13 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
 
         $otherUser = User::factory()->create();
 
+        // Stock write-offs (cycle 7): a recorded write-off, and a reason.
+        $writeOffReason = \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail();
+        $writeOff = \App\Models\StockWriteOff::create([
+            'batch_item_id' => $batchItem->id, 'write_off_reason_id' => $writeOffReason->id,
+            'quantity' => 1, 'written_off_on' => today(),
+        ]);
+
         $this->params = [
             'batch' => $batch->id,            // batches.* — statements.batch.* is overridden in url()
             'batchItem' => $batchItem->id,
@@ -455,6 +462,8 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
             'statement' => $statement->id,
             'statement_batch' => $statementBatch,
             'user' => $otherUser->id,
+            'writeOff' => $writeOff->id,
+            'write_off_reason' => $writeOffReason->id,
         ];
     }
 

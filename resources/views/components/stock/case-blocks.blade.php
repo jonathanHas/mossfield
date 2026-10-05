@@ -20,7 +20,9 @@
     $totalCases = (int) ceil($total / $caseSize);
     $perRow = min(max($totalCases, 1), 30);
 
-    $stateOrder = ['available', 'allocated', 'reserved', 'damaged', 'sold'];
+    $stateOrder = ['available', 'allocated', 'reserved', 'written_off', 'sold'];
+    // written_off → --state-written-off / "written off" (one mapping).
+    $token = fn ($s) => '--state-'.str_replace('_', '-', $s);
     $blocks = [];
     $caseCounts = [];
     foreach ($stateOrder as $state) {
@@ -38,7 +40,7 @@
         $blocks = array_slice($blocks, 0, $totalCases);
     }
 
-    $stateLabel = fn ($s) => ucfirst($s);
+    $stateLabel = fn ($s) => ucfirst(str_replace('_', ' ', $s));
 @endphp
 
 <div class="flex flex-col lg:flex-row lg:items-center gap-4">
@@ -60,7 +62,7 @@
             @foreach($blocks as $i => $state)
                 @php
                     $tooltip = $stateLabel($state).' · '.($caseCounts[$state]['bottles'] ?? 0).' bottles · '.($caseCounts[$state]['cases'] ?? 0).' cases';
-                    $bgVar = $state === 'empty' ? null : '--state-'.$state;
+                    $bgVar = $state === 'empty' ? null : $token($state);
                 @endphp
                 <div
                     class="stock-case @if($state === 'empty') stock-case--empty @endif"
@@ -72,11 +74,11 @@
     </div>
 
     <div class="stock-segments flex-shrink-0">
-        @foreach(['available', 'allocated', 'sold'] as $s)
+        @foreach(['available', 'allocated', 'written_off', 'sold'] as $s)
             @if(($segments[$s] ?? 0) > 0 || $s === 'available')
                 <div>
-                    <div class="stock-segments__label">{{ $s }}</div>
-                    <div class="stock-segments__value" style="color: var(--state-{{ $s }});">
+                    <div class="stock-segments__label">{{ str_replace('_', ' ', $s) }}</div>
+                    <div class="stock-segments__value" style="color: var({{ $token($s) }});">
                         {{ number_format($segments[$s] ?? 0) }}
                     </div>
                 </div>

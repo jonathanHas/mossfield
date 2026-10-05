@@ -353,8 +353,13 @@ class BatchCreateTest extends TestCase
         [$cheese, $wheel, $pack] = $this->cheese(0);
         $admin = User::factory()->admin()->create();
         // One plain batch (no allocations, no conversions: the NULL case) and one reserved.
-        $this->cheeseBatch($cheese, [[$wheel, 5, 5], [$pack, 10, 10]], ['production_date' => today()->subDays(3)]);
+        $plain = $this->cheeseBatch($cheese, [[$wheel, 5, 5], [$pack, 10, 10]], ['production_date' => today()->subDays(3)]);
         $this->allocateOne($this->cheeseBatch($cheese, [[$wheel, 5, 5]], ['production_date' => today()->subDays(4)]));
+        // A write-off too (cycle 7): its sum rides the same eager-load.
+        app(\App\Services\StockWriteOffService::class)->record(
+            $plain->batchItems()->first(), \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(),
+            1, null, null, today(), $admin,
+        );
 
         $count = function (string $url) use ($admin): int {
             \Illuminate\Support\Facades\DB::flushQueryLog();

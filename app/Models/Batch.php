@@ -66,6 +66,12 @@ class Batch extends Model
         return $this->hasManyThrough(CheeseCuttingLog::class, BatchItem::class, 'batch_id', 'source_batch_item_id');
     }
 
+    /** Every write-off (active and reversed) on this batch's items. */
+    public function writeOffs(): HasManyThrough
+    {
+        return $this->hasManyThrough(StockWriteOff::class, BatchItem::class, 'batch_id', 'batch_item_id');
+    }
+
     /**
      * Trim lost across every measured cut on this batch (Σ wheel − packs).
      * Unmeasured (pre-2026-09-13) cuts contribute nothing and are counted
@@ -213,7 +219,7 @@ class Batch extends Model
      */
     public function deletionBlocker(): ?string
     {
-        ['allocations' => $allocations, 'cuts' => $cuts, 'conversions' => $conversions] = $this->dependentCounts();
+        ['allocations' => $allocations, 'cuts' => $cuts, 'conversions' => $conversions, 'write_offs' => $writeOffs] = $this->dependentCounts();
 
         $reasons = [];
         if ($allocations) {
@@ -224,6 +230,9 @@ class Batch extends Model
         }
         if ($conversions) {
             $reasons[] = $conversions.' mature-conversion '.($conversions === 1 ? 'record' : 'records');
+        }
+        if ($writeOffs) {
+            $reasons[] = $writeOffs.' write-off '.($writeOffs === 1 ? 'record' : 'records');
         }
 
         if (! $reasons) {
@@ -246,12 +255,13 @@ class Batch extends Model
      * Reads the *_count attributes from loaded batchItems when the caller
      * eager-loaded them (BatchController::index()), else one withCount query.
      *
-     * @return array{allocations: int, cuts: int, conversions: int}
+     * @return array{allocations: int, cuts: int, conversions: int, write_offs: int}
      */
     private function dependentCounts(): array
     {
+        // write_offs_count counts reversed write-offs too: they're history.
         $keys = ['order_allocations_count', 'source_cutting_logs_count', 'target_cutting_logs_count',
-            'source_conversion_logs_count', 'target_conversion_logs_count'];
+            'source_conversion_logs_count', 'target_conversion_logs_count', 'write_offs_count'];
 
         $items = $this->relationLoaded('batchItems')
             && $this->batchItems->every(fn ($item) => collect($keys)->every(fn ($k) => array_key_exists($k, $item->getAttributes())))
@@ -262,13 +272,49 @@ class Batch extends Model
                 'targetCuttingLogs',
                 'sourceConversionLogs',
                 'targetConversionLogs',
+                'writeOffs',
             ])->get();
 
         return [
             'allocations' => (int) $items->sum('order_allocations_count'),
             'cuts' => (int) $items->sum('source_cutting_logs_count') + (int) $items->sum('target_cutting_logs_count'),
             'conversions' => (int) $items->sum('source_conversion_logs_count') + (int) $items->sum('target_conversion_logs_count'),
+            'write_offs' => (int) $items->sum('write_offs_count'),
         ];
+    }
+
+    /**
+     * Active write-offs on this batch, from the LOADED batchItems.writeOffs
+     * (BatchController::show() loads them): units, and the kg of the ones that
+     * were weighed.
+     *
+     * @return array{units: int, weighed_kg: float}
+     */
+    public function writtenOffSummary(): array
+    {
+        $active = $this->batchItems->flatMap(fn ($item) => $item->relationLoaded('writeOffs') ? $item->writeOffs : collect())
+            ->whereNull('reversed_at');
+
+        return [
+            'units' => (int) $active->sum('quantity'),
+            'weighed_kg' => round((float) $active->sum(fn ($w) => (float) ($w->weight_kg ?? 0)), 3),
+        ];
+    }
+
+    /**
+     * Units an expired batch could still write off: Σ holdable (remaining −
+     * still owed) per item. Uses the index's eager-loaded
+     * quantity_currently_allocated when present, so a card costs no query.
+     */
+    public function writableUnits(): int
+    {
+        return (int) $this->batchItems->sum(function (BatchItem $item) {
+            if (array_key_exists('quantity_currently_allocated', $item->getAttributes())) {
+                return max(0, (int) $item->quantity_remaining - (int) $item->getAttributes()['quantity_currently_allocated']);
+            }
+
+            return $item->holdable_quantity;
+        });
     }
 
     public function getRemainingStockAttribute(): int

@@ -133,7 +133,7 @@
                 <div class="grid gap-3 mb-4 grid-cols-1 sm:grid-cols-3">
                     <a href="{{ route('batches.index', ['status' => 'expired']) }}">
                         <x-dash-kpi label="Expired stock" :value="$expiredCount"
-                            :sub="number_format($expiredUnits).' units · write off or close'"
+                            :sub="number_format($expiredUnits).' units · write off'"
                             tone="danger" />
                     </a>
                 </div>

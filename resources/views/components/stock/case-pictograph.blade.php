@@ -19,7 +19,9 @@
         : $fullCases.' '.\Illuminate\Support\Str::plural('case', $fullCases).' × '.$caseSize.($looseUnits ? ' + '.$looseUnits.' loose' : '');
     $totalCases = (int) ceil($total / $caseSize);
 
-    $stateOrder = ['available', 'allocated', 'reserved', 'damaged', 'sold'];
+    $stateOrder = ['available', 'allocated', 'reserved', 'written_off', 'sold'];
+    // written_off → --state-written-off / "written off" (one mapping).
+    $token = fn ($s) => '--state-'.str_replace('_', '-', $s);
     $icons = [];
     $caseCounts = [];
     foreach ($stateOrder as $state) {
@@ -31,7 +33,7 @@
         }
     }
 
-    $stateLabel = fn ($s) => ucfirst($s);
+    $stateLabel = fn ($s) => ucfirst(str_replace('_', ' ', $s));
 @endphp
 
 <div class="flex flex-col lg:flex-row lg:items-center gap-4">
@@ -57,9 +59,9 @@
                 <svg width="18" height="15" viewBox="0 0 18 16" title="{{ $tooltip }}" style="display: block;">
                     <title>{{ $tooltip }}</title>
                     <path d="M2 4 h14 l-1.5 11 c-0.1 0.7 -0.5 1 -1.2 1 h-8.6 c-0.7 0 -1.1 -0.3 -1.2 -1 z"
-                        fill="var(--state-{{ $state }})" stroke="rgba(0,0,0,0.15)" stroke-width="0.6" />
+                        fill="var({{ $token($state) }})" stroke="rgba(0,0,0,0.15)" stroke-width="0.6" />
                     <ellipse cx="9" cy="3.5" rx="7.4" ry="1.8"
-                        fill="var(--state-{{ $state }})" stroke="rgba(0,0,0,0.18)" stroke-width="0.6" />
+                        fill="var({{ $token($state) }})" stroke="rgba(0,0,0,0.18)" stroke-width="0.6" />
                     <ellipse cx="9" cy="3.5" rx="6" ry="1.1" fill="rgba(255,255,255,0.4)" />
                 </svg>
             @endforeach
@@ -67,11 +69,11 @@
     </div>
 
     <div class="stock-segments flex-shrink-0">
-        @foreach(['available', 'allocated', 'sold'] as $s)
+        @foreach(['available', 'allocated', 'written_off', 'sold'] as $s)
             @if(($segments[$s] ?? 0) > 0 || $s === 'available')
                 <div>
-                    <div class="stock-segments__label">{{ $s }}</div>
-                    <div class="stock-segments__value" style="color: var(--state-{{ $s }});">
+                    <div class="stock-segments__label">{{ str_replace('_', ' ', $s) }}</div>
+                    <div class="stock-segments__value" style="color: var({{ $token($s) }});">
                         {{ number_format($segments[$s] ?? 0) }}
                     </div>
                 </div>

@@ -28,6 +28,12 @@
                 {{ $totals['converted'] }}
             </span>
         @endif
+        @if(($totals['written_off'] ?? 0) > 0)
+            <span class="inline-flex items-center gap-1" title="Written off">
+                <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-written-off); border-color: oklch(0.45 0.15 25);"></span>
+                {{ $totals['written_off'] }}
+            </span>
+        @endif
         <span class="inline-flex items-center gap-1" title="Whole wheels sold">
             <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-900 border border-black"></span>
             {{ $totals['sold'] }}

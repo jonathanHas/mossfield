@@ -41,6 +41,12 @@ class User extends Authenticatable
         ];
     }
 
+    /** Write-offs this user recorded (the audit trail). */
+    public function stockWriteOffs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(StockWriteOff::class, 'written_off_by');
+    }
+
     public function hasRole(UserRole|string ...$roles): bool
     {
         $normalized = array_map(

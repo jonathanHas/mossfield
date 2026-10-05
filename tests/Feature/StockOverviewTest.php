@@ -197,4 +197,35 @@ class StockOverviewTest extends TestCase
             ->assertSee('2 cases × 16 + 8 loose')
             ->assertDontSee('1 cases × 16');
     }
+
+    public function test_a_written_off_bottle_is_its_own_segment_not_sold(): void
+    {
+        $milk = Product::create(['name' => 'Test Organic Milk', 'type' => 'milk', 'is_active' => true]);
+        $variant = ProductVariant::create([
+            'product_id' => $milk->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle',
+            'weight_kg' => 1.0, 'base_price' => 2.50, 'case_size' => 16, 'is_active' => true,
+        ]);
+        $batch = Batch::create([
+            'product_id' => $milk->id, 'production_date' => now()->subDays(2),
+            'expiry_date' => now()->addDays(5), 'raw_milk_litres' => 100, 'status' => 'active',
+        ]);
+        $item = BatchItem::create([
+            'batch_id' => $batch->id, 'product_variant_id' => $variant->id,
+            'quantity_produced' => 32, 'quantity_remaining' => 28, 'unit_weight_kg' => 1.0, // 4 sold
+        ]);
+        $user = User::factory()->admin()->create();
+        app(\App\Services\StockWriteOffService::class)->record(
+            $item, \App\Models\WriteOffReason::where('code', 'damaged')->firstOrFail(), 3, null, null, today(), $user,
+        );
+
+        $segments = app(StockOverviewService::class)->build()['milk']['variants'][0]['segments'];
+        $this->assertSame(25, $segments['available']);
+        $this->assertSame(3, $segments['written_off']);
+        $this->assertSame(4, $segments['sold'], 'written-off units are not sold');
+
+        $this->actingAs($user)->get('/stock')
+            ->assertOk()
+            ->assertSee('written off')
+            ->assertSee('var(--state-written-off)', false);
+    }
 }

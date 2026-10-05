@@ -18,7 +18,9 @@ use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Statement;
+use App\Models\StockWriteOff;
 use App\Models\User;
+use App\Models\WriteOffReason;
 use App\Policies\BatchItemPolicy;
 use App\Policies\BatchPolicy;
 use App\Policies\CheeseConversionLogPolicy;
@@ -35,7 +37,9 @@ use App\Policies\PaymentPolicy;
 use App\Policies\ProductPolicy;
 use App\Policies\ProductVariantPolicy;
 use App\Policies\StatementPolicy;
+use App\Policies\StockWriteOffPolicy;
 use App\Policies\UserPolicy;
+use App\Policies\WriteOffReasonPolicy;
 use Illuminate\Foundation\Support\Providers\AuthServiceProvider as ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 
@@ -56,6 +60,8 @@ class AuthServiceProvider extends ServiceProvider
         BatchItem::class => BatchItemPolicy::class,
         CheeseCuttingLog::class => CheeseCuttingLogPolicy::class,
         CheeseConversionLog::class => CheeseConversionLogPolicy::class,
+        StockWriteOff::class => StockWriteOffPolicy::class,
+        WriteOffReason::class => WriteOffReasonPolicy::class,
         Order::class => OrderPolicy::class,
         OrderItem::class => OrderItemPolicy::class,
         OrderAllocation::class => OrderAllocationPolicy::class,

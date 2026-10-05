@@ -10,6 +10,7 @@ A comprehensive Laravel 12 application for managing dairy farm operations, provi
 - **Cheese Maturation**: Track maturation periods and ready-to-sell dates
 - **Cheese Cutting**: Convert whole wheels to vacuum-packed units with full traceability
 - **Mature Conversion** (`/cheese-conversion`): Set Farmhouse wheels aside to age — a reversible "maturing hold" (any age) that takes them out of order allocation — then release aged wheels into the separate **Mossfield Mature Cheese** product. Drag-and-drop / select wheel allocator; release is reversible until the mature wheels are cut or sold
+- **Stock Write-offs**: Record stock that was lost — spoiled, dropped, sampled, expired — against a batch item with a reason (an extendable list), an optional note and, for weighed stock, the measured weight. Written-off units leave sellable stock everywhere at once but still count in the batch's finished weight; a write-off is reversible and stays on the record. Expired batches get a one-click "Write off expired stock"
 - **Grouped Batch Browser** (`/batches`, `/cheese-cutting`): Batches grouped by product type and cheese variety with three-level collapsible sections. At-a-glance wheel status in every cheese batch header — one circle per wheel (🟡 remaining · ⚪ cut · ⚫ sold) plus a stacked bar for vacuum packs — so stock status is visible without expanding anything
 
 ### 📦 **Product & Variant Management**

@@ -17,10 +17,11 @@
     $packBreakdowns = $packItems->map(function ($item) {
         $produced = (int) $item->quantity_produced;
         $remaining = (int) $item->quantity_remaining;
-        $sold = max(0, $produced - $remaining);
+        $written_off = $item->written_off_units; // eager-loaded by BatchController::index()
+        $sold = max(0, $produced - $remaining - $written_off);
         $allocated = max(0, min($remaining, (int) ($item->quantity_currently_allocated ?? 0)));
         $free = max(0, $remaining - $allocated);
-        return compact('produced', 'remaining', 'sold', 'allocated', 'free') + ['name' => $item->productVariant->name];
+        return compact('produced', 'remaining', 'sold', 'written_off', 'allocated', 'free') + ['name' => $item->productVariant->name];
     })->filter(fn ($b) => $b['produced'] > 0);
 
     $statusTone = match($batch->status) {
@@ -44,6 +45,12 @@
                     <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst(str_replace('_', ' ', $batch->status)) }}</span>
                     @if($isExpired)
                         <span class="mf-tag mf-tag-danger">Expired</span>
+                        {{-- Still holding stock nobody can sell: straight to the write-off panel. --}}
+                        @can('create', App\Models\StockWriteOff::class)
+                            @if($batch->writableUnits() > 0)
+                                <a href="{{ route('batches.show', $batch) }}#write-offs" class="mf-link text-[12px]" style="color: var(--danger);" onclick="event.stopPropagation()">Write off →</a>
+                            @endif
+                        @endcan
                     @elseif(!$isReady)
                         <span class="mf-tag mf-tag-warn">Maturing</span>
                     @else
@@ -105,18 +112,23 @@
                                 $freePct = $pb['produced'] > 0 ? ($pb['free'] / $pb['produced']) * 100 : 0;
                                 $allocatedPct = $pb['produced'] > 0 ? ($pb['allocated'] / $pb['produced']) * 100 : 0;
                                 $soldPct = $pb['produced'] > 0 ? ($pb['sold'] / $pb['produced']) * 100 : 0;
+                                $writtenOffPct = $pb['produced'] > 0 ? ($pb['written_off'] / $pb['produced']) * 100 : 0;
                             @endphp
                             <div class="flex items-center flex-wrap gap-2">
                                 <span class="text-[11.5px]" style="color: var(--muted);">{{ $pb['name'] }}:</span>
                                 <span class="inline-flex w-32 h-2 rounded-full bg-gray-200 overflow-hidden border border-gray-300" title="{{ $pb['free'] }} free · {{ $pb['allocated'] }} allocated · {{ $pb['sold'] }} sold">
                                     <span class="h-full bg-yellow-400" style="width: {{ $freePct }}%"></span>
                                     <span class="h-full bg-amber-500" style="width: {{ $allocatedPct }}%"></span>
+                                    <span class="h-full" style="width: {{ $writtenOffPct }}%; background: var(--state-written-off);"></span>
                                     <span class="h-full bg-gray-900" style="width: {{ $soldPct }}%"></span>
                                 </span>
                                 <span class="text-[11.5px] font-mono" style="color: var(--muted);">
                                     {{ $pb['free'] }} <span style="color: var(--faint);">/</span> {{ $pb['produced'] }} packs
                                     @if($pb['allocated'] > 0)
                                         <span style="color: var(--faint);">· {{ $pb['allocated'] }} allocated</span>
+                                    @endif
+                                    @if($pb['written_off'] > 0)
+                                        <span style="color: var(--state-written-off);">· {{ $pb['written_off'] }} written off</span>
                                     @endif
                                     @if($pb['sold'] > 0)
                                         <span style="color: var(--faint);">· {{ $pb['sold'] }} sold</span>

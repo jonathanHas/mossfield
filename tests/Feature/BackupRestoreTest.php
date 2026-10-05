@@ -190,6 +190,55 @@ class BackupRestoreTest extends TestCase
         $this->assertDatabaseHas('order_items', ['order_id' => Order::first()->id, 'quantity_ordered' => 10]);
     }
 
+    public function test_write_offs_and_a_custom_reason_round_trip(): void
+    {
+        $this->seedBusinessData();
+        $reason = \App\Models\WriteOffReason::create(['code' => 'broken_seal', 'label' => 'Broken seal', 'is_active' => true, 'sort_order' => 80]);
+        $writeOff = app(\App\Services\StockWriteOffService::class)->record(
+            BatchItem::first(), $reason, 4, null, 'Seal split', \Carbon\CarbonImmutable::parse('2026-07-03'), $this->admin,
+        );
+        $upload = $this->archiveUpload();
+
+        $writeOff->delete();
+        $reason->delete();
+        BatchItem::first()->update(['quantity_remaining' => 100]);
+
+        $this->actingAs($this->admin)
+            ->post(route('backup.restore'), [
+                'backup_file' => $upload, 'password' => self::PASSWORD, 'confirm' => 'RESTORE',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(1, \App\Models\WriteOffReason::where('code', 'broken_seal')->count());
+        $restored = \App\Models\StockWriteOff::sole();
+        $this->assertSame(4, $restored->quantity);
+        $this->assertSame('Seal split', $restored->note);
+        $this->assertSame('Broken seal', $restored->reason->label);
+        $this->assertSame(96, BatchItem::first()->quantity_remaining);
+    }
+
+    public function test_a_backup_from_before_write_offs_still_restores(): void
+    {
+        $this->seedBusinessData();
+        $payload = app(BackupService::class)->export();
+        unset($payload['tables']['stock_write_offs'], $payload['tables']['write_off_reasons']);
+        $upload = $this->archiveUpload($payload);
+
+        // A write-off made since then goes; the reasons stay.
+        app(\App\Services\StockWriteOffService::class)->record(
+            BatchItem::first(), \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(), 1, null, null, today(), $this->admin,
+        );
+
+        $this->actingAs($this->admin)
+            ->post(route('backup.restore'), [
+                'backup_file' => $upload, 'password' => self::PASSWORD, 'confirm' => 'RESTORE',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(0, \App\Models\StockWriteOff::count());
+        $this->assertSame(7, \App\Models\WriteOffReason::count());
+    }
+
     public function test_restore_reencrypts_customer_pii_readable(): void
     {
         $this->seedBusinessData();

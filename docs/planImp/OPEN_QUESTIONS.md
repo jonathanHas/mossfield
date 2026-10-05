@@ -12,8 +12,8 @@ implementation into `handoff/NEXT.md`.
 ## 1. The app has no way to record stock being lost
 
 **Raised:** 2026-09-13, after the stock model work · **Status:** **decided
-2026-10-04** — implementation is Plan/Implement cycle 7 (`plan.md`, then
-`archive/2026-10-04-write-offs/`).
+2026-10-04, built 2026-10-05** — Plan/Implement cycle 7
+(`archive/2026-10-05-write-offs/`; write-up in `TESTING_AND_FIXES.md`).
 
 ### Decision (Jon, 2026-10-04)
 

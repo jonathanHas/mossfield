@@ -27,6 +27,9 @@ class CheeseCuttingController extends Controller
             'batchItems' => fn ($q) => $q->with('productVariant')
                 ->withCount('sourceCuttingLogs')
                 ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
+                // Active write-offs only — a reversed write-off isn't one
+                // (a legitimate filter, unlike fulfilled_at on reservations).
+                ->withSum(['writeOffs as written_off_units' => fn ($q) => $q->whereNull('reversed_at')], 'quantity')
                 ->withSum(
                     'orderAllocations as quantity_currently_allocated',
                     DB::raw('quantity_allocated - quantity_fulfilled')

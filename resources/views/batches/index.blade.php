@@ -13,7 +13,7 @@
         // Per-variety totals of the wheel strip (BatchItem::wheelStates(),
         // the one formula shared with the cards and /cheese-cutting).
         $wheelStatsFor = function ($batch) {
-            $stats = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold'], 0);
+            $stats = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'written_off', 'sold'], 0);
             foreach ($batch->batchItems as $item) {
                 if (! $item->productVariant->isWheel()) {
                     continue;
@@ -106,7 +106,7 @@
                             $subBatchCount = $subBatches->count();
                             $subWheelTotals = null;
                             if ($type === 'cheese') {
-                                $subWheelTotals = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'sold'], 0);
+                                $subWheelTotals = array_fill_keys(['produced', 'free', 'allocated', 'maturing', 'cut', 'converted', 'written_off', 'sold'], 0);
                                 foreach ($subBatches as $b) {
                                     $s = $wheelStatsFor($b);
                                     foreach ($subWheelTotals as $k => $v) {

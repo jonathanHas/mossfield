@@ -77,11 +77,21 @@ worth returning to.
   **617 passed, 0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-04
   Loose ends. Jon archives `plan.md` + `implemented.md` to
   `archive/2026-10-04-loose-ends/`.
-- **The Planner's own backlog is now empty.** What's left needs Jon:
-  `OPEN_QUESTIONS.md` #1 (write-offs — the biggest functional gap) and #5
-  (eight policy calls from the E2E run); each answer becomes a one-step
-  plan. Also `FULFILMENT_PLAN.md` Phase 4 (driver route + POD) when wanted,
-  and two tiny follow-ups logged under the cycle-6 section.
+- **Cycle 7 "Stock write-offs" — ACCEPTED 2026-10-05:** OPEN_QUESTIONS #1
+  built — reasons list (seeded by migration, manageable), record/reverse
+  through `StockWriteOffService`, the expired one-click, the fifth state in
+  the weight model and on every stock surface, `BackupService::ADDED_LATER`.
+  Suite **647 passed, 0 failed**. Write-up in `TESTING_AND_FIXES.md` →
+  2026-10-05. Jon archives `plan.md` + `implemented.md` to
+  `archive/2026-10-05-write-offs/`.
+- **Next: cycle 8 — the policy batch** from OPEN_QUESTIONS #5 (decided
+  2026-10-04): one delivery charge per drop; credit-limit warning; Mature
+  conversion-only; sanity ceiling; milk yield computed, bottled > raw
+  refused; order notes off customer documents; Mark dispatched requires the
+  loaded tick. **F-38 still needs Jon's answer** (Planner's recommendation in
+  the chat: restrict Issue to dispatched/delivered; default terms from
+  invoicing mode). Then a small polish batch (follow-ups under the cycle-6
+  and cycle-7 sections) and `FULFILMENT_PLAN.md` Phase 4 when wanted.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -129,7 +139,10 @@ way. Cycle 3's browser checks added orders 19–20 (cancelled) and payment 8
 more G010426 wheel to Mature** (item 46 now `remaining 7 · held 1`; G010426-1
 has 2) — reversible from the Mature batch page. Cycles 5–6 added orders
 23–25 (cancelled). Counts now 24 orders, 33 allocations, 4 payments, 7
-invoices, 13 batches, 18 customers; no customer is linked to Mossorders. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+invoices, 13 batches, 18 customers; no customer is linked to Mossorders.
+**Cycle 7 wrote off M230726's expired stock** (951 units, reason Expired —
+correct, kept) and left 4 `stock_write_offs` rows (2 active, 2 reversed
+probes); the dashboard Expired tile now reads 4 batches / 4,956 units. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.

@@ -29,8 +29,12 @@ class BatchController extends Controller
                     'targetCuttingLogs',
                     'sourceConversionLogs',
                     'targetConversionLogs',
+                    'writeOffs',
                 ])
                 ->withSum('sourceConversionLogs as converted_wheels', 'wheels_converted')
+                // Active write-offs only — a reversed write-off isn't one
+                // (a legitimate filter, unlike fulfilled_at on reservations).
+                ->withSum(['writeOffs as written_off_units' => fn ($q) => $q->whereNull('reversed_at')], 'quantity')
                 ->withSum([
                     'orderAllocations as quantity_currently_allocated',
                 ], DB::raw('quantity_allocated - quantity_fulfilled')),
@@ -167,9 +171,20 @@ class BatchController extends Controller
             'batchItems.targetConversionLogs.sourceBatchItem.batch.product',
             // Everything BatchItem::weight_breakdown reads, loaded once.
             'batchItems.orderAllocations', 'batchItems.sourceCuttingLogs', 'batchItems.sourceConversionLogs', 'batchItems.targetCuttingLogs',
+            'batchItems.writeOffs.reason', 'batchItems.writeOffs.writtenOffBy', 'batchItems.writeOffs.reversedBy',
         ]);
 
-        return view('batches.show', compact('batch'));
+        // The write-off form's reasons (active only — a deactivated reason
+        // can't be chosen) and the history, newest first.
+        $writeOffReasons = auth()->user()->can('create', \App\Models\StockWriteOff::class)
+            ? \App\Models\WriteOffReason::active()->ordered()->get()
+            : collect();
+        $writeOffs = $batch->batchItems
+            ->flatMap(fn ($item) => $item->writeOffs->each(fn ($w) => $w->setRelation('batchItem', $item)))
+            ->sortByDesc(fn ($w) => [$w->written_off_on?->toDateString(), $w->id])
+            ->values();
+
+        return view('batches.show', compact('batch', 'writeOffReasons', 'writeOffs'));
     }
 
     public function edit(Batch $batch): View

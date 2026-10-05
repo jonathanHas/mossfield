@@ -14,6 +14,9 @@
     @for($i = 0; $i < $wb['converted']; $i++)
         <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-converted); border-color: #5B21B6;" title="Converted to mature cheese"></span>
     @endfor
+    @for($i = 0; $i < ($wb['written_off'] ?? 0); $i++)
+        <span class="inline-block w-2.5 h-2.5 rounded-full border" style="background: var(--state-written-off); border-color: oklch(0.45 0.15 25);" title="Written off"></span>
+    @endfor
     @for($i = 0; $i < $wb['sold']; $i++)
         <span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-900 border border-black" title="Whole wheel sold"></span>
     @endfor
@@ -35,6 +38,7 @@
             @if($wb['maturing'] > 0) · <span style="color: var(--state-maturing);">{{ $wb['maturing'] }} maturing</span> @endif
             @if($wb['cut'] > 0) · {{ $wb['cut'] }} cut @endif
             @if($wb['converted'] > 0) · <span style="color: var(--state-converted);">{{ $wb['converted'] }} converted</span> @endif
+            @if(($wb['written_off'] ?? 0) > 0) · <span style="color: var(--state-written-off);">{{ $wb['written_off'] }} written off</span> @endif
             @if($wb['sold'] > 0) · {{ $wb['sold'] }} sold @endif
             <span style="color: var(--faint);">/ {{ $wb['produced'] }}</span>
         </span>

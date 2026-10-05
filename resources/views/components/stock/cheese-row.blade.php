@@ -8,8 +8,11 @@
 @php
     // Render order matches batches/partials/batch-card.blade.php so colors line up:
     // available (yellow→green), allocated (amber/warn), maturing (deep amber),
-    // cut (grey), converted-to-mature (purple), sold (black).
-    $order = ['available', 'allocated', 'maturing', 'cut', 'converted', 'sold'];
+    // cut (grey), converted-to-mature (purple), written off (red), sold (black).
+    $order = ['available', 'allocated', 'maturing', 'cut', 'converted', 'written_off', 'sold'];
+    // One mapping from a segment key to its CSS token and label:
+    // written_off → --state-written-off / "written off".
+    $token = fn ($s) => '--state-'.str_replace('_', '-', $s);
     $dots = [];
     foreach ($order as $state) {
         $n = (int) ($segments[$state] ?? 0);
@@ -17,7 +20,7 @@
             $dots[] = $state;
         }
     }
-    $stateLabel = fn ($s) => ucfirst($s);
+    $stateLabel = fn ($s) => ucfirst(str_replace('_', ' ', $s));
 @endphp
 
 <div class="flex flex-col lg:flex-row lg:items-center gap-4">
@@ -35,7 +38,7 @@
         <div class="stock-cheese-row" style="max-width: 520px;">
             @foreach($dots as $state)
                 <span class="stock-cheese-dot"
-                      style="background: var(--state-{{ $state }});"
+                      style="background: var({{ $token($state) }});"
                       title="{{ $stateLabel($state) }}"></span>
             @endforeach
         </div>
@@ -45,8 +48,8 @@
         @foreach($order as $s)
             @if(($segments[$s] ?? 0) > 0)
                 <div>
-                    <div class="stock-segments__label">{{ $s }}</div>
-                    <div class="stock-segments__value" style="color: var(--state-{{ $s }});">
+                    <div class="stock-segments__label">{{ str_replace('_', ' ', $s) }}</div>
+                    <div class="stock-segments__value" style="color: var({{ $token($s) }});">
                         {{ number_format($segments[$s]) }}
                     </div>
                 </div>

@@ -56,6 +56,10 @@
     if ($canSeeCustomers) {
         $miscItems[] = ['id' => 'customers', 'label' => 'Customers', 'route' => 'customers.index', 'match' => 'customers.*', 'icon' => 'customer'];
     }
+    // Write-off reasons: office/admin housekeeping (the Admin group is admin-only).
+    if ($canSeeAllocation) {
+        $miscItems[] = ['id' => 'write-off-reasons', 'label' => 'Write-off reasons', 'route' => 'write-off-reasons.index', 'match' => 'write-off-reasons.*', 'icon' => 'alert'];
+    }
     if ($canSeeProduction) {
         $miscItems[] = ['id' => 'stock', 'label' => 'Stock', 'route' => 'stock.index', 'match' => 'stock.*', 'icon' => 'stock'];
         $miscItems[] = ['id' => 'products', 'label' => 'Products', 'route' => 'products.index', 'match' => 'products.*', 'icon' => 'products'];

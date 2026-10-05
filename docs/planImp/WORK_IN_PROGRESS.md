@@ -8,6 +8,23 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Stock write-offs (2026-10-04)
+
+Plan/Implement cycle 7 (OPEN_QUESTIONS #1): a fifth way stock leaves a batch.
+Office/admin write off N units of a batch item with a reason (seven defaults
+shipped by the migration, extendable at `/write-off-reasons`), an optional
+note and, for weighed stock, the measured weight. The units come off
+`quantity_remaining`, so every free-stock surface drops them at once; they
+stay in the finished weight; the reconciliation is now
+`on hand + dispatched + cut + converted + written off = produced`, and the
+wheel strip and `/stock` show a red written-off state. Reserved stock can't be
+written off; held wheels can (the hold is clamped). Write-offs are
+reversible and never deleted. Expired batches get a one-click write-off from
+the batch page; the dashboard tile and `/stock` notes drop a batch once it's
+written off.
+
+---
+
 ## Recently Completed: Loose ends (2026-10-04)
 
 Plan/Implement cycle 6: topping up a reservation from the same batch on the

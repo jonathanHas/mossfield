@@ -44,18 +44,34 @@ class BackupService
      */
     public const TABLES = [
         'users',
+        'write_off_reasons',
         'products',
         'delivery_runs',
         'product_variants',
         'customers',
         'batches',
         'batch_items',
+        'stock_write_offs',
         'orders',
         'customer_special_prices',
         'order_items',
         'cheese_cutting_logs',
         'cheese_conversion_logs',
         'order_allocations',
+    ];
+
+    /**
+     * Tables added after backups were already being taken (cycle 7, stock
+     * write-offs). A backup from before they existed is still restorable:
+     * a missing table with `true` restores as empty (there were no rows
+     * then); with `false` its current rows are left alone (reference data
+     * the app needs — the write-off reasons).
+     *
+     * @var array<string, bool>
+     */
+    public const ADDED_LATER = [
+        'stock_write_offs' => true,
+        'write_off_reasons' => false,
     ];
 
     /**
@@ -118,14 +134,20 @@ class BackupService
 
         DB::transaction(function () use ($tables, &$summary) {
             Schema::withoutForeignKeyConstraints(function () use ($tables, &$summary) {
-                // Delete children before parents.
+                // Delete children before parents. A table an older backup
+                // doesn't carry (ADDED_LATER => false) keeps its rows.
                 foreach (array_reverse(self::TABLES) as $table) {
-                    DB::table($table)->delete();
+                    if (array_key_exists($table, $tables)) {
+                        DB::table($table)->delete();
+                    }
                 }
 
                 // Insert parents before children (chunked to stay under the
                 // SQLite bound-parameter limit on wide tables).
                 foreach (self::TABLES as $table) {
+                    if (! array_key_exists($table, $tables)) {
+                        continue;
+                    }
                     $rows = $tables[$table];
                     $summary[$table] = count($rows);
 
@@ -232,6 +254,13 @@ class BackupService
 
         $tables = [];
         foreach (self::TABLES as $table) {
+            if (! isset($payload['tables'][$table]) && array_key_exists($table, self::ADDED_LATER)) {
+                if (self::ADDED_LATER[$table]) {
+                    $tables[$table] = []; // restores as empty
+                }
+
+                continue; // else: left untouched
+            }
             if (! isset($payload['tables'][$table]) || ! is_array($payload['tables'][$table])) {
                 throw new RuntimeException("The backup file is missing the '{$table}' table.");
             }
