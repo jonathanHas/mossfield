@@ -188,9 +188,8 @@ to follow.
 ## 5. Decisions surfaced by the 2026-10-04 end-to-end run
 
 **Raised:** 2026-10-04 (findings in `archive/2026-10-04-e2e-browser-run/implemented.md`)
-· **Status:** **seven of eight decided 2026-10-04** (below, per item);
-implementation is Plan/Implement cycle 8. F-38 stays open — Jon wants to go
-through it in more detail.
+· **Status:** **all eight decided** (seven on 2026-10-04, F-38 on 2026-10-05;
+below, per item); implementation is Plan/Implement cycle 8.
 
 ### Decisions (Jon, 2026-10-04)
 
@@ -210,7 +209,12 @@ through it in more detail.
   confirmation or the docket.
 - **F-34 — align per-order dispatch with the run button**: Mark dispatched
   also requires the loaded tick.
-- **F-38 — open.** See the two sub-items above; to be gone through with Jon.
+- **F-38 — decided 2026-10-05** (Jon took the Planner's recommendations):
+  (a) manual *Issue invoice* is only offered for `dispatched`/`delivered`
+  orders — a `ready` order shows in the queue as "awaiting dispatch", not
+  billable (dispatch issues the invoice itself); (b) choosing weekly or
+  monthly invoicing on the customer form defaults the payment terms to
+  **Net 14** unless the office changes them.
 
 - **F-24 — one delivery charge per drop, or per order?** A flagged customer
   with two orders for the same run day is charged the run fee twice (€12.30

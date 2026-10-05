@@ -1,503 +1,389 @@
-# Stock write-offs: a fifth state for stock that is lost
+# The policy batch: eight rules the app had no opinion on
 
-Status: ACCEPTED
+Status: READY
 Revision: 1
 Planner: Fable 5.1
-Date: 2026-10-04
+Date: 2026-10-05
 
 ## Goal
 
-Stock can currently leave a batch three ways — sold, cut, converted — so a
-mouldy wheel, a dropped crate, a tasting sample or a batch that expired on the
-shelf has nowhere honest to go: the expired batches on dev still hold 5,907
-units as `active` stock. This cycle adds the **write-off**: office/admin
-record that N units of a batch item were lost, with a reason from an
-extendable list, an optional note, and for weighed stock the measured weight;
-the units leave sellable stock everywhere at once (they come off
-`quantity_remaining`, which every free-stock surface already reads), stay
-counted in the batch's finished weight (the make produced them), and appear
-as a fifth state in the reconciliation
-`on hand + dispatched + cut + converted + written off = produced`. A
-write-off is reversible and stays on the record. Expired stock gets a
-one-click write-off. Decisions: `OPEN_QUESTIONS.md` #1.
+Build Jon's decisions on `OPEN_QUESTIONS.md` #5 (all eight items). After this
+cycle: a flagged customer pays the run's delivery charge **once per drop**,
+not once per order; confirming an order that takes a customer over their
+credit limit **warns** (and the order page shows it); Mature is **made by
+conversion only**; a batch quantity far above the usual needs an explicit
+"yes, really"; milk yield is **computed** and bottling more than the raw milk
+entered is refused; order notes stay **internal** (off the dispatch
+confirmation and docket); **Mark dispatched** requires the loaded tick like
+the run button does; the To-Invoice queue only lets the office **issue
+invoices for dispatched or delivered orders**; and choosing weekly/monthly
+invoicing defaults a customer's **payment terms to Net 14**.
 
 ## Context
 
-HEAD `742674c` + the staged archive of cycle 6. Suite **617 passed, 0 failed**;
+HEAD `b7a2d59` + the staged archive of cycle 7. Suite **647 passed, 0 failed**;
 any failure is real. `pint --test app tests database routes config` clean.
 Nothing pushed or deployed.
 
-**The model to extend**
+**Facts the steps rely on**
 
-- `BatchItem` (`app/Models/BatchItem.php`): `quantity_produced`,
-  `quantity_remaining`, `quantity_maturing`, `unit_weight_kg`; relations
-  `orderAllocations`, `sourceCuttingLogs`, `targetCuttingLogs`,
-  `sourceConversionLogs`, `targetConversionLogs`. `available_quantity` =
-  `max(0, remaining − outstanding reservations − maturing)`; `holdable_quantity`
-  = `remaining − outstanding reservations`. **Every free-stock surface derives
-  from `quantity_remaining`**, so reducing it is the whole of "leaves sellable
-  stock" — no change needed at the eight sites.
-- `BatchItem::wheelStates()` (`:109`): `cut`, `converted`, `reserved` from
-  eager-loaded aggregates (`array_key_exists`, cycle 6), `sold = produced −
-  remaining − cut − converted`, then `allocated`/`maturing`/`free`. Rendered
-  by `batches/partials/_wheel-strip.blade.php` and `_wheel-legend.blade.php`
-  (colour tokens in `resources/css/stock.css`: `--state-damaged: var(--danger)`
-  exists and is unused).
-- `BatchItem::getWeightBreakdownAttribute()` (`:163–234`): wheels in four
-  states, measured where a measurement exists (dispatched →
-  `actual_weight_kg`; cut → `wheel_weight_kg`), nominal otherwise;
-  `reconciles = on_hand + dispatched + cut + converted === produced`;
-  `nominal_kg` counts on-hand + converted + unweighed cut + unweighed
-  dispatched × unit weight. Packs/milk: `produced × unit` (packs from cuts
-  excluded). `Batch::finished_product_weight` / `weight_coverage` sum these;
-  `BatchController::show()` eager-loads what the breakdown reads.
-- `BatchItem::getQuantitySoldAttribute()` (`:80`) is `produced − remaining`.
-- `StockOverviewService`: simple cards `sold = produced − remaining` (`:121`);
-  wheel rows `sold = produced − remaining − cut − converted` (`:196`);
-  segments arrays at `:131–135`, `:205–211`; `components/stock/cheese-row`
-  renders any `segments` state with `var(--state-{state})`; the index-style
-  eager-loads (`StockOverviewService:21–27`, `BatchController::index():20–35`,
-  `CheeseCuttingController::index():26–33`) carry the counts/sums
-  `wheelStates()` reads.
-- `/batches?status=expired` (cycle 4) matches `status=expired` or active past
-  expiry; the dashboard **Expired stock** tile (`routes/web.php`) counts
-  active, past-expiry batches with `quantity_remaining > 0` and links there;
-  `/stock` cards print an expired note (`stock/partials/_expired-note`).
-  Batch `status` enum: `active | sold_out | expired`.
-- Batch page `batches/show.blade.php`: panels for info (`:45`), items table
-  (`:134`), cutting history (`:189`), the items/actions panel (`:248`) with
-  Cut / hold buttons and the conversion history incl. "Return to farmhouse
-  hold" (`:339`, a `data-confirm` form). `Batch::deletionBlocker()` counts
-  allocations/cuts/conversions from the five `*_count`s the index eager-loads.
-- Admin-ish CRUD pattern to copy: `DeliveryRunController` + `resources/views/delivery-runs/`
-  (index with inline forms; create/edit pages). Policies: `BasePolicy`
-  subclasses registered in `AuthServiceProvider::$policies`. Office routes
-  live in the `role:admin,office` group in `routes/web.php` (`:138+`).
-- Housekeeping that fails tests if missed: `ResetTradingData::WIPE_ORDER`
-  (trading tables, FK order, `batch_items` near the end) / `KEEP` (reference
-  data) — `ResetTradingDataTest` fails on an unclassified table;
-  `BackupService::TABLES` (insert order) — `BackupRestoreTest` round-trips
-  them; `AuthorizationBoundaryTest` needs a fixture for every new route
-  parameter; `ConfirmDialogTest` scans views for `confirm(`;
-  `LayoutFeedbackTest` forbids a second flash region.
-- Seeders: `DatabaseSeeder` calls `AdminUserSeeder`, `ProductSeeder`,
-  `BatchSeeder`, `CustomerSeeder`. Production installs run migrations and
-  selected seeders (`DEPLOYMENT.md`); defaults a feature needs should ship
-  in the **migration** so no deploy step is forgotten.
-- Nav: Production group (`layouts/navigation.blade.php:66`) holds Batches,
-  Cheese Cutting, Mature Conversion for admin/office/factory.
+- **Delivery charge** (`CLAUDE.md` → Delivery Charge): `Customer::currentDeliveryCharge()`
+  (`app/Models/Customer.php:96`) returns the run's gross charge iff
+  `apply_delivery_charge` and the customer is on a run (0 when a percentage
+  is set — `deliveryChargePercent()` takes precedence). Snapshotted at **four**
+  creation sites: `OrderController::store()` (`:327`), `ChilledRunController::saveStop()`
+  (`:499`), `ImportOnlineOrders::processOrder()` (`:211`),
+  `OnlineOrdersController::import()` (`:192`); also fed to the order form's
+  preview map (`OrderController::create()` `:225`). VAT is backed out in
+  `Order::calculateTotals()`. E2E F-24: two same-day orders both carried €6.15.
+- **Credit limit**: `Customer::canPlaceOrder(float)` (`:201`) =
+  `outstanding_balance + amount <= credit_limit`, **called nowhere**;
+  `outstanding_balance` = open invoice balances − unallocated credit; the
+  customer form requires `credit_limit` (default €0). Confirm happens in
+  `OrderController::update()` (`$isConfirming`, `:409`) and
+  `ChilledRunController::confirmAll()`.
+- **Mature**: `ProductSeeder` creates "Mossfield Mature Cheese";
+  `CheeseConversionController::matureProduct()` (`:227`) finds it **by name**
+  (`MATURE_PRODUCT_NAME`); `BatchController::create()` passes every active
+  product to the form (`batches/create.blade.php:22`); `products` has no
+  flag for it. `ProductRequest` validates the product form.
+- **Quantities**: `BatchController::store()` validates
+  `batch_items.*.quantity_produced` as `integer|min:1`, nothing above
+  (E2E F-09: 3 000 wheels accepted). `config/mossfield.php` exists (one key,
+  `mature_conversion_months`).
+- **Milk yield**: `Batch::getProductionYieldAttribute()` returns a
+  hard-coded `1.0` for milk; cheese/yoghurt use
+  `finished_product_weight / raw_milk_litres`. Milk variants' `weight_kg` is
+  their volume in litres (the batch form labels it "Unit volume" and prints
+  "L"); `BatchItem.unit_weight_kg` is copied from it at creation.
+  `BatchFinishedWeightTest:363` asserts `1.0` for milk and `:378` the page's
+  "Yield ~5.0%" for cheese. The store form helper says raw milk "equals the
+  finished volume" for milk.
+- **Notes on documents**: `orders/dispatch-confirmation.blade.php:129–133`
+  and `orders/docket.blade.php:171+` print a NOTES block from `order.notes`.
+  The run sheet's Notes column and the order page are internal and stay.
+- **Dispatch**: `DispatchService::dispatch()` (`app/Services/DispatchService.php:47`)
+  refuses unless `status === 'ready'`; the **run** button
+  (`ChilledRunController::dispatchAll()`) additionally requires `loaded_at`
+  and names skipped orders; the **per-order** `OrderController::markDispatched()`
+  (`:~380`) has no loaded check. `loaded_at` is set only by
+  `ChilledRunController::toggleLoaded()` (ability `load`, factory may), which
+  redirects to the sheet. The order page (`orders/show.blade.php:151`) shows
+  Mark dispatched when `ready`. Tests that dispatch through the route
+  without `loaded_at`: `DispatchConfirmationTest` (18 posts),
+  `OrderTransitionsTest` (8); `DispatchRunTest` sets `loaded_at`.
+- **To Invoice**: `UninvoicedOrderController` base query `whereIn('status',
+  ['ready','dispatched','delivered'])` (`:33`); `issue()`/`issueAll()` call
+  `InvoiceService::issueForOrder()`, whose guard is `hasReachedReady()`
+  (`InvoiceService::issueForOrder()`); the view offers **Issue invoice** per
+  row and **Issue all N**. `InvoiceController::headlineStats()` feeds the
+  dashboard's "Awaiting invoice" tile. `DispatchService` calls
+  `issueForOrder()` **after** flipping the status to `dispatched`.
+- **Customer form** (`customers/create.blade.php:62–110`, same in `edit`):
+  Alpine `x-data="{ terms, mode }"` seeded from `x-ref`'d selects; the
+  cycle-5 hint shows when `terms === 'immediate'` and mode is weekly/monthly.
+- Tests to extend: `DeliveryChargeTest`, `OrderTransitionsTest`,
+  `ChilledRunTest`, `BatchCreateTest`, `BatchFinishedWeightTest`,
+  `MatureProductSeedTest`, `CheeseConversionTest`, `DispatchConfirmationTest`,
+  `OrderDocketTest`, `DispatchRunTest`, `InvoiceIssueTest`, `DashboardTest`,
+  `CustomerSpecialPriceTest` (customer form), `AuthorizationBoundaryTest`
+  (no new routes expected unless step 7 adds one). New:
+  `CreditLimitWarningTest`.
 
 ## Constraints
 
-- **Units leave via `quantity_remaining` only.** No new column feeds any
-  free-stock expression; the eight sites stay untouched (`TESTING_AND_FIXES.md`
-  → invariants).
-- **Write-offs never touch reserved stock.** The bound is
-  `holdable_quantity` (remaining − outstanding reservations). Held
-  (maturing) wheels **can** be written off — a maturing wheel going mouldy
-  is the main case — and the hold is clamped to what remains.
-- **Reversal keeps the row.** `reversed_at`/`reversed_by` — never delete.
-  Aggregates and the weight model read **active** write-offs only (this is a
-  legitimate filter: a reversed write-off is not a write-off; don't confuse
-  it with the `fulfilled_at` rule).
-- **Written-off units count in finished weight and yield, not in sellable
-  stock** (OPEN_QUESTIONS #1, point 6).
-- Office/admin write, factory read-only (standard `BasePolicy`), driver
-  denied.
-- `data-confirm` on reverse and on the expired bulk action; no new flash
-  region; `npm run build` after CSS; `./vendor/bin/pint` on PHP.
+- Snapshot semantics stay: a decision made at order creation is stored on
+  the order; later edits are manual (`CLAUDE.md` → Delivery Charge).
+- The credit limit **warns, never blocks** (Jon). A `credit_limit` of 0 means
+  "no limit" (today every customer has 0 by default — a block would have
+  stopped everything).
+- Stock arithmetic, the free-stock sites and the write-off model are
+  untouched.
+- Every flash text that isn't changed by a step stays.
+- `npm run build` after JS/CSS; `./vendor/bin/pint` on PHP.
 - **Do not commit.** Planner commits on acceptance. Nothing pushed/deployed.
 
 ## Out of scope
 
-- Partial-weight loss on a unit that stays in stock (trim/salvage) —
-  recorded as out of scope in OPEN_QUESTIONS #1.
-- Valuing losses (€ per batch), reports, a scheduled "expired → write off"
-  sweep (write-off of expired stock is a manual one-click action).
-- Changing batch `status` automatically (a fully written-off batch simply
-  has 0 remaining; the dashboard tile and `/stock` notes drop it because
-  they filter on `quantity_remaining > 0`).
-- Cycle 8's policy items (delivery per drop, credit-limit warning, Mature
-  conversion-only, sanity ceiling, milk yield, internal notes, dispatch
-  alignment).
+- Charging delivery per *run* across several days, or re-charging when the
+  charged order is cancelled (the office edits the charge on the surviving
+  order — say so in the docs).
+- Blocking on credit; a credit-hold status; changing `outstanding_balance`.
+- Automatic batch `status` changes; the follow-ups under the cycle-6/7
+  records.
+- `FULFILMENT_PLAN.md` Phase 4.
 
 ## Steps
 
-### 1. Schema and models
+### 1. One delivery charge per drop (F-24)
 
-Files: `database/migrations/2026_10_04_130000_create_write_off_reasons_table.php` (new),
-`database/migrations/2026_10_04_130100_create_stock_write_offs_table.php` (new),
-`app/Models/WriteOffReason.php` (new), `app/Models/StockWriteOff.php` (new),
-`app/Models/BatchItem.php`, `app/Models/Batch.php`, `app/Models/User.php`
-
-What:
-- `write_off_reasons`: `id`, `code` (string 40, unique, slug), `label`
-  (string 80), `is_active` (bool, default true), `sort_order` (unsigned
-  smallint, default 0), timestamps. **The migration inserts the defaults**
-  (`insertOrIgnore` on `code`): `spoiled` "Spoiled / mouldy", `damaged`
-  "Damaged / dropped", `sample` "Sample / tasting", `own_use` "Own use",
-  `stocktake` "Stocktake adjustment", `expired` "Expired", `returned`
-  "Customer return (not resaleable)", `sort_order` 10, 20, … 70.
-- `stock_write_offs`: `id`, `batch_item_id` FK (`constrained()->cascadeOnDelete()`,
-  like the other child tables — the delete guard is `Batch::deletionBlocker()`,
-  step 6), `write_off_reason_id` FK (`constrained()->restrictOnDelete()`),
-  `quantity` (unsigned int), `weight_kg` (decimal 8,3 nullable — the
-  measured weight of the written-off units, variable-weight variants only),
-  `note` (string 255 nullable), `written_off_on` (date), `written_off_by`
-  FK users (`nullOnDelete`), `reversed_at` (timestamp nullable),
-  `reversed_by` FK users nullable (`nullOnDelete`), timestamps. Index
-  `(batch_item_id, reversed_at)`.
-- `WriteOffReason`: fillable `code, label, is_active, sort_order`; scope
-  `active()`; `writeOffs()` hasMany; `isInUse()` = `writeOffs()->exists()`.
-- `StockWriteOff`: fillable all of the above; casts `weight_kg decimal:3`,
-  `written_off_on date`, `reversed_at datetime`; `batchItem()`, `reason()`,
-  `writtenOffBy()`, `reversedBy()`; scope `active()` (`whereNull('reversed_at')`);
-  `isReversed()`.
-- `BatchItem::writeOffs()` hasMany; `BatchItem::getWrittenOffUnitsAttribute()`
-  reads `written_off_units` when eager-loaded (`array_key_exists`, the
-  cycle-6 rule) else sums active rows. `getQuantitySoldAttribute()` becomes
-  `max(0, produced − remaining − written_off_units)`.
-- `Batch::writeOffs()` hasManyThrough batch_items (like `cuttingLogs()`).
-- `User::stockWriteOffs()` hasMany (optional, for the audit list).
-
-Check: `php artisan migrate` clean; `php artisan tinker --execute='echo
-App\Models\WriteOffReason::count();'` → 7; `php artisan migrate:rollback
---step=2 && php artisan migrate` round-trips.
-
-### 2. Recording and reversing — the service
-
-Files: `app/Services/StockWriteOffService.php` (new), `app/Services/InvoicingException.php`
-(reuse pattern — or a new `App\Services\StockException`), `tests/Feature/StockWriteOffTest.php` (new)
+Files: `app/Models/Customer.php`, `app/Http/Controllers/OrderController.php`,
+`app/Http/Controllers/ChilledRunController.php`, `app/Console/Commands/ImportOnlineOrders.php`,
+`app/Http/Controllers/OnlineOrdersController.php`, `resources/views/orders/create.blade.php`,
+`tests/Feature/DeliveryChargeTest.php`
 
 What:
-- `record(BatchItem $item, WriteOffReason $reason, int $quantity, ?float $weightKg,
-  ?string $note, CarbonInterface $on, User $by): StockWriteOff` in one
-  `DB::transaction` with `lockForUpdate()` on the batch item:
-  - refuse `quantity < 1`; refuse `quantity > holdable_quantity` with the
-    message `Only N units can be written off — M are reserved for orders.
-    Release them first.` (M = outstanding reservations when they bite,
-    else the plain bound);
-  - refuse `weight_kg` on a non-variable-weight variant; refuse
-    `weight_kg` > 3 × nominal × quantity when a nominal exists (the cycle-3
-    bound, same message family);
-  - refuse an inactive reason; refuse `on` before the batch's production
-    date or after today;
-  - `quantity_remaining −= quantity`; then
-    `quantity_maturing = min(quantity_maturing, max(0, quantity_remaining −
-    outstanding reservations))`;
-  - create the row; return it.
-- `reverse(StockWriteOff $wo, User $by): void` — refuse if already reversed;
-  `quantity_remaining += quantity` (sanity: refuse if that would exceed
-  `quantity_produced` — it can't, but say so if it would); stamp
-  `reversed_at/by`. **Does not** restore a maturing hold (note in the
-  flash: "…returned to free stock").
-- `writeOffExpired(Batch $batch, ?string $note, User $by): Collection` — for
-  every item of a batch whose `isExpired()` is true, record
-  `holdable_quantity` units with reason `expired`; skip items with 0; return
-  the rows; refuse (exception) when the batch isn't expired or nothing is
-  writable.
-- Tests (`StockWriteOffTest`, new; fixtures in the file's own `setUp`, as
-  `CheeseConversionTest` does): record reduces `quantity_remaining` and the
-  units vanish from `BatchItem::available_quantity`, `freeStockByVariant()`,
-  `/stock`'s available segment, the cutting index and the picking batch
-  chooser (five sites, one assertion each — the point of the invariant);
-  over-reserved refused with the message; a held wheel written off clamps
-  `quantity_maturing`; weight refused on milk; weight bound; inactive reason
-  refused; date bounds; reverse restores and stamps; double reverse refused;
-  `writeOffExpired` writes off every item and skips a non-expired batch;
-  `quantity_sold` excludes write-offs.
+- `Customer::currentDeliveryCharge(?CarbonInterface $deliveryDate = null,
+  ?int $exceptOrderId = null): float` — unchanged when no date is given;
+  with a date, returns **0** when the customer already has a non-cancelled
+  order on that `delivery_date` with `delivery_charge > 0` (the drop is
+  already charged). Add `Customer::deliveryChargeCarrierFor($date)` (or
+  return the order) so the flash can name it.
+- Pass the delivery date at all four creation sites (`store()` →
+  `delivery_date` when set, else no dedupe; `saveStop()` → the run date;
+  the two imports → the payload's delivery date when set). When the charge
+  was waived, `store()`'s and `saveStop()`'s success flash appends
+  `"Delivery charge already on ORD-… for that day."`
+- The create form's preview: `customerCharges` can't know the date until
+  typed — on delivery-date change, JS asks nothing new; instead pass
+  `customerChargedDates` = `[customer_id => [dates already charged]]` for
+  the next 14 days (one query) and show Delivery €0 with "(already charged
+  on ORD-… that day)" when the chosen date matches.
+- Docs line (step 10): cancelling the charged order leaves the other at €0 —
+  the office edits the charge on the surviving order.
+- Tests (`DeliveryChargeTest`): second same-day order via `store()` → €0,
+  flash names the first; a different day → charged; the first order
+  cancelled before the second is created → second charged; `saveStop()`
+  same rule; a percentage customer's second order still computes its %;
+  import path (whichever is easiest to drive) obeys it.
 
-Check: `php artisan test --filter=StockWriteOffTest` pass.
+Check: `php artisan test --filter="DeliveryChargeTest|ChilledRunTest"` pass.
+Browser: create a second order for E2E Corner Shop on a day it already has
+one → Delivery €0 in the preview and on the saved order, flash names the
+first order.
 
-### 3. The fifth state in the weight model and the wheel strip
+### 2. The credit limit warns (F-25)
 
-Files: `app/Models/BatchItem.php`, `app/Services/StockOverviewService.php`,
-`app/Http/Controllers/BatchController.php`, `app/Http/Controllers/CheeseCuttingController.php`,
-`resources/views/batches/partials/_wheel-strip.blade.php`,
-`resources/views/batches/partials/_wheel-legend.blade.php`,
-`resources/views/components/stock/cheese-row.blade.php` (only if its state
-list is hard-coded), `resources/css/stock.css`,
-`tests/Feature/BatchFinishedWeightTest.php`, `tests/Feature/StockOverviewTest.php`,
-`tests/Feature/StockWriteOffTest.php`
+Files: `app/Models/Customer.php`, `app/Http/Controllers/OrderController.php`,
+`app/Http/Controllers/ChilledRunController.php`, `resources/views/orders/show.blade.php`,
+`tests/Feature/CreditLimitWarningTest.php` (new)
 
 What:
-- **Eager-loads**: `BatchController::index()`, `CheeseCuttingController::index()`
-  and `StockOverviewService::build()` add
-  `->withSum(['writeOffs as written_off_units' => fn ($q) => $q->whereNull('reversed_at')], 'quantity')`
-  next to `converted_wheels`. `BatchController::show()` adds
-  `'batchItems.writeOffs.reason'` and `'batchItems.writeOffs.writtenOffBy'`.
-- **`wheelStates()`**: `written_off` from the loaded sum (null → 0) else a
-  query; `sold = max(0, produced − remaining − cut − converted − written_off)`;
-  `remaining = max(0, produced − cut − converted − sold − written_off)`;
-  return it in the array. Strip: a circle in `var(--state-damaged)` with
-  title "Written off" placed after converted; legend and the numeric
-  summary print `N written off` (drop when 0, as the others). Rename the
-  token to `--state-written-off` (keep `--state-damaged` as an alias) so the
-  stock component's `var(--state-{{ $state }})` resolves for a segment key
-  `written_off` — check how `cheese-row` maps keys to tokens (underscore vs
-  hyphen) and make them agree.
-- **`weight_breakdown`**: new key `written_off` (units) for every kind;
-  wheels: each active write-off adds its `quantity` to `written_off`; when
-  `weight_kg` is set it adds to `weighed` (by `quantity`) and `measured_kg`,
-  else to a `writtenOffNominalUnits` that joins the `nominal_kg` product;
-  `reconciles = on_hand + dispatched + cut + converted + written_off ===
-  produced`. Packs/milk: `written_off` units counted but **`nominal_kg`
-  unchanged** (produced × unit — they were made). Update the docblock's
-  state list.
-- **Batch page coverage line**: "N of M wheels weighed" keeps counting
-  write-offs with a weight as weighed.
-- **`StockOverviewService`**: simple cards `sold = max(0, produced − remaining −
-  written_off)` and a `written_off` segment; wheel rows `sold = … −
-  written_off` and a `written_off` segment after `converted`; packs likewise.
-  `buildCheeseCard`'s `tag`/totals include it where `sold` is summed.
-- Tests: `BatchFinishedWeightTest` — extend the reconciliation case with one
-  wheel written off **with** a weight (measured, `weighed` +1) and one
-  **without** (nominal), asserting the five states sum to produced and
-  `finished_product_weight` still equals the made weight; a milk batch with
-  a write-off keeps `nominal_kg = produced × unit` and `written_off = N`.
-  `StockOverviewTest` — a written-off bottle shows in a `written off`
-  segment and not in `sold`. `StockWriteOffTest` — `/batches` card summary
-  reads "… · 2 written off · …" and the strip has two `--state-written-off`
-  circles; the index query count doesn't grow (extend the cycle-6 flat-count
-  test's fixture with a write-off).
+- `Customer::creditWarning(float $orderTotal): ?string` — `null` when
+  `credit_limit <= 0` or within limit; else
+  `"{name} is at €{outstanding} outstanding against a €{limit} credit limit —
+  this order takes it to €{outstanding + total}."` Make `canPlaceOrder()` use
+  the same arithmetic (or remove it if nothing else will call it — say which).
+- `OrderController::update()` on `$isConfirming`, `OrderController::store()`,
+  and `ChilledRunController::confirmAll()` (one line per customer over) add
+  the warning as a **`warning` flash** alongside the success flash — never a
+  refusal.
+- `orders/show.blade.php`: inside `@can('see-financials')`, when the order is
+  `pending|confirmed|preparing|ready` and `creditWarning($order->total_amount)`
+  is non-null, a warn-tone banner with the same text.
+- Tests (new `CreditLimitWarningTest`): limit 100, outstanding 80 (one open
+  invoice), confirm a €30 order → warning flash text; €15 → none; limit 0 →
+  none at any size; the order page banner for over/within; `confirmAll`
+  names the customer once.
 
-Check: `php artisan test --filter="BatchFinishedWeightTest|StockOverviewTest|StockWriteOffTest|BatchCreateTest|ConsolidationPassTest"`
-pass.
+Check: `php artisan test --filter="CreditLimitWarningTest|OrderTransitionsTest"` pass.
 
-### 4. Routes, policies, controller
+### 3. Mature is made by conversion only (F-10)
 
-Files: `routes/web.php`, `app/Policies/StockWriteOffPolicy.php` (new),
-`app/Policies/WriteOffReasonPolicy.php` (new), `app/Providers/AuthServiceProvider.php`,
-`app/Http/Controllers/StockWriteOffController.php` (new),
-`app/Http/Requests/StockWriteOffRequest.php` (new),
-`tests/Feature/StockWriteOffTest.php`, `tests/Feature/AuthorizationBoundaryTest.php`
+Files: `database/migrations/2026_10_05_120000_add_conversion_only_to_products_table.php` (new),
+`app/Models/Product.php`, `database/seeders/ProductSeeder.php`,
+`app/Http/Requests/ProductRequest.php`, `resources/views/products/{create,edit}.blade.php`,
+`app/Http/Controllers/BatchController.php`, `resources/views/batches/create.blade.php`,
+`app/Http/Controllers/CheeseConversionController.php`,
+`tests/Feature/BatchCreateTest.php`, `tests/Feature/MatureProductSeedTest.php`, `tests/Feature/CheeseConversionTest.php`
 
 What:
-- Policies: both `extends BasePolicy` (office write, factory view, driver
-  deny); register.
-- Routes in the **office group**:
-  `POST /batches/{batch}/write-offs` → `store` (`batches.write-offs.store`);
-  `POST /batches/{batch}/write-offs/expired` → `storeExpired`
-  (`batches.write-offs.expired`); `POST /write-offs/{writeOff}/reverse` →
-  `reverse` (`write-offs.reverse`).
-- `StockWriteOffRequest::authorize()` = `can('create', StockWriteOff::class)`
-  (the cycle-3 rule for FormRequests); rules: `batch_item_id` required,
-  exists, **belongs to the route batch** (closure rule);
-  `write_off_reason_id` required, exists, active; `quantity` required int
-  min 1; `weight_kg` nullable numeric min 0.001; `note` nullable max 255;
-  `written_off_on` required date. Service exceptions → `redirect()->route('batches.show',
-  $batch)->withFragment('write-offs')->withErrors([...])->withInput()`;
-  success → same fragment with the flash `Written off N × {variant} — {reason}.`
-- `reverse()`: `authorize('update', $writeOff)`; service; flash `Write-off
-  reversed — N units returned to free stock.`; redirect to the batch page
-  fragment.
-- `storeExpired()`: `authorize('create')`; `note` nullable; flash lists what
-  was written off per item.
-- Tests: factory 403 on all three; office succeeds; a `batch_item_id` from
-  another batch → 422; `AuthorizationBoundaryTest::buildFixtures()` gains a
-  `writeOff` row and a `write_off_reason` (step 5 adds that parameter).
+- Migration: `products.conversion_only` boolean default false; **set true
+  where `name = 'Mossfield Mature Cheese'`** in the same migration (so prod
+  needs no seeder step). `Product::$fillable`/casts; `ProductSeeder` sets it.
+- `ProductRequest`: `conversion_only` boolean (coerced like `is_active`);
+  product create/edit forms get the checkbox "Made only by conversion — no
+  production batches (e.g. Mature)".
+- `BatchController::create()` excludes `conversion_only` products from the
+  select; `store()` refuses one with the validation message
+  `"{name} is only made by releasing matured wheels — use Mature Conversion."`
+- `CheeseConversionController::matureProduct()` prefers
+  `where('conversion_only', true)->where('type','cheese')->first()`, falling
+  back to the name (keep the constant for the fallback).
+- Tests: the batch form omits Mature; `store()` with Mature → 422/redirect
+  with the message; `MatureProductSeedTest` asserts the flag; a conversion
+  still finds the Mature product with the flag set and the name changed.
 
-Check: `php artisan test --filter="StockWriteOffTest|AuthorizationBoundaryTest"` pass.
+Check: `php artisan test --filter="BatchCreateTest|MatureProductSeedTest|CheeseConversionTest"` pass.
 
-### 5. Reasons are manageable
+### 4. A sanity ceiling on batch quantities (F-09)
 
-Files: `app/Http/Controllers/WriteOffReasonController.php` (new),
-`resources/views/write-off-reasons/index.blade.php` (new), `routes/web.php`,
-`resources/views/layouts/navigation.blade.php`, `tests/Feature/StockWriteOffTest.php`
+Files: `config/mossfield.php`, `app/Http/Controllers/BatchController.php`,
+`resources/views/batches/create.blade.php`, `tests/Feature/BatchCreateTest.php`
 
 What:
-- `Route::resource('write-off-reasons', …)->only(['index', 'store', 'update'])`
-  in the office group (no destroy: a used reason is **deactivated**, an
-  unused one may be deleted — add `destroy` guarded by `isInUse()` → flash
-  error, if you prefer; either way no orphaned write-offs).
-- One page: the list (label, code, active, in-use count) with inline
-  rename / activate-deactivate forms, and an "Add reason" form (label →
-  code auto-slugged server-side, unique). Pattern: `delivery-runs/index`.
-- Nav: under Production for admin/office only — "Write-off reasons" is
-  admin housekeeping, so put it in the **Admin** group beside Users (or
-  Miscellaneous — your call, say which), not in the factory's view.
-- Tests: add/rename/deactivate; deactivated reason absent from the batch
-  page's select and refused by the service; factory 403.
+- `config('mossfield.batch_ceilings')` = `['milk' => 5000, 'yoghurt' => 3000,
+  'cheese' => 200]` — **units per variant per batch** (dev's largest: milk
+  240 + 96, yoghurt 120 + 60, cheese 38 wheels). Comment that Jon sets the
+  numbers.
+- `store()`: when any item exceeds its type's ceiling and `confirm_large`
+  isn't posted, redirect back `withInput()` and a `warning` flash plus a
+  per-item error: `"{N} × {variant} — the usual ceiling is {ceiling}. Tick
+  'Yes, this batch really is that big' to save it."` The form renders a
+  checkbox `confirm_large` (only shown when `old('confirm_large')` or that
+  error exists). With the box ticked, the batch saves and the success flash
+  notes "(large batch confirmed)". `update()` doesn't change quantities —
+  untouched.
+- Tests: 3 000 wheels → refused with the message and the box rendered;
+  ticked → saved; 200 wheels → saved without asking; a milk batch of 4 999 →
+  no prompt.
 
-Check: `php artisan test --filter=StockWriteOffTest` pass.
+Check: `php artisan test --filter=BatchCreateTest` pass.
 
-### 6. The batch page: record, see, reverse; the expired one-click
+### 5. Milk yield is computed and can't exceed 100 % (F-06)
 
-Files: `resources/views/batches/show.blade.php`,
-`resources/views/batches/partials/_write-offs.blade.php` (new),
-`resources/views/batches/partials/batch-card.blade.php`, `app/Models/Batch.php`,
-`app/Http/Controllers/BatchController.php`, `resources/views/dashboard.blade.php`,
-`resources/views/stock/partials/_expired-note.blade.php`, `tests/Feature/StockWriteOffTest.php`
-
-What:
-- New panel **Write-offs** (`id="write-offs"`, `scroll-mt-20`) after the
-  cutting history: the form (`@can('create', StockWriteOff::class)`): item
-  `<select>` (hidden when the batch has one item), quantity, weight (shown
-  only for a variable-weight variant — Alpine on the item select, label
-  "Measured weight of these N units (kg)", optional), reason `<select>` of
-  active reasons with a "Manage reasons" link, note, date (default today);
-  then the history table: date · item · qty · kg · reason · note · by ·
-  Reverse (`data-confirm="Reverse this write-off? N units go back into free
-  stock." data-confirm-label="Reverse"`); reversed rows struck through with
-  "reversed {date} by {name}". Factory sees the table, no forms.
-- **Expired one-click**: when `$batch->isExpired()` and any item has
-  `holdable_quantity > 0`, a danger-tone button in the batch header
-  **"Write off expired stock (N units)"** with `data-confirm` naming the
-  units and the reason, posting `batches.write-offs.expired` (optional note
-  in the dialog is not possible — accept none; the service writes the note
-  "Expired — written off from the batch page").
-- Info panel: a **Written off** row ("N units · X kg measured") when > 0;
-  the reconciliation warning text gains the fifth term.
-- Card (`batch-card`): an expired card's "Expired" tag is followed by a
-  "Write off →" link to the batch page `#write-offs` when the batch still
-  has holdable units; `Batch::deletionBlocker()` and `dependentCounts()`
-  count write-offs (`stock_write_offs_count` via `withCount` on the index
-  eager-load — reversed rows count too; they're history).
-- Dashboard tile sub-line "write off or close" → "write off" linking as now;
-  `/stock` expired note unchanged (already links to the expired list).
-- Tests: the panel renders for office with the form and for factory without
-  it; a POST writes off and the page shows the row; reverse works through
-  the UI route; the expired button appears only on an expired batch with
-  stock and writes everything off; the card link appears; `deletionBlocker`
-  names write-offs.
-
-Check: `php artisan test --filter="StockWriteOffTest|BatchCreateTest"` pass.
-Browser as office: `/batches/19` (M230726, expired, 951 left) → "Write off
-expired stock (951 units)" → dialog → the panel lists one row per item,
-`/stock` milk note drops from 4 expired batches to 3, the dashboard tile from
-5 to 4; reverse one row → back; on G010426 write off 1 wheel at 4.900 kg
-reason Spoiled → strip shows a red circle, coverage counts it weighed,
-finished weight unchanged, `/cheese-cutting` shows one fewer free wheel.
-
-### 7. Housekeeping the suite insists on
-
-Files: `app/Console/Commands/ResetTradingData.php`, `app/Services/BackupService.php`,
-`tests/Feature/BackupRestoreTest.php`, `tests/Feature/ResetTradingDataTest.php`
+Files: `app/Models/Batch.php`, `app/Http/Controllers/BatchController.php`,
+`resources/views/batches/create.blade.php`, `tests/Feature/BatchFinishedWeightTest.php`,
+`tests/Feature/BatchCreateTest.php`
 
 What:
-- `ResetTradingData::WIPE_ORDER`: `stock_write_offs` **before** `batch_items`
-  (FK order); `KEEP`: `write_off_reasons`.
-- `BackupService::TABLES`: `write_off_reasons` after `users`;
-  `stock_write_offs` after `batch_items` (and after `users` — it references
-  both).
-- Tests: `ResetTradingDataTest` passes as-is once classified (that's the
-  check); `BackupRestoreTest` round-trip includes a write-off and a custom
-  reason and restores both.
+- `Batch::getProductionYieldAttribute()`: drop the milk special case — every
+  type is `finished_product_weight / raw_milk_litres` (for milk the unit
+  weight is litres, so this is bottled ÷ raw).
+- `store()` and `update()` (if it edits `raw_milk_litres`): for a **milk**
+  product, `Σ(quantity × variant weight_kg)` must be `<= raw_milk_litres`,
+  else refuse with `"Bottled {N} L is more than the {M} L of raw milk
+  entered."` (an error on `raw_milk_litres`, input kept). The form's helper
+  text for milk becomes "Raw milk that was bottled — must be at least the
+  total bottled volume."
+- Tests: `BatchFinishedWeightTest:363` → a milk batch of 500 L raw with 432 L
+  bottled yields `0.864`; `BatchCreateTest`: 100 L raw with 120 × 1L refused,
+  100 × 1L accepted.
 
-Check: `php artisan test --filter="ResetTradingDataTest|BackupRestoreTest"` pass.
+Check: `php artisan test --filter="BatchFinishedWeightTest|BatchCreateTest"` pass.
 
-### 8. Docs
+### 6. Order notes stay internal (F-33)
 
-Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`, `README.md`
+Files: `resources/views/orders/dispatch-confirmation.blade.php`,
+`resources/views/orders/docket.blade.php`, `resources/views/orders/create.blade.php`,
+`resources/views/orders/edit.blade.php`, `tests/Feature/DispatchConfirmationTest.php`,
+`tests/Feature/OrderDocketTest.php`
 
 What:
-- `CLAUDE.md`: a new **Stock Write-offs** section (model, the
-  `holdable_quantity` bound, maturing clamp, reversal keeps the row,
-  active-only aggregates, the five-state reconciliation, the eager-load key
-  `written_off_units`, routes/policies, reasons CRUD, the expired one-click);
-  update **Finished weight & yield** (five states), **Wheel & Vac-Pack
-  Visualization** (the `written_off` state and token), **Stock Overview**
-  (segment), **Resetting Dev Trading Data** (the two tables' classification),
-  and the Business Intelligence bullet that said losses can't be recorded.
-- `README.md` → Implemented Features: one bullet.
-- `WORK_IN_PROGRESS.md`: *Recently Completed: Stock write-offs (2026-10-04)*.
+- Remove the NOTES blocks from both documents (and the docket's `.notes`
+  CSS). The order form's Notes label gets a hint "Internal — not printed on
+  customer documents."
+- Tests: an order with notes "SECRET INTERNAL" → the confirmation (HTML and
+  PDF text) and the docket don't contain it; the order page and the run
+  sheet still do.
 
-Check: `grep -n "Stock Write-offs\|written_off_units\|writeOffExpired" CLAUDE.md` → hits.
+Check: `php artisan test --filter="DispatchConfirmationTest|OrderDocketTest|ChilledRunTest"` pass.
+
+### 7. Mark dispatched requires the loaded tick (F-34)
+
+Files: `app/Services/DispatchService.php`, `app/Http/Controllers/ChilledRunController.php`,
+`resources/views/orders/show.blade.php`, `tests/Feature/OrderTransitionsTest.php`,
+`tests/Feature/DispatchConfirmationTest.php`, `tests/Feature/DispatchRunTest.php`
+
+What:
+- `DispatchService::dispatch()`: after the `ready` check, refuse when
+  `loaded_at` is null — `DispatchException('Tick the order as loaded onto the
+  van first.')`. Both buttons now share the rule at the service.
+- `ChilledRunController::toggleLoaded()` accepts an optional `return=order`
+  input and then redirects to `orders.show` (fragment `dispatch`) instead of
+  the sheet. No new route.
+- `orders/show.blade.php`: for `ready` orders, a **"Loaded onto van"** tick
+  (`@can('load', $order)` — factory can tick here too) posting
+  `chilled-runs.toggle-loaded` with `return=order`; **Mark dispatched** is
+  rendered only when `loaded_at` is set, otherwise a muted "Tick loaded onto
+  van first". Show the loaded timestamp when set.
+- Tests: `OrderTransitionsTest` — dispatch on a ready, **unloaded** order is
+  refused with the message; the existing dispatch cases set `loaded_at` in
+  their fixture (one helper change); the page shows the tick and hides Mark
+  dispatched until loaded; factory can POST the toggle with `return=order`
+  and lands on the order page. `DispatchConfirmationTest`: give its ready
+  fixture `loaded_at` (one place) — **don't** weaken any assertion.
+  `DispatchRunTest` is already loaded-aware.
+
+Check: `php artisan test --filter="OrderTransitionsTest|DispatchConfirmationTest|DispatchRunTest|PickingTest"`
+pass. Browser: a ready order's page → tick Loaded → Mark dispatched appears →
+dispatch works; an unloaded one has no Mark dispatched.
+
+### 8. Issue only for dispatched or delivered (F-38a)
+
+Files: `app/Services/InvoiceService.php`, `app/Http/Controllers/Invoicing/UninvoicedOrderController.php`,
+`app/Http/Controllers/Invoicing/InvoiceController.php` (`headlineStats()`),
+`resources/views/invoicing/uninvoiced/index.blade.php`, `tests/Feature/InvoiceIssueTest.php`,
+`tests/Feature/DashboardTest.php` (or wherever the tile is tested)
+
+What:
+- `InvoiceService::issueForOrder()`: the guard becomes `status ∈ {dispatched,
+  delivered}` with the message `"An invoice is issued when the order is
+  dispatched — this one hasn't left yet."` (`DispatchService` flips to
+  `dispatched` first, so the automatic path is unaffected).
+- `UninvoicedOrderController`: keep `ready` orders in the list but in their
+  own section **"Picked, awaiting dispatch"** with no Issue button and no
+  place in "Issue all"; `issue()`/`issueAll()` only consider
+  dispatched/delivered. `headlineStats()['uninvoiced']` counts
+  dispatched/delivered only (the tile is "act now" money).
+- Tests: `issueForOrder()` on a `ready` order throws with the new message; a
+  dispatched one issues; the queue page shows a ready order under the new
+  heading with no Issue button and the count excludes it; `issueAll` skips
+  it.
+
+Check: `php artisan test --filter="InvoiceIssueTest|DashboardTest|InvoicingAccessTest|ConsolidatedInvoiceTest|DispatchRunTest"` pass.
+
+### 9. Consolidated customers default to Net 14 (F-38b)
+
+Files: `resources/views/customers/create.blade.php`, `resources/views/customers/edit.blade.php`,
+`tests/Feature/CustomerSpecialPriceTest.php` (the customer-form tests live there)
+
+What: in the Alpine block, on `invoicing_mode` change to `weekly|monthly`
+while `terms === 'immediate'`, set the terms select (and `terms`) to
+`net_14`; the cycle-5 hint still shows if the office sets Immediate back.
+No server rule. Test: the form carries the handler (assert the `net_14`
+default expression is present) — the behaviour is a browser check.
+
+Check: browser — pick Weekly on a new customer → terms flip to Net 14; set
+Immediate again → the hint shows.
+
+### 10. Docs
+
+Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`
+
+What: `CLAUDE.md` → Delivery Charge (once per drop, date-aware
+`currentDeliveryCharge()`, the cancel caveat); Customer Structure (credit
+limit warns, 0 = no limit, `creditWarning()`); Products (`conversion_only`);
+Batch create (ceilings config + `confirm_large`; milk bottled ≤ raw; yield
+computed for every type); Dispatch (loaded required at the service; the
+order-page tick; `return=order`); Invoicing (issue only
+dispatched/delivered; the queue's "awaiting dispatch" section); Customer
+form (terms default). `WORK_IN_PROGRESS.md`: *Recently Completed: Policy
+batch (2026-10-05)*.
+
+Check: `grep -n "once per drop\|creditWarning\|conversion_only\|batch_ceilings\|loaded onto the van first\|hasn't left yet" CLAUDE.md` → six hits.
 
 ## Verification
 
 1. `php artisan test` → **0 failed**; record the count.
 2. `./vendor/bin/pint --test app tests database routes config` → clean.
 3. `npm run build` → ok.
-4. `php artisan migrate:status | tail -4` shows both migrations ran;
-   `php artisan tinker --execute='echo App\Models\WriteOffReason::count();'` → 7.
+4. `php artisan migrate:status | tail -2` shows the products migration ran;
+   `php artisan tinker --execute='echo App\Models\Product::where("conversion_only",1)->value("name");'`
+   → Mossfield Mature Cheese.
 5. `git status --short` → only files this plan names (+ the staged archive).
-6. Browser checks from step 6 with real input; console clean.
-7. Dev-DB probe: the browser checks **will** write off real expired dev stock
-   (M230726) and one G010426 wheel — that's the feature working; reverse the
-   G010426 one so its lineage numbers stay as `RESUME.md` records them, and
-   leave the expired write-off in place (it is correct). Record before/after
-   counts of `stock_write_offs`, `batch_items.quantity_remaining` for the
-   touched items, and the dashboard tile.
+6. Browser checks from steps 1, 2, 4, 7, 9 with real input; console clean.
+7. Dev-DB probe: tag any probe orders `E2E-20261005 cycle8` and cancel them;
+   nothing else moves. Dispatching in the browser check (step 7) issues a
+   real invoice — use an E2E customer's order and say which.
 
 ## Risks
 
-- **Reconciliation tests**: every existing fixture must still reconcile with
-  `written_off = 0`; the new term defaults to 0 when the relation/aggregate
-  is absent — don't make `weight_breakdown` lazy-load `writeOffs` (the
-  docblock's "reads only LOADED relations" rule). `BatchController::show()`
-  loads it; for other callers an unloaded relation must read as zero, not
-  as a query — mirror how `sourceCuttingLogs` is handled.
-- **`whereNull('reversed_at')` is a legitimate filter.** Say so in a comment
-  where it's used so a future reader doesn't "fix" it like the
-  `fulfilled_at` one.
-- **The maturing clamp** can silently shrink a hold; the flash must say
-  "hold reduced to N" when it does.
-- **Expired one-click on a batch with reservations**: it writes off only the
-  holdable units and the flash must list what was skipped and why.
-- **State key spelling**: `written_off` in PHP arrays vs `written-off` in CSS
-  tokens — one mapping, tested by the strip's rendered class/style.
-- **Migration defaults**: `insertOrIgnore` keyed on `code` so re-running on a
-  DB that already has reasons doesn't duplicate; the test DB gets them from
-  the migration too (RefreshDatabase).
+- **Step 7 touches 26 existing dispatch tests.** Fix the fixture, not the
+  assertions; if a test genuinely dispatches without a loaded tick as its
+  *subject*, it becomes the refusal case.
+- **Step 8 vs the automatic path**: `DispatchService` must still issue — it
+  calls `issueForOrder()` after the status flip inside its own flow; run
+  `DispatchRunTest` and `DispatchConfirmationTest` to prove it.
+- **Step 5 and existing milk fixtures**: any test fixture that bottles more
+  than its raw milk now fails validation — fix the fixture (raw ≥ bottled),
+  not the rule.
+- **Step 1's dedupe reads other orders at creation time** — keep it inside
+  the creating transaction; two simultaneous creations for the same drop
+  could both charge, which is acceptable (the office can fix one).
+- **Ceiling numbers** are guesses from dev data; Jon can change them in
+  config, and the plan says so in the comment.
 
 ## Review
 
-Reviewed 2026-10-05 against `implemented.md` (Status: DONE, 617 lines, read
-to the end) and the diff: service, request, controller, both migrations,
-both models, `BatchItem`/`Batch`/`StockOverviewService`/`BackupService`,
-routes, policies, the write-offs panel and the batch-page header. Planner
-reran: `php artisan test` → **647 passed, 0 failed** (+30); `pint --test …
-config` → PASS 289 files; `npm run build` ok; both migrations `[6] Ran`; 7
-reasons; dev DB: 4 write-off rows (2 active), M230726 at 0/0/0, G010426
-back at `remaining 7 · hold 1`, `reconciles = y`, finished weight 60.31;
-orders/payments/invoices unchanged. Checked that the only consumer of
-`weight_breakdown` (the batch page) loads `writeOffs`, so the
-"unloaded reads as none" rule cannot mislead.
-
-### Criteria — all eight pass
-
-1 Schema and defaults in the migration (`insertOrIgnore`), FKs as specified,
-models with `active()`; `quantity_sold` excludes write-offs. 2 One service
-path, locked, with every refusal the plan listed and the exact over-reserved
-message; maturing clamp with `holdReducedTo`; reverse keeps the row;
-`writeOffExpired()` skips reserved units. Ten service tests incl. the five
-free-stock sites. 3 Fifth state everywhere: `wheelStates()`, strip, legend,
-`weight_breakdown` (measured where weighed), `/stock` segments, one
-key→token/label mapping across the three stock components; the index
-query count stays flat. 4 Routes in the office group, FormRequest carrying
-the policy and the belongs-to-batch closure, flashes as specified,
-boundary-test fixtures. 5 Reasons page (no destroy; deactivate), slug codes,
-nav in Miscellaneous — right call, office needs it. 6 Panel with the form
-(weight only for weighed items), history with reverse, the expired
-one-click, the Written-off info row, the card link, `deletionBlocker()`
-counting write-offs. 7 Reset and backup tables classified; **plus**
-`BackupService::ADDED_LATER` so pre-deploy backups stay restorable — a real
-deployment hazard the plan missed, found and fixed with tests. 8 Docs.
-
-### Deviations — all accepted
-
-1 baseline; 2 the two index views' `array_fill_keys` and `StockException`;
-3 the key/token mapping; **4–5 two more "sold = produced − remaining" sites
-found in the browser** (batch-page variant table, card pack bar) and fixed
-with tests; 6 comma handler on the weight box (F-29 pattern); **7 corrects
-the plan**: finished weight *does* move when a write-off is weighed — from
-nominal to measured for that wheel, exactly as a dispatched or cut wheel —
-and that is the model working; 8 `ADDED_LATER`; 9 Miscellaneous nav; 10–12
-fine.
-
-### Notes for Planner — decisions
-
-- Card items table lumps cut/converted into "Sold" (pre-existing) → **next
-  polish batch**: use `wheelStates()['sold']` for wheels.
-- `isExpired()` (`< now()`) vs tile (`<= today`) agree in practice → leave.
-- `ADDED_LATER` convention → documented in CLAUDE.md by the Implementer;
-  `DEPLOYMENT.md` has no backup section to amend → nothing more.
-- `/batches?status=expired` still lists a fully written-off batch → **next
-  polish batch**: a "written off" tag on such cards (the filter is right —
-  it *is* expired; what's missing is the state).
-- Dev data: M230726 written off (correct, kept); G010426 probe reversed as
-  the plan asked.
-
-Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-05-write-offs`
-and move `plan.md` + `implemented.md` there.
+(Planner fills this in after reading implemented.md and the diff.)
