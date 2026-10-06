@@ -8,6 +8,12 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Order-flow polish (2026-10-06)
+
+Plan/Implement cycle 11 — every one of the 47 confirm dialogs now has a title naming its action (pinned by `ConfirmDialogTest`), the order stepper shows "N of M picked" under Picking, the run sheet reads "Capacity:", and the create form's trailing blank line is dashed with "Add another item…" and no ×.
+
+---
+
 ## Recently Completed: Settings (2026-10-06)
 
 Plan/Implement cycle 10 — the batch sanity ceilings are now editable by an admin, without a deploy:

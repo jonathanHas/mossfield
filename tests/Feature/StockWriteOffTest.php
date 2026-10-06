@@ -450,7 +450,8 @@ class StockWriteOffTest extends TestCase
         $this->actingAs($this->office)->get(route('batches.show', $item->batch))
             ->assertOk()
             ->assertSeeInOrder(['Written off', '3 units'])
-            ->assertSee('Reverse this write-off? 3 units go back into free stock.')
+            ->assertSee('data-confirm-title="Reverse this write-off?"', false)
+            ->assertSee('3 units go back into free stock.')
             // The variant table: 10 produced, 7 on hand, 0 sold, 3 written off.
             ->assertSeeInOrder(['1L Bottle', '10', '7', '0', '—', '—', '3']);
 

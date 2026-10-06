@@ -39,7 +39,7 @@
             </div>
         @else
             <form method="POST" action="{{ route('invoicing.consolidated.store') }}"
-                  data-confirm="Issue consolidated invoices for the selected customers?" data-confirm-label="Issue">
+                  data-confirm-title="Issue consolidated invoices?" data-confirm="Each selected customer gets one invoice covering their uninvoiced deliveries in the period." data-confirm-label="Issue">
                 @csrf
                 <input type="hidden" name="start" value="{{ $start->toDateString() }}">
                 <input type="hidden" name="end" value="{{ $end->toDateString() }}">

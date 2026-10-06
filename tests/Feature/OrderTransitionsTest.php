@@ -481,4 +481,43 @@ class OrderTransitionsTest extends TestCase
             ->assertSee('Awaiting invoice')
             ->assertDontSee('Awaiting dispatch — invoiced when dispatched');
     }
+
+    // ── The stepper says what has been picked (cycle 11) ──────────────
+
+    private function lineOn(Order $order, int $ordered, int $fulfilled): void
+    {
+        $product = Product::create(['name' => 'Stepper Milk '.uniqid(), 'type' => 'milk', 'is_active' => true]);
+        $variant = ProductVariant::create([
+            'product_id' => $product->id, 'name' => '1L Bottle', 'size' => '1L', 'unit' => 'bottle',
+            'weight_kg' => 1.0, 'base_price' => 1.50, 'is_active' => true,
+        ]);
+        OrderItem::create([
+            'order_id' => $order->id, 'product_variant_id' => $variant->id,
+            'quantity_ordered' => $ordered, 'quantity_fulfilled' => $fulfilled, 'unit_price' => 1.50,
+        ]);
+    }
+
+    public function test_a_preparing_order_shows_how_much_is_picked_under_picking(): void
+    {
+        $order = $this->makeOrder('preparing');
+        $this->lineOn($order, 10, 4);
+        $this->lineOn($order, 6, 0);
+
+        $html = $this->actingAs(User::factory()->create())->get(route('orders.show', $order))->assertOk()->getContent();
+        preg_match('/data-picked-count>\s*(.*?)\s*</s', $html, $m);
+        $this->assertSame('4 of 16 picked', $m[1] ?? null);
+    }
+
+    public function test_other_statuses_show_no_picked_count(): void
+    {
+        $office = User::factory()->create();
+        foreach (['confirmed', 'ready'] as $status) {
+            $order = $this->makeOrder($status);
+            $this->lineOn($order, 10, $status === 'ready' ? 10 : 0);
+
+            $this->actingAs($office)->get(route('orders.show', $order))->assertOk()
+                ->assertDontSee('data-picked-count', false)
+                ->assertDontSee('picked</div>', false);
+        }
+    }
 }

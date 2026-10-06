@@ -16,7 +16,7 @@
                 <a href="{{ route('invoicing.credit-notes.pdf', ['credit_note' => $creditNote, 'download' => 1]) }}" class="mf-btn-secondary">Download</a>
                 @if($creditNote->isIssued() && $creditNote->documentRecipient())
                     <form method="POST" action="{{ route('invoicing.credit-notes.email', $creditNote) }}"
-                          data-confirm="Email credit note {{ $creditNote->number }}?" data-confirm-label="Send">
+                          data-confirm-title="Email this credit note?" data-confirm="Email credit note {{ $creditNote->number }}?" data-confirm-label="Send">
                         @csrf
                         <button type="submit" class="mf-btn-primary">{{ $creditNote->emailed_at ? 'Email again' : 'Email' }}</button>
                     </form>

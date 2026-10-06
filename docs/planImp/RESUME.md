@@ -110,10 +110,18 @@ worth returning to.
   dialog; the stepper says "Picking" with nothing picked; "Capacity." on the
   run sheet; the create form's trailing blank line). Probes ids 27–28
   cancelled.
-- **Cycle 11 "Order-flow polish" — READY 2026-10-06:** `plan.md` — every
-  dialog gets a title (pinned by a view scan in `ConfirmDialogTest`), the
-  stepper shows "N of M picked", the capacity label, the optional trailing
-  line. Awaiting the Implementer.
+- **Cycle 11 "Order-flow polish" — ACCEPTED 2026-10-06 (revision 2):**
+  every confirm dialog titled and its body the consequence (scan in
+  `ConfirmDialogTest`), "N of M picked" under Picking, "Capacity:", the
+  optional trailing line, "FIFO" gone. Suite **699 passed, 0 failed**. Probe
+  id 29 cancelled. Reviewed in the Implementer's session at Jon's request.
+  **Jon archives:** `mkdir -p docs/planImp/archive/2026-10-06-order-flow-polish`
+  and move `plan.md` + `implemented.md` there.
+- **Cycle 12 (not yet planned):** refuse deleting a product/variant that has
+  batches, order lines or special prices (`deletionBlocker()` on the `Batch`
+  pattern; deactivate instead), and refuse a customer delete blocked by
+  payments/invoices/statements with a flash instead of a DB error. Two
+  copy items deferred from cycle 11 sit in `SMALL_FIXES.md`.
 - **Next after that:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
   route for the day + proof of delivery with signature) — a new feature
   that would want a design pass before a plan. Otherwise: push and deploy

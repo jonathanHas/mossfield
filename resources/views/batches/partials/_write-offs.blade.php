@@ -116,7 +116,7 @@
                                         <form method="POST" action="{{ route('write-offs.reverse', $wo) }}" class="inline">
                                             @csrf
                                             <button type="submit" class="mf-link text-[12px]"
-                                                    data-confirm="Reverse this write-off? {{ $wo->quantity }} {{ Str::plural('unit', $wo->quantity) }} {{ $wo->quantity === 1 ? 'goes' : 'go' }} back into free stock."
+                                                    data-confirm-title="Reverse this write-off?" data-confirm="{{ $wo->quantity }} {{ Str::plural('unit', $wo->quantity) }} {{ $wo->quantity === 1 ? 'goes' : 'go' }} back into free stock."
                                                     data-confirm-label="Reverse">Reverse</button>
                                         </form>
                                     @endcan

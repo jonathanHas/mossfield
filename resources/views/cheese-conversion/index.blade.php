@@ -88,7 +88,7 @@
                                 <button type="submit" form="release-form-{{ $item->id }}" x-ref="releaseBtn"
                                         class="mc-btn mc-btn-mature"
                                         :disabled="mature.length !== {{ $maturing }}"
-                                        data-confirm="Release {{ $maturing }} held wheel(s) into mature cheese?" data-confirm-label="Release">
+                                        data-confirm-title="Release to mature?" data-confirm="Release {{ $maturing }} held wheel(s) into mature cheese?" data-confirm-label="Release">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg>
                                     Release
                                 </button>

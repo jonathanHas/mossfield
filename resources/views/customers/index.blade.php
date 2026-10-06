@@ -97,7 +97,7 @@
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                    data-confirm="Are you sure you want to delete this customer?" data-confirm-label="Delete" data-confirm-danger>Delete</button>
+                                                    data-confirm-title="Delete this customer?" data-confirm="This deletes the customer and their special prices. A customer with orders can't be deleted — set them inactive instead." data-confirm-label="Delete" data-confirm-danger>Delete</button>
                                         </form>
                                     @endif
                                 </td>

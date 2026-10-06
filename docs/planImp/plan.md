@@ -1,7 +1,7 @@
 # Order-flow polish: named dialogs, honest stepper, quieter blank line
 
-Status: READY
-Revision: 1
+Status: ACCEPTED
+Revision: 2
 Planner: Fable 5.1
 Date: 2026-10-06
 
@@ -218,6 +218,44 @@ item (data, not code) under the pricing section. `WORK_IN_PROGRESS.md`:
 
 Check: `grep -n "test_every_dialog_names_its_action" CLAUDE.md` → hit.
 
+### 6. (Revision 2) A body never repeats its title
+
+Files: `resources/views/orders/show.blade.php`,
+`resources/views/orders/partials/allocation-items.blade.php`,
+`resources/views/customers/show.blade.php`, `resources/views/picking/item.blade.php`,
+`resources/views/invoicing/payments/show.blade.php`,
+`resources/views/batches/partials/_write-offs.blade.php`,
+`tests/Feature/ConfirmDialogTest.php`
+
+What: with titles in place, several dialogs now ask the same question twice
+— two bodies are the title verbatim ("Remove this allocation?", "Remove this
+special price?") and about nine open with it ("Undo this pick? Stock will
+be…", "Reopen this line? It will…", "Mark this line short? The…", "Can't
+finish this line? The…", "Reverse this write-off? N units…", "Remove this
+payment? The invoices…", "Close this line short? N units…", "Remove this
+line? Any picked…", "Undo the last pick on this line? Stock…").
+- Rewrite each body as the **consequence only**, one or two sentences, no
+  leading question: "The reserved units go back to free stock." / "The
+  customer pays the base price on new orders; existing lines keep it." /
+  "Stock goes back to the batch." / "It needs picking again and the order
+  goes back to Preparing." etc. Keep every number and name the body carries
+  today. The `$isOnlyLine` Remove-line body (`orders/show`, `allocation-items`)
+  becomes "This is the only item — the order is cancelled and any picked
+  stock returns to its batch." / "Any picked stock returns to its batch."
+- Also drop "using FIFO" from the **banner** above Auto allocate
+  (`orders/show.blade.php:357`): "Auto allocate pulls available stock to
+  every line, oldest batches first." (the Implementer's note — the dialog
+  lost the jargon, the banner kept it).
+- **Test**: in `test_every_dialog_names_its_action`, after the title check,
+  read the raw `data-confirm="…"` value and add an offender when it starts
+  (case-insensitive, trimmed) with the title text or the title text minus
+  its `?`. A body that is a Blade expression (`{{ … }}`) is skipped by the
+  scan — do the two `$isOnlyLine` ones by hand.
+
+Check: `php artisan test --filter=ConfirmDialogTest` → pass; the Remove
+allocation dialog on a preparing order reads "Remove this allocation?" once,
+then the consequence.
+
 ## Verification
 
 1. `php artisan test` → **0 failed**; record the count (695 + the new tests).
@@ -249,4 +287,100 @@ Check: `grep -n "test_every_dialog_names_its_action" CLAUDE.md` → hit.
 
 ## Review
 
-(Planner fills in after `implemented.md` is DONE.)
+### Revision 1 — reviewed 2026-10-06 against `implemented.md` (DONE, read to the end) and the diff
+
+Planner reran: `php artisan test` → **699 passed, 0 failed** (+4); `pint --test`
+→ PASS 297 files; `data-confirm=` 47 / `data-confirm-title=` 47; probe
+ORD-20261006-003 (id 29) cancelled, 0 allocation rows, 28 orders.
+
+**Criteria** — steps 1–5 all pass. 1 Every trigger titled; the scan splits on
+`<` and reports `file:line`, refuses an "Are you sure" title or body; confirm-
+order sibling test; "Not yet" on Confirm order / Dispatch / Dispatch run;
+FIFO gone from the dialog; the four bare bodies say what the controller and
+the FKs really do. 2 Stepper: "N of M picked" only while `preparing`,
+summed over the loaded lines, inline style, two tests (sum proved on two
+lines). 3 "Capacity:". 4 `refreshBlankRow()` — dashed + no × on the trailing
+blank row after the first, "Add another item…" only in the JS template,
+server filter untouched; inline `display` rather than `hidden` is right (the
+button carries `grid`). 5 CLAUDE.md rule, SMALL_FIXES re-sighting added to
+the existing item rather than duplicated, WIP line.
+
+**Deviations** — all five accepted: the fifth "Are you sure" body (cancel
+order) reworded and caught by the test; "Delete this run?" body trimmed;
+two-line stepper test; no duplicate SMALL_FIXES item; browser on 127.0.0.1.
+
+**Why not ACCEPTED yet**: a side effect of adding titles the plan should
+have foreseen — about eleven bodies now repeat the title (two verbatim).
+Step 6 fixes that and pins it in the same scan. One short pass.
+
+**Notes for Planner — decisions**
+- *Deleting a product or variant cascades away order lines and batch
+  traceability* → **cycle 12**, its own plan: `Product::deletionBlocker()` /
+  `ProductVariant::deletionBlocker()` on the `Batch` pattern (refuse when
+  batches, order lines or special prices exist; hide Delete on the cards;
+  "deactivate instead"), plus the customer case below. Not this cycle.
+- *The allocation banner still says "using FIFO"* → **fixed now** (step 6).
+- *Customer delete hits a DB RESTRICT when payments/invoices/statements
+  exist* → folded into **cycle 12** (refuse with a flash, like orders).
+
+### Revision 2 — reviewed 2026-10-06 against `implemented.md` (DONE, read to the end) and the diff — **ACCEPTED**
+
+*Reviewed in the Implementer's session at Jon's request ("review the imp") —
+so the checks below were rerun rather than taken from the report, and every
+new body was traced to the code that runs when it's confirmed.*
+
+Reran: `php artisan test` → **699 passed (4456 assertions), 0 failed**;
+`pint --test` → clean; `data-confirm=` **47** / `data-confirm-title=` **47**;
+no `FIFO` left outside the picking screens (out of scope), no `scroll-mt-20`;
+`git status` = the 25 + 1 views, four tests, three docs, `plan.md`,
+`implemented.md`.
+
+**Criteria — step 6 passes.**
+- The echo check is in the existing scan (title or title-minus-`?` as a body
+  prefix, Blade bodies skipped); its first run named 12, and all 12 now read
+  as consequences, plus the two `$isOnlyLine` bodies by hand and the
+  reworded "Undo fulfillment?" echo the prefix test can't see.
+- The bodies are true — traced: *Remove allocation* only renders for an
+  unpicked allocation (`quantity_fulfilled == 0`) and `deallocate()` only
+  drops the reservation ("The reserved units go back to free stock" ✔);
+  *Issue consolidated invoices* loops the selected customers calling
+  `issueConsolidated()` once each and names the skipped ones ✔; *Remove this
+  special price* — `unit_price` is a snapshot, so existing lines keep theirs
+  ✔; *Remove this payment* ✔; *Delete batch* — the button only renders when
+  `deletionBlocker()` is null ✔.
+- The banner reads "…every line, oldest batches first." Browser: Remove
+  allocation on order 14 reads the question once, then the consequence;
+  dismissed, no request reached the server, order 14 unchanged.
+
+**Deviations (revision 2)** — all three accepted: the two echoes beyond the
+list (the check found them — that's its job); the hand fix of the reworded
+Undo echo; the two copy assertions in `BatchCreateTest`/`StockWriteOffTest`
+that pinned replaced bodies (assertions on copy the plan changed, not on
+behaviour).
+
+**Found in review — decisions**
+- *Docs gap (fixed at acceptance):* `CLAUDE.md`'s `confirm.js` rule didn't
+  state revision 2's rule that the scan now enforces. One sentence added —
+  a body is the consequence and never repeats its title.
+- *Close short / Mark short / Can't finish bodies over-promise* — "N units
+  will be released back to stock" with N = `quantity_remaining` (ordered −
+  picked), but `closeShort()` releases only the **reserved** units; on the
+  no-stock line those buttons exist for, nothing moves. **Pre-existing**
+  (cycle 8's short-supply copy; step 6 only removed the leading question),
+  so **deferred** → `SMALL_FIXES.md`, with the wording to use. Not a reason
+  to reopen a cycle whose goal was titles.
+- *Stepper total includes short-closed units* — "4 of 16 picked" on a
+  `preparing` order counts a short-closed line's whole ordered quantity,
+  though those units are never coming. Rare (a fully settled order is
+  `ready`, where the count is hidden). **Deferred** → `SMALL_FIXES.md`
+  (net `quantity_short` out of the total, as the chilled-run stats do).
+
+**Notes for Planner (revision 1)** — decided in the revision-1 review above
+(product/variant delete cascade and the customer RESTRICT → cycle 12; FIFO
+banner → fixed in step 6, verified). Revision 2 raised no new notes.
+
+**Dev DB:** probe ORD-20261006-003 (id 29) cancelled, 0 allocation rows;
+revision 2 wrote nothing.
+
+**Archive:** `mkdir -p docs/planImp/archive/2026-10-06-order-flow-polish`
+and move `plan.md` + `implemented.md` there.

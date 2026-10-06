@@ -46,7 +46,7 @@
 
             @if($ceilings->contains(fn ($c) => $c['stored']))
                 <form method="POST" action="{{ route('settings.update') }}" class="px-4 pb-4 -mt-2 flex justify-end"
-                      data-confirm="Reset the batch ceilings to the defaults ({{ $ceilings->map(fn ($c, $t) => $t.' '.number_format($c['default'], 0, '.', ' '))->implode(', ') }})?"
+                      data-confirm-title="Reset the ceilings?" data-confirm="Reset the batch ceilings to the defaults ({{ $ceilings->map(fn ($c, $t) => $t.' '.number_format($c['default'], 0, '.', ' '))->implode(', ') }})?"
                       data-confirm-label="Reset" data-confirm-danger>
                     @csrf
                     @method('PUT')

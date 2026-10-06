@@ -40,7 +40,7 @@
                 @if($invoice->isIssued())
                     @if($invoice->documentRecipient())
                         <form method="POST" action="{{ route('invoicing.invoices.email', $invoice) }}"
-                              data-confirm="Email invoice {{ $invoice->number }} to {{ $invoice->documentRecipient() }}?" data-confirm-label="Send">
+                              data-confirm-title="Email this invoice?" data-confirm="Email invoice {{ $invoice->number }} to {{ $invoice->documentRecipient() }}?" data-confirm-label="Send">
                             @csrf
                             <button type="submit" class="mf-btn-primary">
                                 {{ $invoice->hasBeenEmailed() ? 'Email again' : 'Email invoice' }}
@@ -49,7 +49,7 @@
                     @endif
                     @if($invoice->canBeReminded())
                         <form method="POST" action="{{ route('invoicing.invoices.remind', $invoice) }}"
-                              data-confirm="Send a payment reminder for {{ $invoice->number }}?" data-confirm-label="Send">
+                              data-confirm-title="Send a reminder?" data-confirm="Send a payment reminder for {{ $invoice->number }}?" data-confirm-label="Send">
                             @csrf
                             <button type="submit" class="mf-btn-secondary">Send reminder</button>
                         </form>

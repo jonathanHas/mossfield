@@ -162,7 +162,7 @@
                                         <input type="hidden" name="{{ $name }}" value="{{ $value }}">
                                     @endforeach
                                     <button type="submit" class="mf-btn-primary"
-                                        data-confirm="Confirm this order and make it available for stock allocation?" data-confirm-label="Confirm">
+                                        data-confirm-title="Confirm this order?" data-confirm-cancel-label="Not yet" data-confirm="It goes to the picking floor and stock can be allocated to it." data-confirm-label="Confirm order">
                                         Confirm order
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                                     </button>
@@ -173,7 +173,7 @@
                                 <form method="POST" action="{{ route('orders.dispatch', $order) }}" class="inline">
                                     @csrf
                                     <button type="submit" class="mf-btn-primary"
-                                        data-confirm="Dispatch order {{ $order->order_number }}? {{ $order->customer->isConsolidatedBilling() ? 'It will be billed on the next '.strtolower($order->customer->invoicing_mode->label()).' invoice' : 'The figures are frozen and an invoice is issued' }}, and a dispatch confirmation is emailed to {{ $order->customer->billingEmail() ?? 'no address on file' }}." data-confirm-label="Dispatch">
+                                        data-confirm-title="Dispatch this order?" data-confirm-cancel-label="Not yet" data-confirm="Dispatch order {{ $order->order_number }}? {{ $order->customer->isConsolidatedBilling() ? 'It will be billed on the next '.strtolower($order->customer->invoicing_mode->label()).' invoice' : 'The figures are frozen and an invoice is issued' }}, and a dispatch confirmation is emailed to {{ $order->customer->billingEmail() ?? 'no address on file' }}." data-confirm-label="Dispatch">
                                         Mark dispatched
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7" /><path d="M5.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM18.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" /></svg>
                                     </button>
@@ -182,7 +182,7 @@
                                 <form method="POST" action="{{ route('orders.deliver', $order) }}" class="inline">
                                     @csrf
                                     <button type="submit" class="mf-btn-primary"
-                                        data-confirm="Mark order {{ $order->order_number }} as delivered?" data-confirm-label="Mark delivered">
+                                        data-confirm-title="Mark as delivered?" data-confirm="Mark order {{ $order->order_number }} as delivered?" data-confirm-label="Mark delivered">
                                         Mark delivered
                                         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6L9 17l-5-5" /></svg>
                                     </button>
@@ -354,13 +354,13 @@
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
                                 <div>
                                     <b>Assign stock in one tap.</b>
-                                    Auto allocate pulls available stock to every line using FIFO (oldest batches first).
+                                    Auto allocate pulls available stock to every line, oldest batches first.
                                 </div>
                             </div>
                             <form method="POST" action="{{ route('order-allocations.auto-allocate', $order) }}" class="inline">
                                 @csrf
                                 <button type="submit" class="mf-btn-primary whitespace-nowrap"
-                                    data-confirm="Auto-allocate available stock to this order using FIFO?" data-confirm-label="Auto-allocate">
+                                    data-confirm-title="Allocate stock?" data-confirm="Reserves available stock for every line, oldest batches first. Nothing is picked yet." data-confirm-label="Allocate">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
                                     Auto allocate
                                 </button>
@@ -421,7 +421,7 @@
                                                 <form method="POST" action="{{ route('orders.items.destroy', [$order, $item]) }}" class="inline">
                                                     @csrf @method('DELETE')
                                                     <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                        data-confirm="{{ $isOnlyLine ? 'This is the only item — removing it will cancel the order and return any picked stock to its batch. Continue?' : 'Remove this line? Any picked stock will be returned to its batch.' }}" data-confirm-label="Remove" data-confirm-danger>{{ $isOnlyLine ? 'Remove (cancels order)' : 'Remove' }}</button>
+                                                        data-confirm-title="{{ $isOnlyLine ? 'Remove the only line?' : 'Remove this line?' }}" data-confirm="{{ $isOnlyLine ? 'This is the only item — the order is cancelled and any picked stock returns to its batch.' : 'Any picked stock returns to its batch.' }}" data-confirm-label="Remove" data-confirm-danger>{{ $isOnlyLine ? 'Remove (cancels order)' : 'Remove' }}</button>
                                                 </form>
                                             @endif
                                         @endcan
@@ -534,7 +534,7 @@
                                 @endforeach
                                 <button type="submit" class="mf-link" style="color: var(--danger);"
                                     data-confirm-title="Cancel this order?" data-confirm-cancel-label="Keep order"
-                                    data-confirm="Are you sure you want to cancel this order? Any picked stock will be returned to its batch." data-confirm-label="Cancel order" data-confirm-danger>
+                                    data-confirm="Reserved and picked stock goes back to its batch; the order stays on record as cancelled." data-confirm-label="Cancel order" data-confirm-danger>
                                     Cancel order
                                 </button>
                             </form>

@@ -184,7 +184,7 @@
                             @csrf @method('DELETE')
                             <button type="submit" class="mf-link" style="color: var(--danger);"
                                     data-confirm-title="Delete batch?"
-                                    data-confirm="Delete batch {{ $batch->batch_code }}? This can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
+                                    data-confirm="Batch {{ $batch->batch_code }} and its items are removed. This can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
                         </form>
                     @endif
                 @endcan

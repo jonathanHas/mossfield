@@ -29,6 +29,14 @@
             <div class="mf-pstep is-{{ $state }}" role="listitem" aria-current="{{ $state === 'current' ? 'step' : 'false' }}">
                 <div class="mf-pstep-node"></div>
                 <div class="mf-pstep-label">{{ $step['name'] }}</div>
+                {{-- "Picking" alone reads as under way the moment stock is
+                     allocated; say how much has actually been picked. Sums
+                     the loaded lines — no query. --}}
+                @if($step['id'] === 'preparing' && $order->status === 'preparing')
+                    <div style="font-size: 11px; color: var(--muted);" data-picked-count>
+                        {{ $order->orderItems->sum('quantity_fulfilled') }} of {{ $order->orderItems->sum('quantity_ordered') }} picked
+                    </div>
+                @endif
             </div>
         @endforeach
     </div>

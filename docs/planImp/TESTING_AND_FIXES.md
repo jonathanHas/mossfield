@@ -90,6 +90,51 @@ baseline.
 
 ---
 
+## 2026-10-06 — Order-flow polish (Plan/Implement cycle 11, revision 2)
+
+**Scope:** the Planner's Chrome walk of order-taking found five copy/UX items;
+one generalised — 46 of 47 confirm dialogs opened under "Are you sure?".
+Copy and one template change; no routes, data or arithmetic. Suite afterwards:
+**699 passed, 0 failed** (+4).
+
+- **Every dialog names its action** — `data-confirm-title` on all 47 triggers
+  ("Confirm this order?", "Allocate stock?", "Delete this run?"…).
+  `ConfirmDialogTest::test_every_dialog_names_its_action` splits each view on
+  `<` (multi-line tags) and fails on a missing/empty/"Are you sure" title, a
+  body starting "Are you sure", or (**revision 2**) a body that starts with
+  its own title. Confirm order, Dispatch and Dispatch run say **"Not yet"**
+  instead of "Cancel" (`test_the_confirm_order_dialog_names_both_choices`).
+- **Bodies say the consequence** — the four bare "Are you sure" bodies were
+  rewritten after checking what really happens: deleting a **product** or
+  **variant** cascades (FKs) to its batches, batch items, allocations,
+  cut/conversion logs, write-offs and **order lines**, and nothing refuses it
+  — the body now says so (the guard is **cycle 12**). Revision 2 removed the
+  title-echoes the titles created (12 by the scan + 3 by hand).
+- **Stepper** — under "Picking", while `preparing`, "N of M picked" from the
+  loaded lines (`OrderTransitionsTest`, two cases).
+- **Run sheet** "Capacity:"; **create form** trailing blank row dashed,
+  "Add another item…", no × (`refreshBlankRow()`; server still drops it);
+  "FIFO" gone from the auto-allocate dialog and banner.
+
+**Dev DB:** probe ORD-20261006-003 (id 29) created, confirmed, allocated and
+cancelled — 0 allocation rows left.
+
+**Deferred to `SMALL_FIXES.md`** (pre-existing, found in review): the
+short-close dialogs promise "N units released back to stock" where only
+reserved units move; the stepper's total counts short-closed units.
+
+### Invariants worth keeping
+
+- **A `data-confirm` trigger has a title naming the action, and its body is
+  the consequence** — never "Are you sure", never the title again. The view
+  scan enforces both; a Blade-expression body is skipped by the scan, so
+  check those by hand.
+- **Before a dialog promises what goes, check the controller and the FKs.**
+  The product/variant delete bodies are honest about a cascade the app
+  shouldn't allow — cycle 12 replaces the cascade with a refusal.
+
+---
+
 ## 2026-10-06 — Settings (Plan/Implement cycle 10)
 
 **Scope:** Jon asked for the batch ceilings (cycle 8) to be changeable by an

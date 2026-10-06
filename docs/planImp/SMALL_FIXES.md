@@ -37,6 +37,23 @@ Most of these need no test. Where one is worth having, it says so.
   *Source: browser pass, cosmetic list.*
   *Done 2026-09-13:* when some units are allocated the banner reads "N of M still unallocated — no stock left for the rest" and names the allocated count; the flat "No available stock" wording is kept only when nothing is allocated.
 
+- [ ] **Short-close dialogs over-promise a stock release.** *Close short*
+  (`orders/partials/allocation-items`), *Mark short* and *Can't finish this
+  line* (`picking/item`) say "N units will be released back to stock", with
+  N = `OrderItem::quantity_remaining` (ordered − picked). But `closeShort()`
+  releases only the **reserved** units (allocated − picked) — on the
+  zero-stock line the buttons exist for, nothing moves at all. Say instead:
+  "The N unpicked units won't be supplied or billed; any stock reserved for
+  them goes back to free stock." Pre-existing copy (cycle 8); found in the
+  cycle-11 review. `ConfirmDialogTest` keeps it titled and echo-free.
+
+- [ ] **Stepper total counts short-closed units.** The "N of M picked" line
+  under Picking (`orders/partials/status-stepper`) sums `quantity_ordered`,
+  so a short-closed line's never-coming units sit in M. Net
+  `quantity_short` out of the total for short-closed lines, as the chilled
+  run sheet's stats do. Rare — a fully settled order is `ready`, where the
+  count is hidden. Found in the cycle-11 review.
+
 ## Display and consistency
 
 - [x] **Batch progress bar has five segments and a four-item legend.** Renders as
@@ -121,7 +138,9 @@ These are not bugs until someone says they are.
   product was seeded on 2026-09-12, so it is a seeder choice rather than a data
   entry slip, but it is the price the app will use. Confirm the premium is right
   and whether mature should be priced per kg like the other wheels.
-  *Source: 2026-09-13 verification of the dev-database repair.*
+  *Source: 2026-09-13 verification of the dev-database repair; seen again in
+  the 2026-10-06 order-flow walk (€55.00 per unit beside Farmhouse/Cumin
+  wheels at €16.00/kg). Data, not code — Jon's call.*
 
 ## Not investigated
 

@@ -92,7 +92,7 @@
             </div>
 
             <form action="{{ route('backup.restore') }}" method="POST" enctype="multipart/form-data" class="p-4"
-                  data-confirm="Replace ALL data with this backup file? This cannot be undone." data-confirm-label="Restore" data-confirm-danger>
+                  data-confirm-title="Restore this backup?" data-confirm="Replace ALL data with this backup file? This cannot be undone." data-confirm-label="Restore" data-confirm-danger>
                 @csrf
 
                 <div class="mb-4">

@@ -180,6 +180,22 @@
             relabelOptions(newItem);
             itemIndex++;
             updateOrderTotal();
+            refreshBlankRow();
+        }
+
+        // The blank row the form keeps at the end is optional: while it has
+        // no product it is dashed and has no × (the server drops it anyway).
+        // The first row is never "another" item, so it is left alone.
+        function refreshBlankRow() {
+            const items = document.querySelectorAll('#orderItems .order-item');
+            items.forEach(function(item, i) {
+                if (i === 0) {
+                    return;
+                }
+                const optional = i === items.length - 1 && !item.querySelector('.product-select').value;
+                item.style.borderStyle = optional ? 'dashed' : 'solid';
+                item.querySelector('.remove-item').style.display = optional ? 'none' : '';
+            });
         }
 
         function isLastItem(itemEl) {
@@ -198,7 +214,7 @@
                     <div>
                         <label class="mf-label">Product</label>
                         <select name="items[${index}][product_variant_id]" class="product-select mf-select">
-                            <option value="">Select product</option>
+                            <option value="">Add another item…</option>
                             @foreach($productVariants as $productName => $variants)
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
@@ -226,6 +242,7 @@
                 div.remove();
                 updateOrderTotal();
                 ensureTrailingEmptyItem();
+                refreshBlankRow();
             });
 
             const productSelect = div.querySelector('.product-select');
@@ -237,6 +254,7 @@
                 if (this.value && isLastItem(div)) {
                     appendEmptyItem();
                 }
+                refreshBlankRow();
             });
 
             quantityInput.addEventListener('input', function() {
@@ -369,6 +387,7 @@
                     item.remove();
                     updateOrderTotal();
                     ensureTrailingEmptyItem();
+                    refreshBlankRow();
                 });
 
                 productSelect.addEventListener('change', function() {
@@ -376,6 +395,7 @@
                     if (this.value && isLastItem(item)) {
                         appendEmptyItem();
                     }
+                    refreshBlankRow();
                 });
 
                 quantityInput.addEventListener('input', function() {
@@ -399,6 +419,7 @@
             }
 
             ensureTrailingEmptyItem();
+            refreshBlankRow();
             updateOrderTotal();
         });
     </script>

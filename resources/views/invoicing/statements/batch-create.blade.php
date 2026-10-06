@@ -48,7 +48,7 @@
             </div>
         @else
             <form method="POST" action="{{ route('invoicing.statements.batch.store') }}"
-                  data-confirm="Generate and queue statements for the selected customers?" data-confirm-label="Generate">
+                  data-confirm-title="Generate statements?" data-confirm="Generate and queue statements for the selected customers?" data-confirm-label="Generate">
                 @csrf
                 <input type="hidden" name="from" value="{{ $from->toDateString() }}">
                 <input type="hidden" name="to" value="{{ $to->toDateString() }}">
