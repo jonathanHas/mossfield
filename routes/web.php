@@ -20,6 +20,7 @@ use App\Http\Controllers\OnlineOrdersController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductVariantController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\UserController;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
@@ -295,6 +296,10 @@ Route::middleware(['auth', 'role:admin'])->group(function () {
     Route::get('/backup', [BackupController::class, 'index'])->name('backup.index');
     Route::post('/backup/download', [BackupController::class, 'download'])->name('backup.download');
     Route::post('/backup/restore', [BackupController::class, 'restore'])->name('backup.restore');
+
+    // Settings — admin-tunable values (the batch ceilings; config holds the defaults).
+    Route::get('/settings', [SettingsController::class, 'index'])->name('settings.index');
+    Route::put('/settings', [SettingsController::class, 'update'])->name('settings.update');
 });
 
 require __DIR__.'/auth.php';

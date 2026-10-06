@@ -20,7 +20,9 @@ Suite **598 passed, 0 failed** — any failure is real. Nothing pushed or deploy
 
 **Cycle 9 — Polish**: the batch card's items table shows a wheel row's sold / cut / converted separately; a fully written-off expired card says "Written off"; a `ready` order's page says "Awaiting dispatch — invoiced when dispatched"; the run sheet's header sticks whenever the sheet fits its panel (by column count); every fragment landing sits just under the flash by its real height.
 
-All seven are written up in `TESTING_AND_FIXES.md` (2026-10-04/05/06 sections); cycle files in `docs/planImp/archive/`.
+**Cycle 10 — Settings**: `/settings` (Admin group, admin-only) holds the batch sanity ceilings; Save names each change, Reset drops back to the built-in defaults; office/factory get the 403 page.
+
+All eight are written up in `TESTING_AND_FIXES.md` (2026-10-04/05/06 sections); cycle files in `docs/planImp/archive/`.
 
 ## What to verify in the browser
 
@@ -52,7 +54,7 @@ None with a brief. The cycle-4 plan's reorder semantics and landing fragment wer
 
 ## Test results
 
-684 passed, 0 failed (536 → 557 → 598 → 612 → 617 → 647 → 674 → 684 across cycles 3–9). New suites: `DashboardTest`, `ErrorPagesTest`, `StockWriteOffTest`, `CreditLimitWarningTest`.
+695 passed, 0 failed (536 → 557 → 598 → 612 → 617 → 647 → 674 → 684 → 695 across cycles 3–10). New suites: `DashboardTest`, `ErrorPagesTest`, `StockWriteOffTest`, `CreditLimitWarningTest`, `SettingsTest`.
 
 ## Dev database state
 

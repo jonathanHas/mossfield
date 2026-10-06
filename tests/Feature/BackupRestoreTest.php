@@ -239,6 +239,45 @@ class BackupRestoreTest extends TestCase
         $this->assertSame(7, \App\Models\WriteOffReason::count());
     }
 
+    public function test_a_stored_setting_round_trips(): void
+    {
+        $this->seedBusinessData();
+        \App\Models\Setting::set('batch_ceilings.cheese', 450, $this->admin);
+        $upload = $this->archiveUpload();
+
+        \App\Models\Setting::set('batch_ceilings.cheese', 999, $this->admin);
+        \App\Models\Setting::set('batch_ceilings.milk', 10, $this->admin);
+        $this->assertSame(999, \App\Models\Setting::batchCeiling('cheese')); // warm the per-request cache
+
+        $this->actingAs($this->admin)
+            ->post(route('backup.restore'), [
+                'backup_file' => $upload, 'password' => self::PASSWORD, 'confirm' => 'RESTORE',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(450, \App\Models\Setting::batchCeiling('cheese'), 'the backed-up value, not the cached one');
+        $this->assertSame(5000, \App\Models\Setting::batchCeiling('milk'), 'a row added since the backup goes');
+        $this->assertSame($this->admin->id, \App\Models\Setting::find('batch_ceilings.cheese')->updated_by);
+    }
+
+    public function test_a_backup_from_before_settings_keeps_the_current_ones(): void
+    {
+        $this->seedBusinessData();
+        $payload = app(BackupService::class)->export();
+        unset($payload['tables']['settings']);
+        $upload = $this->archiveUpload($payload);
+
+        \App\Models\Setting::set('batch_ceilings.cheese', 450, $this->admin);
+
+        $this->actingAs($this->admin)
+            ->post(route('backup.restore'), [
+                'backup_file' => $upload, 'password' => self::PASSWORD, 'confirm' => 'RESTORE',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(450, \App\Models\Setting::batchCeiling('cheese'));
+    }
+
     public function test_restore_reencrypts_customer_pii_readable(): void
     {
         $this->seedBusinessData();

@@ -98,10 +98,16 @@ worth returning to.
   queue page; sticky header by column count (≤ 11 xl, ≤ 15 2xl);
   `mf-landing`. Suite **684 passed, 0 failed**. Archived to
   `archive/2026-10-06-polish/` by the Planner.
-- **Next: cycle 10 — a Settings page** (Jon asked 2026-10-06): the batch
-  ceilings editable by admin at `/settings` instead of `config/mossfield.php`
-  (config stays as the default). Then `FULFILMENT_PLAN.md` Phase 4 (driver
-  route + proof of delivery) when wanted.
+- **Cycle 10 "Settings" — ACCEPTED 2026-10-06:** `/settings` (admin-only)
+  holds the batch ceilings; `Setting::batchCeiling()` is the read site;
+  config stays the default; backups/reset classify the table. Suite **695
+  passed, 0 failed**. Jon archives `plan.md` + `implemented.md` to
+  `archive/2026-10-06-settings/`. **Jon enters his ceiling numbers at
+  `/settings`** (dev table is empty = defaults).
+- **Next:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
+  route for the day + proof of delivery with signature) — a new feature
+  that would want a design pass before a plan. Otherwise: push and deploy
+  when the server is back (see below).
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 

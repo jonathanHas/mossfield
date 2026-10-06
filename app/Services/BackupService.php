@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Models\Setting;
 use Illuminate\Contracts\Encryption\DecryptException;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,7 @@ class BackupService
      */
     public const TABLES = [
         'users',
+        'settings',
         'write_off_reasons',
         'products',
         'delivery_runs',
@@ -62,16 +64,18 @@ class BackupService
 
     /**
      * Tables added after backups were already being taken (cycle 7, stock
-     * write-offs). A backup from before they existed is still restorable:
-     * a missing table with `true` restores as empty (there were no rows
-     * then); with `false` its current rows are left alone (reference data
-     * the app needs — the write-off reasons).
+     * write-offs; cycle 10, settings). A backup from before they existed is
+     * still restorable: a missing table with `true` restores as empty (there
+     * were no rows then); with `false` its current rows are left alone
+     * (reference data the app needs — the write-off reasons, the admin's
+     * settings).
      *
      * @var array<string, bool>
      */
     public const ADDED_LATER = [
         'stock_write_offs' => true,
         'write_off_reasons' => false,
+        'settings' => false,
     ];
 
     /**
@@ -163,6 +167,9 @@ class BackupService
                 }
             });
         });
+
+        // Settings are cached per request; the restored rows must win.
+        Setting::flushCache();
 
         return $summary;
     }

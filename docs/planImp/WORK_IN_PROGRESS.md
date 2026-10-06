@@ -8,6 +8,16 @@ This file tracks the current development state and what needs attention when res
 
 ---
 
+## Recently Completed: Settings (2026-10-06)
+
+Plan/Implement cycle 10 — the batch sanity ceilings are now editable by an admin, without a deploy:
+
+- **`/settings`** (Admin nav, admin-only): the milk / yoghurt / cheese ceilings, each showing its default and who changed it when; Save names each change; Reset to defaults.
+- **`settings` table + `App\Models\Setting`** (`get`/`set`/`forget`, one query per request): a generic key → value store whose defaults stay in config — the next admin-tunable number has a home.
+- `BatchController::store()` reads `Setting::batchCeiling()`; backups and the trading-data reset keep settings.
+
+---
+
 ## Recently Completed: Polish (2026-10-06)
 
 Plan/Implement cycle 9 — the six follow-ups deferred by the cycle 6–8 reviews. No stock, money or rule changes:

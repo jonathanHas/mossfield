@@ -458,6 +458,21 @@ class BatchCreateTest extends TestCase
         $this->assertSame(2, Batch::count());
     }
 
+    public function test_an_admin_set_ceiling_replaces_the_default(): void
+    {
+        \App\Models\Setting::set('batch_ceilings.cheese', 500);
+        [$cheese, $wheel] = $this->cheese();
+
+        $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 300]], 3000)
+            ->assertSessionHasNoErrors()
+            ->assertSessionMissing('warning');
+
+        $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 501]], 5000)
+            ->assertSessionHas('warning')
+            ->assertSessionHasErrors(['batch_items.0.quantity_produced' => "501 × Whole Wheel — the usual ceiling is 500. Tick 'Yes, this batch really is that big' to save it."]);
+        $this->assertSame(1, Batch::count());
+    }
+
     public function test_milk_cannot_bottle_more_than_its_raw_milk(): void
     {
         [$milk, $oneLitre] = $this->makeMilkProductWithTwoVariants();

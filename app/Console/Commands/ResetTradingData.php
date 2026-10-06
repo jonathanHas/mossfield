@@ -76,6 +76,7 @@ class ResetTradingData extends Command
         'product_variants',
         'delivery_runs',
         'write_off_reasons',
+        'settings', // admin-set values (cycle 10) — configuration, not trading
     ];
 
     /** Framework/infra tables — neither trading data nor reference data. */

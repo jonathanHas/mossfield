@@ -6,6 +6,7 @@ use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Setting;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -145,9 +146,10 @@ class BatchController extends Controller
             }
         }
 
-        // A sanity ceiling per variant (config/mossfield.php batch_ceilings):
+        // A sanity ceiling per variant (set by an admin at /settings; the
+        // defaults are config/mossfield.php batch_ceilings):
         // above it the batch needs an explicit "yes, really" (F-09).
-        $ceiling = (int) config("mossfield.batch_ceilings.{$product->type}", 0);
+        $ceiling = Setting::batchCeiling($product->type);
         $tooBig = $ceiling > 0
             ? collect($validated['batch_items'])->filter(fn ($item) => (int) $item['quantity_produced'] > $ceiling)
             : collect();

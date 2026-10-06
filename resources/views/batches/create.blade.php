@@ -85,7 +85,7 @@
                     </div>
                 </div>
 
-                {{-- Only after the ceiling check refused the quantities (config/mossfield.php batch_ceilings). --}}
+                {{-- Only after the ceiling check refused the quantities (Setting::batchCeiling() — admin-set at /settings, defaults in config/mossfield.php batch_ceilings). --}}
                 @php
                     $overCeiling = collect($errors->getMessages())
                         ->filter(fn ($messages, $key) => str_starts_with($key, 'batch_items.') && str_contains(implode(' ', $messages), 'usual ceiling'))

@@ -90,6 +90,45 @@ baseline.
 
 ---
 
+## 2026-10-06 — Settings (Plan/Implement cycle 10)
+
+**Scope:** Jon asked for the batch ceilings (cycle 8) to be changeable by an
+admin without a deploy. Suite afterwards: **695 passed, 0 failed** (+11;
+`SettingsTest` is new).
+
+- **`settings` table** (`key` string PK, JSON `value`, `updated_by`) behind a
+  static API on `App\Models\Setting`: `get($key, $default)`, `set()`,
+  `forget()`, `flushCache()`, and `batchCeiling($type)` — the one read site
+  (`BatchController::store()`). **Config stays the default**: no rows ⇒
+  exactly today's behaviour; a stored value wins. All rows are read once per
+  request and cached, keyed on the `app()` instance so every test and every
+  request under a long-lived worker starts from the database; `set()`,
+  `forget()` and `BackupService::import()` clear it (a restore otherwise left
+  stale values cached — red-checked).
+- **`/settings`** (admin-only: `role:admin` group, `SettingPolicy` mirrors
+  `UserPolicy`, `SettingsRequest` carries the policy) — one panel, three
+  number inputs with "default 5 000" and "changed by {name} on {date}", Save
+  naming each change ("cheese 200 → 500"), **Reset to defaults** (PUT
+  `reset=1`, confirm) shown only when something is stored. Nav: Admin →
+  Settings.
+- Housekeeping: `ResetTradingData::KEEP`, `BackupService::TABLES` with
+  `ADDED_LATER['settings'] = false` (older backups keep current settings);
+  the authorisation matrix covers the two routes automatically.
+- The dev `settings` table is empty — defaults in force until Jon enters his
+  numbers at `/settings`.
+
+### Invariants worth keeping
+
+- **Config is the default, the DB is the override, and `Setting::` is the
+  only reader.** Don't `config()` a tunable value anywhere else.
+- **Anything that writes `settings` outside the model clears the cache**
+  (`Setting::flushCache()`), as `BackupService::import()` does.
+- **The next admin setting** = a config default + a key + a form field. A
+  second one justifies a small registry (key → label, rules, default) rather
+  than another hand-written block in the controller and request.
+
+---
+
 ## 2026-10-06 — Polish (Plan/Implement cycle 9)
 
 **Scope:** the follow-ups deferred by the cycle-6/7/8 reviews. Suite

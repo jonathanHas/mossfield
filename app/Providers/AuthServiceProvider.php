@@ -17,6 +17,7 @@ use App\Models\OrderItem;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Setting;
 use App\Models\Statement;
 use App\Models\StockWriteOff;
 use App\Models\User;
@@ -36,6 +37,7 @@ use App\Policies\OrderPolicy;
 use App\Policies\PaymentPolicy;
 use App\Policies\ProductPolicy;
 use App\Policies\ProductVariantPolicy;
+use App\Policies\SettingPolicy;
 use App\Policies\StatementPolicy;
 use App\Policies\StockWriteOffPolicy;
 use App\Policies\UserPolicy;
@@ -52,6 +54,7 @@ class AuthServiceProvider extends ServiceProvider
      */
     protected $policies = [
         User::class => UserPolicy::class,
+        Setting::class => SettingPolicy::class,
         Customer::class => CustomerPolicy::class,
         DeliveryRun::class => DeliveryRunPolicy::class,
         Product::class => ProductPolicy::class,

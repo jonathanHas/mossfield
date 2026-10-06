@@ -1,6 +1,6 @@
 # Settings: batch ceilings editable by admin
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-06
@@ -195,4 +195,44 @@ Check: `grep -n "batchCeiling\|/settings" CLAUDE.md` → hits.
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-06 against `implemented.md` (Status: DONE, read to the end)
+and the diff: model, controller, request, policy, migration, view, and the
+integration points. Planner reran: `php artisan test` → **695 passed, 0
+failed** (+11); `pint --test … config` → PASS 297 files; migration `[8] Ran`;
+`route:list` → 166 (+2); dev `settings` empty (defaults), probe batch G061026
+gone, 13 batches, 25 orders.
+
+### Criteria — all five pass
+
+1 `settings` (string PK, JSON value, `updated_by`); `Setting::get/set/
+forget/flushCache/batchCeiling`; one query per request, cache keyed on the
+`app()` instance so tests and long-lived workers start clean; three tests
+incl. "five reads → 1 query". 2 `BatchController::store()` is the one read
+site; stored 500 → 300 wheels save, 501 asks; cycle-8 cases unchanged.
+3 Admin-only routes in the admin group; `SettingPolicy` denies all to
+non-admins in `before()`; `SettingsRequest` carries the policy and the
+`min:1|max:1000000` rules (reset mode validates only `reset`); page with
+defaults, "changed by … on …", Save naming each change, Reset (PUT
+`reset=1`, `data-confirm-danger`) shown only when something is stored; nav
+in Admin; eight tests incl. office/factory 403, guest, inactive admin.
+4 `KEEP`, `TABLES` + `ADDED_LATER['settings'] = false`, **and**
+`import()` flushes the cache (red-checked). 5 Docs, config comment,
+OPEN_QUESTIONS #5 status.
+
+### Deviations — all accepted
+
+1 API on the model; 2 app-keyed cache (better than `once()`, which can't
+be cleared selectively); 3 Reset via `PUT reset=1` (keeps "+2 routes");
+4 `forget()`; 5 `flushCache()` on restore — necessary; 6 a pre-settings
+restore may leave `updated_by` dangling → the page says "a removed user";
+values unaffected; fine.
+
+### Notes for Planner — decisions
+
+- Reset placement → fine as is.
+- Jon's numbers go in at `/settings` → told him.
+- A second setting would justify a small registry (key → label, rules,
+  default) → noted in `TESTING_AND_FIXES.md` for whoever adds the next one.
+
+Nothing to redo. Archive: `mkdir -p docs/planImp/archive/2026-10-06-settings`
+and move `plan.md` + `implemented.md` there.

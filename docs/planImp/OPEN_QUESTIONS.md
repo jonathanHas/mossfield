@@ -190,8 +190,9 @@ to follow.
 **Raised:** 2026-10-04 (findings in `archive/2026-10-04-e2e-browser-run/implemented.md`)
 · **Status:** **all eight decided and built 2026-10-05** — Plan/Implement
 cycle 8 (`archive/2026-10-05-policy-batch/`; write-up in
-`TESTING_AND_FIXES.md`). The batch-ceiling numbers in `config/mossfield.php`
-are the Planner's guesses and still want Jon's figures.
+`TESTING_AND_FIXES.md`). The batch-ceiling numbers are now set by an admin
+at `/settings` (cycle 10, 2026-10-06); `config/mossfield.php` holds only the
+defaults (the Planner's guesses) for a fresh install.
 
 ### Decisions (Jon, 2026-10-04)
 
