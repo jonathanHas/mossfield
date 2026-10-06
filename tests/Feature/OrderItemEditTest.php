@@ -288,6 +288,14 @@ class OrderItemEditTest extends TestCase
             ->assertOk()
             ->assertSee('id="line-'.$item->id.'"', false)
             ->assertSee('id="order-items"', false);
+
+        // Both landings clear the flash by its real height (.mf-landing).
+        $html = $this->actingAs($office)->get(route('orders.show', $order))->getContent();
+        foreach (['line-'.$item->id, 'order-items'] as $id) {
+            $this->assertMatchesRegularExpression('/<[^>]*id="'.$id.'"[^>]*>/', $html);
+            preg_match('/<[^>]*id="'.$id.'"[^>]*>/', $html, $tag);
+            $this->assertStringContainsString('mf-landing', $tag[0], "#$id carries mf-landing");
+        }
     }
 
     public function test_the_create_form_knows_each_customers_next_run_date_and_special_labels(): void

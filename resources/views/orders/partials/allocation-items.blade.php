@@ -23,7 +23,7 @@
     @endphp
 
     {{-- id: line actions redirect back to #line-{id} (cycle 4). --}}
-    <x-order.item-row :item="$orderItem" :order="$order" id="line-{{ $orderItem->id }}" class="scroll-mt-20" x-data="{ open: {{ $settled ? 'false' : 'true' }} }">
+    <x-order.item-row :item="$orderItem" :order="$order" id="line-{{ $orderItem->id }}" class="mf-landing" x-data="{ open: {{ $settled ? 'false' : 'true' }} }">
         <x-slot:summary>
             <div class="flex items-center gap-3.5 mt-2.5 text-[12.5px] flex-wrap" style="color: var(--muted);">
                 @if($fulfilled)

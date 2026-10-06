@@ -742,6 +742,59 @@ class ChilledRunTest extends TestCase
         $this->assertSame(0, substr_count($response->getContent(), 'data-tick-order'));
     }
 
+    // ── Sticky header by column count (cycle 9) ─────────────────────
+
+    private function sheetWrapperWith(int $milkColumns, bool $editing = false): string
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Column Shop');
+        $first = null;
+        for ($i = 1; $i <= $milkColumns; $i++) {
+            $v = $this->variant($this->milk, "{$i}L Bottle", "{$i}L", 16);
+            $first ??= $v;
+        }
+        $this->orderFor($shop, [[$first, 2]], 'pending');
+
+        $html = $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index', ['run' => $run->id] + ($editing ? ['edit' => $shop->id] : [])))
+            ->assertOk()->getContent();
+        preg_match('/<div class="overflow-x-auto ([^"]*)">/', $html, $m);
+
+        return trim($m[1] ?? 'NO WRAPPER');
+    }
+
+    public function test_the_sticky_header_follows_the_column_count(): void
+    {
+        $this->assertSame('xl:overflow-visible', $this->sheetWrapperWith(11));
+    }
+
+    public function test_twelve_columns_wait_for_2xl_before_sticking(): void
+    {
+        $this->assertSame('2xl:overflow-visible', $this->sheetWrapperWith(12));
+    }
+
+    public function test_a_very_wide_sheet_always_scrolls(): void
+    {
+        $this->assertSame('', $this->sheetWrapperWith(16));
+    }
+
+    public function test_an_editing_row_always_scrolls(): void
+    {
+        $this->assertSame('', $this->sheetWrapperWith(3, editing: true));
+    }
+
+    public function test_sheet_rows_are_landings(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Landing Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->orderFor($shop, [[$oneL, 4]]);
+
+        $html = $this->actingAs(User::factory()->create())->get(route('chilled-runs.index', ['run' => $run->id]))->getContent();
+        preg_match('/<tr id="stop-'.$shop->id.'" class="([^"]*)"/', $html, $m);
+        $this->assertStringContainsString('mf-landing', $m[1] ?? '', 'the row a save lands on');
+    }
+
     public function test_the_sheet_still_shows_order_notes(): void
     {
         $run = $this->makeRun();

@@ -90,6 +90,49 @@ baseline.
 
 ---
 
+## 2026-10-06 — Polish (Plan/Implement cycle 9)
+
+**Scope:** the follow-ups deferred by the cycle-6/7/8 reviews. Suite
+afterwards: **684 passed, 0 failed** (+10). No stock or money moved.
+
+- The batch card's items table reads a wheel row's **Sold** from
+  `wheelStates()` (with "· N cut · N converted" beside it) instead of
+  `quantity_sold`, which counts cut and converted wheels as sold.
+- An expired card that has been fully written off shows a **"Written off"**
+  tag where the "Write off →" link was.
+- The order page's billing line has three states: `ready` → "Awaiting
+  dispatch — invoiced when dispatched"; dispatched/delivered uninvoiced →
+  "Awaiting invoice · Finance"; invoiced → the number.
+- `UninvoicedOrderController` refuses to the queue page, never `back()`.
+- The run sheet's sticky header is keyed on the **column count**: ≤ 11
+  quantity columns stick at `xl`, ≤ 15 at `2xl`, more always scroll (60 px per
+  column; 11 columns = 983 px at 1280; the non-quantity columns take ~323 px).
+- Every fragment landing carries **`mf-landing`** — `scroll-margin-top:
+  calc(var(--mf-feedback-h) + 1rem)` plus the `:target` tint; the run-sheet
+  rows add the header height by context. `LayoutFeedbackTest` greps the
+  views so the old fixed margin can't creep back.
+
+### Dev-database action on acceptance
+
+The two stale July `ready` orders (ORD-20260710-001 An Tairseach, 81 units;
+ORD-20260723-001 Barnhill, 31 units) were **cancelled** by the Planner through
+the same path `OrderController::update()` uses (every line's committed units
+released, status `cancelled`, totals recalculated). They were never
+dispatched; the picked stock went back to their (long-expired) July batches,
+which now show that much more expired stock — honest dev data.
+
+### Invariants worth keeping
+
+- **A refusal test must not GET the page first.** The session's previous URL
+  makes `back()` land where an explicit redirect would, and the test passes
+  on broken code (found red-checking step 4).
+- **Fragment targets carry `mf-landing`**, nothing else; the sheet's header
+  allowance lives in `.mf-run tbody tr.mf-landing`.
+- **The sticky sheet header never spills the panel**: the column-count
+  thresholds are the only switch; a new wrapper with `overflow` set breaks it.
+
+---
+
 ## 2026-10-05 — The policy batch (Plan/Implement cycle 8)
 
 **Scope:** `OPEN_QUESTIONS.md` #5 — eight rules the end-to-end run found the

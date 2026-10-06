@@ -213,6 +213,22 @@ class ConsolidationPassTest extends TestCase
         }
     }
 
+    public function test_the_batch_cards_items_table_splits_sold_from_cut_and_converted(): void
+    {
+        $wheelItem = $this->workedBatch();
+        // The raw figure lumps 2 sold + 1 cut + 1 converted together.
+        $this->assertSame(4, $wheelItem->quantity_sold);
+
+        $html = $this->actingAs($this->office)->get(route('batches.index', ['type' => 'cheese']))->assertOk()->getContent();
+        $card = substr($html, strpos($html, $wheelItem->batch->batch_code), 20000);
+        preg_match_all('/data-sold-cell>(.*?)<\/td>/s', $card, $m);
+        $cells = array_map(fn ($c) => trim(preg_replace('/\s+/', ' ', strip_tags($c))), $m[1]);
+
+        $this->assertContains('2 · 1 cut · 1 converted', $cells, 'the wheel row reads wheelStates()');
+        $this->assertNotContains('4', $cells);
+        $this->assertContains('0', $cells, 'the pack row keeps quantity_sold');
+    }
+
     // ------------------------------------------------- small fixes with tests
 
     public function test_the_root_route_no_longer_serves_the_welcome_page(): void

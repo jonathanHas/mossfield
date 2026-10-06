@@ -341,7 +341,7 @@
         {{-- Per-customer alternative prices. The value stored here replaces the
              variant's base_price on NEW office-entered order lines for this
              customer; existing orders keep their locked unit_price. --}}
-        <div class="mf-panel mt-4 scroll-mt-20" id="special-prices">
+        <div class="mf-panel mt-4 mf-landing" id="special-prices">
             <div class="mf-panel-header">
                 <div class="flex-1">
                     <div class="text-[13px] font-semibold">Special prices <span style="color: var(--muted); font-weight: 400;">({{ $customer->specialPrices->count() }})</span></div>

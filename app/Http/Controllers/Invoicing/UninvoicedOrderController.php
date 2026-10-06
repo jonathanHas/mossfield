@@ -73,7 +73,7 @@ class UninvoicedOrderController extends Controller
         try {
             $invoice = $this->invoices->issueForOrder($order, $request->user());
         } catch (InvoicingException $e) {
-            return back()->with('error', $e->getMessage());
+            return redirect()->route('invoicing.uninvoiced.index')->with('error', $e->getMessage());
         }
 
         return redirect()->route('invoicing.invoices.show', $invoice)
@@ -104,7 +104,7 @@ class UninvoicedOrderController extends Controller
         }
 
         if ($issued === 0) {
-            return back()->with('error', 'Nothing to invoice.'.
+            return redirect()->route('invoicing.uninvoiced.index')->with('error', 'Nothing to invoice.'.
                 ($failures ? ' Skipped: '.implode(', ', $failures).'.' : ''));
         }
 

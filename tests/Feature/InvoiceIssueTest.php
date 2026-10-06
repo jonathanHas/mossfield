@@ -109,6 +109,21 @@ class InvoiceIssueTest extends InvoicingTestCase
             ->assertSessionHas('error', "An invoice is issued when the order is dispatched — this one hasn't left yet.");
     }
 
+    public function test_issue_refusals_land_on_the_queue_not_back(): void
+    {
+        // No GET first and no Referer: back() would have nowhere to go but /.
+        $ready = $this->deliveredOrder(10, 'ready');
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->post(route('invoicing.invoices.issue-order', $ready))
+            ->assertRedirect(route('invoicing.uninvoiced.index'))
+            ->assertSessionHas('error', "An invoice is issued when the order is dispatched — this one hasn't left yet.");
+
+        $this->actingAs($office)->post(route('invoicing.uninvoiced.issue-all'))
+            ->assertRedirect(route('invoicing.uninvoiced.index'))
+            ->assertSessionHas('error', 'Nothing to invoice.');
+    }
+
     public function test_due_date_comes_from_the_customers_payment_terms(): void
     {
         $order = $this->deliveredOrder();

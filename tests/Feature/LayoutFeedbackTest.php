@@ -189,4 +189,18 @@ class LayoutFeedbackTest extends TestCase
         $this->assertStringContainsString('class="mf-feedback ', $html);
         $this->assertStringContainsString('aria-label="Dismiss message"', $html);
     }
+
+    public function test_fragment_landings_clear_the_flash_by_its_real_height(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+        $this->assertMatchesRegularExpression('/\.mf-landing\s*\{\s*scroll-margin-top:\s*calc\(var\(--mf-feedback-h, 0px\) \+ 1rem\)/', $css);
+        $this->assertStringContainsString('.mf-landing:target', $css);
+        $this->assertStringNotContainsString('scroll-mt-20', $css);
+
+        // No view still uses the fixed 80 px margin.
+        $stale = collect(\Illuminate\Support\Facades\File::allFiles(resource_path('views')))
+            ->filter(fn ($f) => str_contains($f->getContents(), 'scroll-mt-20'))
+            ->map(fn ($f) => $f->getRelativePathname())->values()->all();
+        $this->assertSame([], $stale);
+    }
 }

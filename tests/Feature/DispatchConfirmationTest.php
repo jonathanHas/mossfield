@@ -282,9 +282,10 @@ class DispatchConfirmationTest extends InvoicingTestCase
         $order = $this->readyOrder();
         $office = User::factory()->create();
 
+        // A ready order isn't billable until dispatched (cycle 9 wording).
         $this->actingAs($office)->get(route('orders.show', $order))
             ->assertOk()
-            ->assertSee('Awaiting invoice')
+            ->assertSee('Awaiting dispatch — invoiced when dispatched')
             ->assertDontSee('Issue invoice')
             ->assertDontSee('Email invoice')
             ->assertDontSee('Email docket');
@@ -297,7 +298,8 @@ class DispatchConfirmationTest extends InvoicingTestCase
             ->assertSee('Unpaid')
             ->assertSee(route('invoicing.invoices.show', $order->fresh()->invoice))
             ->assertSee('Sent')
-            ->assertDontSee('Awaiting invoice');
+            ->assertDontSee('Awaiting invoice')
+            ->assertDontSee('Awaiting dispatch');
     }
 
     public function test_factory_sees_no_billing_line_or_payment_badge(): void

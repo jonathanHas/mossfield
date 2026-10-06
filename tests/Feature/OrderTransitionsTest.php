@@ -464,4 +464,21 @@ class OrderTransitionsTest extends TestCase
 
         $this->actingAs($factory)->post(route('orders.dispatch', $order))->assertForbidden();
     }
+
+    // ── The billing line (cycle 9) ─────────────────────────────────────
+
+    public function test_a_ready_orders_billing_line_says_awaiting_dispatch(): void
+    {
+        $office = User::factory()->create();
+        $ready = $this->makeOrder('ready');
+
+        $this->actingAs($office)->get(route('orders.show', $ready))->assertOk()
+            ->assertSee('Awaiting dispatch — invoiced when dispatched')
+            ->assertDontSee('Awaiting invoice');
+
+        $shipped = $this->makeOrder('dispatched');
+        $this->actingAs($office)->get(route('orders.show', $shipped))->assertOk()
+            ->assertSee('Awaiting invoice')
+            ->assertDontSee('Awaiting dispatch — invoiced when dispatched');
+    }
 }

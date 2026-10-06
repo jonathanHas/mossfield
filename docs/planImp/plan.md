@@ -1,6 +1,6 @@
 # Polish: the follow-ups from cycles 6–8
 
-Status: READY
+Status: ACCEPTED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-06
@@ -193,4 +193,36 @@ Check: `grep -n "mf-landing" CLAUDE.md` → hits; `grep -rn "scroll-mt-20" CLAUD
 
 ## Review
 
-(Planner fills this in after reading implemented.md and the diff.)
+Reviewed 2026-10-06 against `implemented.md` (Status: DONE, read to the end)
+and the diff. Planner reran: `php artisan test` → **684 passed, 0 failed**
+(+10); `pint --test … config` → PASS 291 files; `npm run build` ok;
+`grep scroll-mt-20 resources CLAUDE.md` → nothing; ten `mf-landing` in views.
+No dev-DB writes (checked).
+
+### Criteria — all seven pass
+
+1 Wheel rows read `wheelStates()['sold']` from the breakdowns keyed by id
+(no second run) with "· N cut · N converted". 2 "Written off" tag outside
+the `@can` (status, not action) when nothing writable remains and some was
+written off. 3 Three billing states. 4 Both `back()`s in the controller
+replaced; the test posts with no prior GET so it can tell the difference.
+5 `match` on the column count with the arithmetic in the comment; four
+tests. 6 One `.mf-landing` class, the sheet override by context, the
+`:target` tint moved, a test that greps the views. 7 Docs.
+
+### Deviations — all accepted
+
+1 **2xl limit 15, not 20** — the plan's arithmetic was wrong; 15 keeps the
+"never spill the panel" invariant. 2 existing fixture (same property).
+3 separate refusal test — and the reason is a lesson recorded below.
+4 `DispatchConfirmationTest` wording follows the text step 3 replaced.
+
+### Notes for Planner — decisions
+
+- Refusal tests must not GET the page first or `back()` is indistinguishable
+  from an explicit route → recorded as an invariant.
+- The stale July orders → **cancelled by the Planner** on acceptance (test
+  data; Jon said "you decide"), recorded in `RESUME.md`.
+
+Nothing to redo. Archived by the Planner to `archive/2026-10-06-polish/`
+(the next plan needs `plan.md`).

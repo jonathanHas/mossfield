@@ -18,7 +18,9 @@ Suite **598 passed, 0 failed** — any failure is real. Nothing pushed or deploy
 
 **Cycle 8 — The policy batch** (Jon's decisions on OPEN_QUESTIONS #5): a flagged customer pays the run's delivery charge **once per drop** (a second same-day order shows €0 and the flash names the first); confirming an order that takes a customer over their credit limit **warns** (banner on the order page, flash on confirm) but never blocks — a limit of 0 means none; **Mature can't be made as a fresh batch** (it's gone from the batch form); a batch far above the usual size asks for a **"Yes, this batch really is that big"** tick; **milk yield is computed** and bottling more than the raw milk is refused; order notes are **off the dispatch confirmation and docket**; **Mark dispatched needs the loaded tick** — the order page has its own "Loaded onto van" tick now (factory can use it); the To-Invoice queue shows `ready` orders under **"Picked, awaiting dispatch"** with no Issue button; choosing weekly/monthly on a customer defaults terms to **Net 14**.
 
-All six are written up in `TESTING_AND_FIXES.md` (2026-10-04/05 sections); cycle files in `docs/planImp/archive/`.
+**Cycle 9 — Polish**: the batch card's items table shows a wheel row's sold / cut / converted separately; a fully written-off expired card says "Written off"; a `ready` order's page says "Awaiting dispatch — invoiced when dispatched"; the run sheet's header sticks whenever the sheet fits its panel (by column count); every fragment landing sits just under the flash by its real height.
+
+All seven are written up in `TESTING_AND_FIXES.md` (2026-10-04/05/06 sections); cycle files in `docs/planImp/archive/`.
 
 ## What to verify in the browser
 
@@ -50,8 +52,8 @@ None with a brief. The cycle-4 plan's reorder semantics and landing fragment wer
 
 ## Test results
 
-674 passed, 0 failed (536 → 557 → 598 → 612 → 617 → 647 → 674 across cycles 3–8). New suites: `DashboardTest`, `ErrorPagesTest`, `StockWriteOffTest`, `CreditLimitWarningTest`.
+684 passed, 0 failed (536 → 557 → 598 → 612 → 617 → 647 → 674 → 684 across cycles 3–9). New suites: `DashboardTest`, `ErrorPagesTest`, `StockWriteOffTest`, `CreditLimitWarningTest`.
 
 ## Dev database state
 
-See `RESUME.md` → *Dev database*. Orders 24 (19–25 are cancelled cycle probes), payments 4, invoices 7, run #1 positions 1…17 with the E2E customers at 1–2. **M230726's expired stock is written off** (951 units); the dashboard Expired tile reads 4 batches / 4,956 units. Cycle 8's probe ORD-20261005-001 (E2E Corner Shop) is dispatched on INV-000008 (€2.50). The two July `ready` orders (An Tairseach, Barnhill) are stale — dispatch or cancel them when convenient. **Mail is the `log` driver — do not point dev at SMTP.**
+See `RESUME.md` → *Dev database*. Orders 24 (19–25 are cancelled cycle probes), payments 4, invoices 7, run #1 positions 1…17 with the E2E customers at 1–2. **M230726's expired stock is written off** (951 units); the dashboard Expired tile reads 4 batches / 4,956 units. Cycle 8's probe ORD-20261005-001 (E2E Corner Shop) is dispatched on INV-000008 (€2.50). The two stale July `ready` orders were cancelled on 2026-10-06. **Mail is the `log` driver — do not point dev at SMTP.**

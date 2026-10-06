@@ -93,12 +93,15 @@ worth returning to.
   `plan.md` + `implemented.md` to `archive/2026-10-05-policy-batch/`.
 - **Open for Jon:** the batch-ceiling numbers (`config/mossfield.php`
   `batch_ceilings`: milk 5 000, yoghurt 3 000, cheese 200 — guesses).
-- **Next:** **cycle 9 — polish** (the follow-ups under the cycle-6, -7 and -8
-  records: card items table lumps cut/converted into "Sold"; a "written off"
-  tag on fully written-off expired cards; order-page "Awaiting dispatch";
-  `issue()`'s `back()`; sticky header by column count; `scroll-mt` from the
-  flash height; `· special` option labels are done). Then
-  `FULFILMENT_PLAN.md` Phase 4 (driver route + proof of delivery) when wanted.
+- **Cycle 9 "Polish" — ACCEPTED 2026-10-06:** card Sold split from cut/
+  converted; "Written off" tag; three billing-line states; refusals to the
+  queue page; sticky header by column count (≤ 11 xl, ≤ 15 2xl);
+  `mf-landing`. Suite **684 passed, 0 failed**. Archived to
+  `archive/2026-10-06-polish/` by the Planner.
+- **Next: cycle 10 — a Settings page** (Jon asked 2026-10-06): the batch
+  ceilings editable by admin at `/settings` instead of `config/mossfield.php`
+  (config stays as the default). Then `FULFILMENT_PLAN.md` Phase 4 (driver
+  route + proof of delivery) when wanted.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -154,8 +157,10 @@ probes); the dashboard Expired tile now reads 4 batches / 4,956 units.
 delivery — the once-per-drop rule) was confirmed, picked, loaded and
 **dispatched → INV-000008** (€2.50, not emailed); it can't be cancelled now
 — void INV-000008 from Finance if it should go. Counts: 25 orders, 8
-invoices. Two July `ready` orders (ORD-20260710-001, ORD-20260723-001) are
-stale and now show under "Picked, awaiting dispatch" — dispatch or cancel. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+invoices. The two stale July `ready` orders (ORD-20260710-001,
+ORD-20260723-001) were **cancelled on 2026-10-06** (Jon: "you decide");
+their 112 picked units went back to their expired July batches, so expired
+stock reads 5,024 units. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.

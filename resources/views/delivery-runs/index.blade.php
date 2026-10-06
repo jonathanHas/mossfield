@@ -35,7 +35,7 @@
 
         <div class="grid gap-4 lg:grid-cols-2">
             @foreach ($runs as $run)
-                <div class="mf-panel scroll-mt-20" id="run-{{ $run->id }}">
+                <div class="mf-panel mf-landing" id="run-{{ $run->id }}">
                     <div class="mf-panel-header">
                         <span class="text-[13px] font-semibold">{{ $run->day_label }} &middot; {{ $run->name }}</span>
                         @unless ($run->is_active)
@@ -72,7 +72,7 @@
                             </form>
                             <ol class="space-y-1">
                                 @foreach ($stops as $index => $stop)
-                                    <li id="stop-{{ $stop->id }}" class="flex items-center gap-2 text-[13px] rounded px-2 py-1.5 scroll-mt-20" style="background: var(--bg);">
+                                    <li id="stop-{{ $stop->id }}" class="flex items-center gap-2 text-[13px] rounded px-2 py-1.5 mf-landing" style="background: var(--bg);">
                                         <input type="number" name="positions[{{ $stop->id }}]" form="reorder-{{ $run->id }}"
                                                value="{{ $index + 1 }}" min="1" max="{{ $stops->count() }}" required
                                                aria-label="Position of {{ $stop->name }}"

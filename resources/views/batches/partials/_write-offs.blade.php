@@ -10,7 +10,7 @@
     $firstItemId = (string) old('batch_item_id', $woItems->first()?->id);
 @endphp
 
-<div class="mf-panel mb-4 scroll-mt-20" id="write-offs">
+<div class="mf-panel mb-4 mf-landing" id="write-offs">
     <div class="mf-panel-header">
         <div class="flex-1">
             <div class="text-[13px] font-semibold">Write-offs</div>

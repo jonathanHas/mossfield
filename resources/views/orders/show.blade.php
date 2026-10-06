@@ -130,7 +130,7 @@
                              too). Dispatch needs it, on this page as on the run sheet. --}}
                         @if($order->status === 'ready')
                             @can('load', $order)
-                                <form method="POST" action="{{ route('chilled-runs.toggle-loaded', $order) }}" class="inline scroll-mt-20" id="dispatch">
+                                <form method="POST" action="{{ route('chilled-runs.toggle-loaded', $order) }}" class="inline mf-landing" id="dispatch">
                                     @csrf
                                     <input type="hidden" name="return" value="order">
                                     <button type="submit" class="mf-btn-secondary" data-loaded-tick
@@ -229,6 +229,10 @@
                                 @elseif($order->customer->isConsolidatedBilling())
                                     <dt style="color: var(--muted);">Invoice</dt>
                                     <dd style="color: var(--muted);">Billed on the {{ strtolower($order->customer->invoicing_mode->label()) }} invoice</dd>
+                                @elseif($order->status === 'ready')
+                                    {{-- Not billable yet: an invoice is issued at dispatch (InvoiceService). --}}
+                                    <dt style="color: var(--muted);">Invoice</dt>
+                                    <dd style="color: var(--muted);">Awaiting dispatch — invoiced when dispatched</dd>
                                 @elseif($order->hasReachedReady())
                                     <dt style="color: var(--muted);">Invoice</dt>
                                     <dd>
@@ -337,7 +341,7 @@
                 @endif
 
                 {{-- Items (#order-items: where a removed line's redirect lands) --}}
-                <div id="order-items" class="flex items-center justify-between mb-3.5 scroll-mt-20">
+                <div id="order-items" class="flex items-center justify-between mb-3.5 mf-landing">
                     <h2 class="text-[15px] font-semibold" style="letter-spacing: -0.01em;">
                         Items <span class="font-normal" style="color: var(--muted);">{{ $order->orderItems->count() }}</span>
                     </h2>
@@ -384,7 +388,7 @@
                     @else
                         @foreach($order->orderItems as $item)
                             @php $isOnlyLine = $order->orderItems->count() <= 1; @endphp
-                            <x-order.item-row :item="$item" :order="$order" id="line-{{ $item->id }}" class="scroll-mt-20">
+                            <x-order.item-row :item="$item" :order="$order" id="line-{{ $item->id }}" class="mf-landing">
                                 <x-slot:summary>
                                     <div class="flex items-center gap-3.5 mt-2.5 text-[12.5px] flex-wrap" style="color: var(--muted);">
                                         @if($item->isFullyFulfilled())

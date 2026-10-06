@@ -502,6 +502,23 @@ class StockWriteOffTest extends TestCase
         $this->assertNotNull($expired->batch->fresh());
     }
 
+    public function test_a_fully_written_off_expired_card_says_so_instead_of_linking(): void
+    {
+        $done = $this->item($this->bottle, 10, batch: ['expiry_date' => today()->subDay()]);
+        $this->actingAs($this->office)->post(route('batches.write-offs.expired', $done->batch));
+        $this->assertSame(0, $done->fresh()->quantity_remaining);
+        $left = $this->item($this->bottle, 6, batch: ['expiry_date' => today()->subDays(2)]);
+
+        $html = $this->actingAs($this->office)->get(route('batches.index'))->assertOk()->getContent();
+        $header = fn (BatchItem $i) => substr($html, strpos($html, $i->batch->batch_code), 2500);
+
+        $this->assertStringContainsString('data-written-off-tag', $header($done));
+        $this->assertStringNotContainsString(route('batches.show', $done->batch).'#write-offs', $header($done));
+
+        $this->assertStringContainsString(route('batches.show', $left->batch).'#write-offs', $header($left));
+        $this->assertStringNotContainsString('data-written-off-tag', $header($left));
+    }
+
     public function test_the_card_pack_bar_does_not_count_written_off_packs_as_sold(): void
     {
         $pack = ProductVariant::create([

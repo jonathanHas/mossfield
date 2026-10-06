@@ -29,12 +29,23 @@
     )) ?: $variant->product->name;
 @endphp
 
-{{-- Run sheet table. At xl+ in display mode neither the panel (mf-panel
-     clips with overflow: hidden) nor the wrapper is a scroll/clip container,
-     so the sticky <thead> works. Below xl — and while a row is being edited,
-     whose inputs need ~35 px more than the sheet's columns — the wrapper
-     scrolls sideways as before and the header just scrolls away. --}}
-@php $stickyHead = ! $editId ? 'xl:overflow-visible' : ''; @endphp
+{{-- Run sheet table. When the sheet fits its panel, neither the panel
+     (mf-panel clips with overflow: hidden) nor the wrapper is a scroll/clip
+     container, so the sticky <thead> works. Whether it fits depends on the
+     column count, not on a fixed breakpoint. Each quantity column is 60 px;
+     11 of them made the sheet 983 px (measured cycle 6) in a ~985 px panel at
+     xl (1280), so the non-quantity columns take ~323 px. At 2xl (1536) the
+     panel is ~256 px wider (~1241 px): (1241 − 323) / 60 ≈ 15 columns. More
+     than that — or a row being edited (its inputs need ~35 px more than the
+     columns) — and the wrapper scrolls sideways and the header scrolls away. --}}
+@php
+    $stickyHead = match (true) {
+        (bool) $editId => '',
+        $qtyColCount <= 11 => 'xl:overflow-visible',
+        $qtyColCount <= 15 => '2xl:overflow-visible',
+        default => '',
+    };
+@endphp
 <div class="mf-panel {{ $stickyHead }}">
     <div class="mf-panel-header">
         <span class="text-[13px] font-semibold">{{ $activeRun->day_label }} &middot; {{ $activeRun->name }} run</span>
@@ -105,7 +116,7 @@
 
                         @if ($isEditing)
                             {{-- ── Edit mode: quantity inputs + history recall + add-line ── --}}
-                            <tr id="stop-{{ $customer->id }}" class="is-editing scroll-mt-20"
+                            <tr id="stop-{{ $customer->id }}" class="is-editing mf-landing"
                                 x-data="stopEditor({
                                     current: {{ Js::from((object) $sheet['editQuantities']) }},
                                     history: {{ Js::from($sheet['history']) }},
@@ -196,7 +207,7 @@
                             </tr>
                         @else
                             {{-- ── Display mode ── --}}
-                            <tr id="stop-{{ $customer->id }}" class="scroll-mt-20 {{ $isLoaded ? 'is-loaded' : '' }}">
+                            <tr id="stop-{{ $customer->id }}" class="mf-landing {{ $isLoaded ? 'is-loaded' : '' }}">
                                 <td class="pad">
                                     @if ($hasOrders)
                                         @can('load', $orders->first())

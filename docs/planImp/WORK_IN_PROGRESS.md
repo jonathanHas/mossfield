@@ -2,9 +2,22 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-10-05
+**Last Updated**: 2026-10-06
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](../../DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: Polish (2026-10-06)
+
+Plan/Implement cycle 9 — the six follow-ups deferred by the cycle 6–8 reviews. No stock, money or rule changes:
+
+- **Batch card items table** splits a wheel item's Sold from cut and converted ("2 · 1 cut · 1 converted"), reading the strip's `wheelStates()`.
+- **Fully written-off expired batch** shows a "Written off" tag instead of nothing.
+- **Order page billing line**: a `ready` order reads "Awaiting dispatch — invoiced when dispatched".
+- **To-Invoice refusals** redirect to the queue rather than `back()`.
+- **Run-sheet sticky header** keyed on the column count (≤ 11 → xl, ≤ 15 → 2xl, more → always scrolls).
+- **Fragment landings** use one `.mf-landing` class that clears the sticky flash by its real height (replaces the fixed 80 px `scroll-mt-20`).
 
 ---
 

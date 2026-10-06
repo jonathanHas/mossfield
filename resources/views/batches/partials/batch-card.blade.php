@@ -12,7 +12,9 @@
 
     // One formula for the strip (BatchItem::wheelStates()) — converted wheels are
     // their own state, not folded into "sold".
-    $wheelBreakdowns = $wheelItems->map(fn ($item) => $item->wheelStates() + ['name' => $item->productVariant->name]);
+    // Keyed by item id so the items table below reads the same figures
+    // instead of running wheelStates() a second time.
+    $wheelBreakdowns = $wheelItems->mapWithKeys(fn ($item) => [$item->id => $item->wheelStates() + ['name' => $item->productVariant->name]]);
 
     $packBreakdowns = $packItems->map(function ($item) {
         $produced = (int) $item->quantity_produced;
@@ -51,6 +53,10 @@
                                 <a href="{{ route('batches.show', $batch) }}#write-offs" class="mf-link text-[12px]" style="color: var(--danger);" onclick="event.stopPropagation()">Write off →</a>
                             @endif
                         @endcan
+                        {{-- Dealt with: nothing left to write off, and some was. --}}
+                        @if($batch->writableUnits() === 0 && $batch->batchItems->sum(fn ($i) => $i->written_off_units) > 0)
+                            <span class="mf-tag mf-tag-neutral" data-written-off-tag>Written off</span>
+                        @endif
                     @elseif(!$isReady)
                         <span class="mf-tag mf-tag-warn">Maturing</span>
                     @else
@@ -228,7 +234,19 @@
                                 </td>
                                 <td class="mf-td font-mono text-right" style="color: {{ $rowAllocated > 0 ? 'var(--warn-ink)' : 'var(--faint)' }};">{{ $rowAllocated }}</td>
                                 <td class="mf-td font-mono text-right" style="color: {{ (int) $item->quantity_maturing > 0 ? 'var(--state-maturing)' : 'var(--faint)' }};">{{ (int) $item->quantity_maturing }}</td>
-                                <td class="mf-td font-mono text-right" style="color: var(--muted);">{{ $item->quantity_sold }}</td>
+                                {{-- A wheel's quantity_sold also counts cut and converted wheels;
+                                     the strip's wheelStates() splits them, so read it here. --}}
+                                @php $rowWheel = $wheelBreakdowns->get($item->id); @endphp
+                                <td class="mf-td font-mono text-right" style="color: var(--muted);" data-sold-cell>
+                                    @if($rowWheel)
+                                        {{ $rowWheel['sold'] }}
+                                        @if($rowWheel['cut'] > 0 || $rowWheel['converted'] > 0)
+                                            <span class="text-[11.5px]" style="color: var(--faint);">· {{ collect(['cut' => $rowWheel['cut'], 'converted' => $rowWheel['converted']])->filter()->map(fn ($n, $label) => $n.' '.$label)->implode(' · ') }}</span>
+                                        @endif
+                                    @else
+                                        {{ $item->quantity_sold }}
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
