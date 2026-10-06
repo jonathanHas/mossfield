@@ -101,10 +101,20 @@ worth returning to.
 - **Cycle 10 "Settings" — ACCEPTED 2026-10-06:** `/settings` (admin-only)
   holds the batch ceilings; `Setting::batchCeiling()` is the read site;
   config stays the default; backups/reset classify the table. Suite **695
-  passed, 0 failed**. Jon archives `plan.md` + `implemented.md` to
-  `archive/2026-10-06-settings/`. **Jon enters his ceiling numbers at
-  `/settings`** (dev table is empty = defaults).
-- **Next:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
+  passed, 0 failed**. Archived to `archive/2026-10-06-settings/` by the
+  Planner. **Jon enters his ceiling numbers at `/settings`** (dev table is
+  empty = defaults).
+- **Planner's Chrome walk-through of order-taking, 2026-10-06:** both entry
+  surfaces work and read well; five copy/UX items found (generic "Are you
+  sure?" dialog titles — 46 of 47 dialogs; "FIFO" in the auto-allocate
+  dialog; the stepper says "Picking" with nothing picked; "Capacity." on the
+  run sheet; the create form's trailing blank line). Probes ids 27–28
+  cancelled.
+- **Cycle 11 "Order-flow polish" — READY 2026-10-06:** `plan.md` — every
+  dialog gets a title (pinned by a view scan in `ConfirmDialogTest`), the
+  stepper shows "N of M picked", the capacity label, the optional trailing
+  line. Awaiting the Implementer.
+- **Next after that:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
   route for the day + proof of delivery with signature) — a new feature
   that would want a design pass before a plan. Otherwise: push and deploy
   when the server is back (see below).
@@ -166,7 +176,7 @@ delivery — the once-per-drop rule) was confirmed, picked, loaded and
 invoices. The two stale July `ready` orders (ORD-20260710-001,
 ORD-20260723-001) were **cancelled on 2026-10-06** (Jon: "you decide");
 their 112 picked units went back to their expired July batches, so expired
-stock reads 5,024 units. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
+stock reads 5,024 units. **The Planner's 2026-10-06 order-taking walk-through** (Chrome, as `office_test`) added two more cancelled probes — ORD-20261006-001 (id 27, Corner Shop, auto-allocated then cancelled, stock released) and ORD-20261006-002 (id 28, Weekly Deli, entered from the run sheet for 13/10) — so **27 orders**. Everything E2E is tagged `E2E` / `E2E-20261004` / `@e2e.test`. Details:
 `TESTING_AND_FIXES.md` → *End-to-end browser run* → *Dev-database state*.
 **Mail is the `log` driver — never point dev `.env` at SMTP** while a
 confirmation addressed to a real customer sits in `document_emails`.
