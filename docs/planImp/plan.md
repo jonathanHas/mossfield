@@ -1,228 +1,198 @@
-# Polish: the follow-ups from cycles 6–8
+# Settings: batch ceilings editable by admin
 
-Status: ACCEPTED
+Status: READY
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-06
 
 ## Goal
 
-Clear the six small things the last three reviews deferred: the batch card's
-items table still lumps cut and converted wheels into "Sold"; a fully
-written-off expired batch shows no sign it has been dealt with; the order
-page says "Awaiting invoice" for an order that can't be invoiced until it is
-dispatched; the To-Invoice queue's manual *Issue* refuses with `back()`; the
-run sheet's sticky header is keyed on a breakpoint when it should be keyed on
-how many columns the sheet has; and fragment landings use a fixed 80 px scroll
-margin where the flash's real height is known. Nothing here changes stock,
-money or any rule.
+The batch sanity ceilings (cycle 8) live in `config/mossfield.php` as the
+Planner's guesses — milk 5 000, yoghurt 3 000, cheese 200 units per variant
+per batch. Jon wants them changeable from the app, by an admin, without a
+deploy. This cycle adds a small **Settings** page in the Admin group with the
+three ceilings; the config values become the defaults a fresh install starts
+from. The settings store is generic (key → value) so the next admin-tunable
+number has a home, but this cycle exposes only the ceilings.
 
 ## Context
 
-HEAD `ebc1c7c` + the staged archive of cycle 8. Suite **674 passed, 0 failed**;
-any failure is real. `pint --test app tests database routes config` clean.
-Nothing pushed or deployed.
+HEAD `e3184a8` + the staged archive of cycle 9. Suite **684 passed, 0
+failed**; any failure is real. `pint --test app tests database routes config`
+clean. Nothing pushed or deployed.
 
 **Facts the steps rely on**
 
-- `batches/partials/batch-card.blade.php`: the wheel strip already uses
-  `wheelStates()` (`:13–15`, `$wheelBreakdowns`); the **items table** at
-  `:206/:231` prints `$item->quantity_sold` = `produced − remaining −
-  written_off`, which for a wheel item includes cut and converted wheels
-  (G010426 reads "5 sold" where the strip says 2 sold · 1 cut · 2 converted).
-  The expired tag block is `:46–53`: "Expired" plus a "Write off →" link when
-  `writableUnits() > 0`; when a batch is fully written off neither the link
-  nor any tag says so. `BatchItem::written_off_units` is eager-loaded on the
-  index (`written_off_units`).
-- `orders/show.blade.php:232–238`: `@elseif($order->hasReachedReady())` →
-  "Awaiting invoice · Finance". Since cycle 8 a `ready` order **cannot** be
-  issued (`InvoiceService` requires dispatched/delivered); only
-  dispatched/delivered uninvoiced orders are "awaiting invoice".
-- `UninvoicedOrderController::issue()` catches `InvoicingException` and
-  returns `back()->with('error', …)`; `CLAUDE.md` (Flash messages) prefers an
-  explicit `redirect()->route(...)` on refusal paths so a Referer-less
-  request can't land the message outside the layout.
-- `_run-table.blade.php:37`: `$stickyHead = ! $editId ? 'xl:overflow-visible' : ''`;
-  `$qtyColCount` is computed at `:5`. Cycle 6 measured the 11-column dev
-  sheet at 983 px inside a 985 px panel at `xl` (1280): a 12th column
-  overflows. Each quantity column is 60 px.
-- Fragment landings: 10 elements carry `scroll-mt-20` (order lines,
-  `#order-items`, `#special-prices`, `#write-offs`, `#dispatch`, run-stop
-  rows, `#run-{id}`, sheet rows); `app.css:748` animates
-  `.scroll-mt-20:target`; the sheet rows have their own
-  `scroll-margin-top: calc(var(--mf-feedback-h, 0px) + 80px)` (`:524`).
-  `--mf-feedback-h` is the sticky flash region's height, set by
-  `layouts/partials/feedback.blade.php` as the page parses and zeroed on
-  dismiss (cycle 6).
-- Tests to extend: `StockWriteOffTest` (card tests live there),
-  `ConsolidationPassTest` (finding-8 card test), `OrderTransitionsTest`,
-  `InvoiceIssueTest`, `ChilledRunTest`, `OrderItemEditTest`,
-  `LayoutFeedbackTest`.
+- The ceilings are read in exactly one place:
+  `BatchController::store()` (`:148–151`),
+  `$ceiling = (int) config("mossfield.batch_ceilings.{$product->type}", 0)`;
+  `batches/create.blade.php:88` mentions the config path in a comment. The
+  config block (`config/mossfield.php`) carries the comment that Jon sets the
+  numbers.
+- Admin-only routes live in the `role:admin` group (`routes/web.php`, the
+  `users` resource and `/backup`); the **Admin** nav group
+  (`layouts/navigation.blade.php:78–80`) holds Users and Backup & Restore,
+  admin-only. `UserPolicy` is admin-only; `BasePolicy` is office-write.
+- Page pattern to copy: `resources/views/users/index.blade.php` (title block,
+  `mf-panel`, `mf-label`/`mf-input`, `mf-btn-primary`).
+- Housekeeping that fails tests if missed: `ResetTradingData::KEEP` (a new
+  reference table must be classified), `BackupService::TABLES` +
+  `ADDED_LATER` (a new table must be listed, and marked so older backups still
+  restore — `false` = keep current rows, which is right for settings),
+  `AuthorizationBoundaryTest` (every web route needs `auth` + a role group;
+  no route parameters here), `ConfirmDialogTest`, `LayoutFeedbackTest`.
+- Tests to extend: `BatchCreateTest` (the ceiling cases from cycle 8),
+  `BackupRestoreTest`, `ResetTradingDataTest` (auto), `AuthorizationBoundaryTest`
+  (auto). New: `SettingsTest`.
 
 ## Constraints
 
-- No arithmetic changes; `quantity_sold` stays as it is (packs and
-  milk/yoghurt are right) — the card reads the wheel figure from
-  `wheelStates()`, which it already computes.
-- No new routes, migrations or config.
-- `npm run build` after CSS; `./vendor/bin/pint` on PHP.
+- **Config stays the default.** A fresh install (no `settings` rows) behaves
+  exactly as today; a stored value wins. Never write the config file.
+- Admin-only (Jon's words: "a page for admin"). Office doesn't see it.
+- Ceilings are integers ≥ 1 (0/blank is not "no ceiling" — a batch form
+  with no ceiling would lose the guard; if Jon ever wants one off, that's a
+  separate decision).
+- One read per request: the batch form must not query settings per variant
+  row.
+- `./vendor/bin/pint` on PHP; `npm run build` only if CSS/JS change (none
+  expected).
 - **Do not commit.** Planner commits on acceptance. Nothing pushed/deployed.
 
 ## Out of scope
 
-- The two stale July `ready` orders on dev (dispatch or cancel is Jon's
-  call; recorded in `RESUME.md`).
-- The batch-ceiling numbers (Jon's).
-- `FULFILMENT_PLAN.md` Phase 4.
+- Exposing any other setting (mature-conversion months, invoicing config,
+  weight bound factor) — the store can hold them later; this page shows the
+  three ceilings only.
+- A per-variant ceiling (per type is what cycle 8 built).
+- Audit history of changes (the flash names old → new; that's enough for
+  three numbers).
 
 ## Steps
 
-### 1. The card's items table shows sold, cut and converted separately
+### 1. A settings store with config defaults
 
-Files: `resources/views/batches/partials/batch-card.blade.php`,
-`tests/Feature/StockWriteOffTest.php` (or `ConsolidationPassTest`)
+Files: `database/migrations/2026_10_06_120000_create_settings_table.php` (new),
+`app/Models/Setting.php` (new), `app/Support/Settings.php` (new — or a static
+API on the model; say which), `tests/Feature/SettingsTest.php` (new)
 
-What: for a wheel item, the Sold cell reads `wheelStates()['sold']` (reuse
-`$wheelBreakdowns`, keyed by item id, rather than calling it again) and the
-row gains a muted "· N cut · N converted" after it when either is non-zero;
-for other items keep `quantity_sold`. The column header stays "Sold".
-Test: a wheel item with 1 cut, 2 converted and 2 sold renders "2" in the Sold
-cell with "1 cut · 2 converted" beside it (not "5").
+What:
+- `settings`: `key` (string 80, **primary**), `value` (text, JSON-encoded),
+  `updated_by` FK users nullable `nullOnDelete`, timestamps.
+- `Setting` model (`$incrementing = false`, `$keyType = 'string'`, casts
+  `value` json). Static API:
+  `Setting::get(string $key, mixed $default = null): mixed` — stored value
+  else `$default`; `Setting::set(string $key, mixed $value, ?User $by): void`;
+  `Setting::batchCeiling(string $type): int` — `(int) self::get("batch_ceilings.$type",
+  config("mossfield.batch_ceilings.$type", 0))`. Cache reads **per request**
+  (a static array or `once()`), cleared by `set()`.
+- Tests: `get` falls back to config; `set` then `get` returns the stored
+  value and survives a fresh query; `batchCeiling('cheese')` is 200 with no
+  row and the stored value with one.
 
-Check: `php artisan test --filter="StockWriteOffTest|ConsolidationPassTest"` pass.
+Check: `php artisan migrate` clean; `php artisan test --filter=SettingsTest` pass.
 
-### 2. A fully written-off expired batch says so
+### 2. The batch form reads the setting
 
-Files: `resources/views/batches/partials/batch-card.blade.php`,
-`tests/Feature/StockWriteOffTest.php`
+Files: `app/Http/Controllers/BatchController.php`, `resources/views/batches/create.blade.php`,
+`tests/Feature/BatchCreateTest.php`
 
-What: in the expired block, when `writableUnits() === 0` and the batch's
-active write-offs > 0 (sum `written_off_units` over the loaded items), render
-a neutral tag **"Written off"** after "Expired" (instead of the link). Test: an
-expired batch fully written off shows the tag and no "Write off →"; one with
-stock left shows the link and no tag.
+What: `store()` uses `Setting::batchCeiling($product->type)` (one call);
+the per-item error text is unchanged. The create view's comment points at
+Settings as well as the config. Test: with `batch_ceilings.cheese` stored as
+500, 300 wheels save without a prompt and 501 ask; the existing cycle-8
+cases (no row) still pass unchanged.
 
-Check: `php artisan test --filter=StockWriteOffTest` pass.
+Check: `php artisan test --filter=BatchCreateTest` pass.
 
-### 3. The order page tells the truth about a ready order's bill
+### 3. The Settings page
 
-Files: `resources/views/orders/show.blade.php`, `tests/Feature/OrderTransitionsTest.php`
+Files: `app/Http/Controllers/SettingsController.php` (new),
+`app/Policies/SettingPolicy.php` (new — admin-only like `UserPolicy`),
+`app/Providers/AuthServiceProvider.php`, `app/Http/Requests/SettingsRequest.php` (new),
+`resources/views/settings/index.blade.php` (new), `routes/web.php`,
+`resources/views/layouts/navigation.blade.php`, `tests/Feature/SettingsTest.php`
 
-What: split the `hasReachedReady()` branch — `ready` → "Awaiting dispatch —
-invoiced when dispatched"; `dispatched|delivered` → "Awaiting invoice ·
-Finance" as now. Test: a ready order's page shows the first and not the
-second; a dispatched uninvoiced order the second.
+What:
+- Routes in the **`role:admin` group**: `GET /settings` → `index`
+  (`settings.index`), `PUT /settings` → `update` (`settings.update`).
+- `SettingPolicy`: `viewAny`/`update` for active admins only (mirror
+  `UserPolicy`). `SettingsRequest::authorize()` = `can('update', Setting::class)`;
+  rules: `batch_ceilings.milk|yoghurt|cheese` each `required|integer|min:1|max:1000000`.
+- `index()`: the three current values (stored or default) and, per type,
+  whether it is the default or who changed it when (`updated_by`,
+  `updated_at`). `update()`: `Setting::set()` for each changed value only;
+  flash "Batch ceilings saved — cheese 200 → 500." naming each change (or
+  "No changes." when none). Redirect to `settings.index`.
+- View: title "Settings", one panel **Batch quantity ceilings** — "Above
+  these a new batch asks for confirmation before saving. Units per variant
+  per batch." — three labelled number inputs (Milk / Yoghurt / Cheese) with
+  the default shown as help text ("default 5 000") and "changed by {name} on
+  {date}" when stored; one **Save** button; a "Reset to defaults" button
+  (`data-confirm`) that deletes the three rows.
+- Nav: **Admin** group, "Settings" (a cog icon, following the existing icon
+  map), admin-only.
+- Tests: admin sees the page with the defaults; `PUT` stores and the page
+  shows the new value and "changed by"; `min:1` refused; office and factory
+  get 403 on both routes; guest → login; Reset restores the defaults; the
+  flash names the change.
 
-Check: `php artisan test --filter=OrderTransitionsTest` pass.
+Check: `php artisan test --filter="SettingsTest|AuthorizationBoundaryTest"` pass
+(the matrix picks the two routes up automatically — admin-only, no params).
+Browser as admin: `/settings` → set cheese to 500 → Save → flash; `/batches/create`
+with 300 wheels saves without the prompt; Reset → 200 again.
 
-### 4. `issue()` refuses to a known page
+### 4. Housekeeping
 
-Files: `app/Http/Controllers/Invoicing/UninvoicedOrderController.php`,
-`tests/Feature/InvoiceIssueTest.php`
+Files: `app/Console/Commands/ResetTradingData.php`, `app/Services/BackupService.php`,
+`tests/Feature/BackupRestoreTest.php`
 
-What: `issue()`'s catch returns
-`redirect()->route('invoicing.uninvoiced.index')->with('error', …)`; check
-`issueAll()` and the controller's other refusals for `back()` and treat them
-the same. Test: the existing refusal case asserts the redirect target.
+What: `settings` → `ResetTradingData::KEEP`; `BackupService::TABLES` gains
+`settings` (after `users`, since it references them) and `ADDED_LATER['settings'] = false`
+(an older backup leaves current settings alone). Test: a backup with a
+stored ceiling round-trips it; a payload without the table keeps it.
 
-Check: `php artisan test --filter=InvoiceIssueTest` pass.
+Check: `php artisan test --filter="ResetTradingDataTest|BackupRestoreTest"` pass.
 
-### 5. The sticky sheet header follows the column count
+### 5. Docs
 
-Files: `resources/views/chilled-runs/partials/_run-table.blade.php`,
-`tests/Feature/ChilledRunTest.php`
+Files: `CLAUDE.md`, `config/mossfield.php`, `docs/planImp/WORK_IN_PROGRESS.md`,
+`docs/planImp/OPEN_QUESTIONS.md`
 
-What: `$stickyHead` = (not editing) and: `$qtyColCount <= 11` →
-`xl:overflow-visible`; `<= 20` → `2xl:overflow-visible`; else `''` (always
-scroll). Comment the arithmetic (60 px per column; 11 fit at 1280, ~20 at
-1536). Test: with the default columns (≤ 11) the wrapper has
-`xl:overflow-visible`; add active variants until 12 columns → it has
-`2xl:overflow-visible` and not `xl:`.
+What: `CLAUDE.md` → a short **Settings** subsection under Security Posture →
+Roles (admin-only `/settings`, `Setting::get/set`, config = defaults,
+`batchCeiling()` is the one read site, housekeeping lists); the Batch create
+rules paragraph points at Settings. `config/mossfield.php`'s ceilings comment:
+"defaults — admins change the live values at /settings". `WORK_IN_PROGRESS.md`:
+*Recently Completed: Settings (2026-10-06)*. `OPEN_QUESTIONS.md` #5 status
+line: the ceiling numbers are now set at `/settings`, not in config.
 
-Check: `php artisan test --filter=ChilledRunTest` pass; browser at 1280 with
-the dev run → header still sticky.
-
-### 6. Fragment landings clear the flash by its real height
-
-Files: `resources/css/app.css`, the 10 views carrying `scroll-mt-20`
-(`grep -rln "scroll-mt-20" resources/views`), `tests/Feature/OrderItemEditTest.php`,
-`tests/Feature/LayoutFeedbackTest.php`
-
-What: one class **`.mf-landing`** — `scroll-margin-top: calc(var(--mf-feedback-h, 0px) + 1rem)`
-plus the existing `:target` animation moved onto `.mf-landing:target`;
-replace every `scroll-mt-20` with `mf-landing`; the sheet rows keep their own
-larger rule (header + flash) — make it `.mf-run tbody tr.mf-landing` so
-there's one class on the element and two rules by context. Delete the
-`.scroll-mt-20:target` rule. Tests: the order page's line rows and the sheet
-rows carry `mf-landing`; `grep -rn "scroll-mt-20" resources` → nothing.
-
-Check: `npm run build`; `php artisan test --filter="OrderItemEditTest|LayoutFeedbackTest|ChilledRunTest"`
-pass. Browser: change a line qty → the line lands just under the flash; ×
-the flash, reload with the fragment → the line lands near the top.
-
-### 7. Docs
-
-Files: `CLAUDE.md`, `docs/planImp/WORK_IN_PROGRESS.md`
-
-What: CLAUDE.md → the redirect convention names `mf-landing` (not
-`scroll-mt-20`); Chilled Run Sheet → sticky header by column count; the
-order-page billing line's three states. `WORK_IN_PROGRESS.md`: *Recently
-Completed: Polish (2026-10-06)*.
-
-Check: `grep -n "mf-landing" CLAUDE.md` → hits; `grep -rn "scroll-mt-20" CLAUDE.md` → none.
+Check: `grep -n "batchCeiling\|/settings" CLAUDE.md` → hits.
 
 ## Verification
 
 1. `php artisan test` → **0 failed**; record the count.
 2. `./vendor/bin/pint --test app tests database routes config` → clean.
-3. `npm run build` → ok.
-4. `grep -rn "scroll-mt-20" resources CLAUDE.md` → nothing.
+3. `php artisan migrate:status | tail -1` shows the settings migration ran.
+4. `php artisan route:list | wc -l` → previous + 2.
 5. `git status --short` → only files this plan names (+ the staged archive).
-6. Browser checks from steps 1, 2, 3, 5, 6 with real input; console clean.
-   Nothing in this cycle writes to the dev DB.
+6. Browser check from step 3 as admin, then as `office_test` `/settings` → 403
+   page with "Back to the dashboard". Console clean.
+7. Dev-DB probe: `settings` rows after the browser check — reset them so dev
+   keeps the defaults (or leave Jon's real numbers if he has given them).
 
 ## Risks
 
-- **Step 6 touches ten views**: a missed `scroll-mt-20` leaves one element
-  without a margin — the grep is the check.
-- **Step 5's test needs 12 columns**: the sheet's milk/yoghurt columns are
-  *all active* variants, so creating extra active milk variants in the test
-  is enough; clean them up within the test's transaction.
-- **Step 1 must not re-run `wheelStates()`** per row (it already ran for the
-  strip); key `$wheelBreakdowns` by item id.
+- **Per-request cache** must be cleared by `set()` and must not leak across
+  tests (`RefreshDatabase` resets the DB but not a static array —
+  clear it in `set()` and, if needed, in a `tearDown`; prefer `once()` or an
+  instance held on the container so each request/test starts clean).
+- **JSON value** for an int: store `500`, read `(int)` — don't let `"500"`
+  (a string) through validation into a comparison.
+- **`AuthorizationBoundaryTest`**: the new routes sit in the admin group, so
+  office is 403 — the matrix asserts that automatically; nothing to add
+  unless a parameter appears.
 
 ## Review
 
-Reviewed 2026-10-06 against `implemented.md` (Status: DONE, read to the end)
-and the diff. Planner reran: `php artisan test` → **684 passed, 0 failed**
-(+10); `pint --test … config` → PASS 291 files; `npm run build` ok;
-`grep scroll-mt-20 resources CLAUDE.md` → nothing; ten `mf-landing` in views.
-No dev-DB writes (checked).
-
-### Criteria — all seven pass
-
-1 Wheel rows read `wheelStates()['sold']` from the breakdowns keyed by id
-(no second run) with "· N cut · N converted". 2 "Written off" tag outside
-the `@can` (status, not action) when nothing writable remains and some was
-written off. 3 Three billing states. 4 Both `back()`s in the controller
-replaced; the test posts with no prior GET so it can tell the difference.
-5 `match` on the column count with the arithmetic in the comment; four
-tests. 6 One `.mf-landing` class, the sheet override by context, the
-`:target` tint moved, a test that greps the views. 7 Docs.
-
-### Deviations — all accepted
-
-1 **2xl limit 15, not 20** — the plan's arithmetic was wrong; 15 keeps the
-"never spill the panel" invariant. 2 existing fixture (same property).
-3 separate refusal test — and the reason is a lesson recorded below.
-4 `DispatchConfirmationTest` wording follows the text step 3 replaced.
-
-### Notes for Planner — decisions
-
-- Refusal tests must not GET the page first or `back()` is indistinguishable
-  from an explicit route → recorded as an invariant.
-- The stale July orders → **cancelled by the Planner** on acceptance (test
-  data; Jon said "you decide"), recorded in `RESUME.md`.
-
-Nothing to redo. Archived by the Planner to `archive/2026-10-06-polish/`
-(the next plan needs `plan.md`).
+(Planner fills this in after reading implemented.md and the diff.)
