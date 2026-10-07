@@ -114,9 +114,9 @@ worth returning to.
   every confirm dialog titled and its body the consequence (scan in
   `ConfirmDialogTest`), "N of M picked" under Picking, "Capacity:", the
   optional trailing line, "FIFO" gone. Suite **699 passed, 0 failed**. Probe
-  id 29 cancelled. Reviewed in the Implementer's session at Jon's request.
-  **Jon archives:** `mkdir -p docs/planImp/archive/2026-10-06-order-flow-polish`
-  and move `plan.md` + `implemented.md` there.
+  id 29 cancelled. Reviewed in the Implementer's session at Jon's request;
+  the Planner re-verified on 2026-10-07 (suite 699 green, 47/47 titles,
+  bodies traced) and archived it to `archive/2026-10-06-order-flow-polish/`.
 - **Cycle 12 (not yet planned):** refuse deleting a product/variant that has
   batches, order lines or special prices (`deletionBlocker()` on the `Batch`
   pattern; deactivate instead), and refuse a customer delete blocked by

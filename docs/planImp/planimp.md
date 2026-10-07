@@ -36,6 +36,13 @@ The `Status:` line at the top of each file is the handshake. Check it before
 you start. Do not act on a `plan.md` that is `DRAFT`, and do not review an
 `implemented.md` that is still `IN PROGRESS`.
 
+**The review comes from a session that did not do the work.** Normally the
+Planner's; if the Planner session is gone, a fresh session reading
+`planimp.md` — never the Implementer session reviewing its own
+`implemented.md` (cycle 11's revision 2 was reviewed that way at the user's
+request; the Planner re-verified it afterwards and it held, but the check
+only means something when it is independent).
+
 ### Kickoff prompts for the user
 
 Planner session:
