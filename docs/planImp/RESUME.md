@@ -117,11 +117,13 @@ worth returning to.
   id 29 cancelled. Reviewed in the Implementer's session at Jon's request;
   the Planner re-verified on 2026-10-07 (suite 699 green, 47/47 titles,
   bodies traced) and archived it to `archive/2026-10-06-order-flow-polish/`.
-- **Cycle 12 (not yet planned):** refuse deleting a product/variant that has
-  batches, order lines or special prices (`deletionBlocker()` on the `Batch`
-  pattern; deactivate instead), and refuse a customer delete blocked by
-  payments/invoices/statements with a flash instead of a DB error. Two
-  copy items deferred from cycle 11 sit in `SMALL_FIXES.md`.
+- **Cycle 12 "Delete guards" — READY 2026-10-07:** `plan.md` —
+  `deletionBlocker()` on `Product`, `ProductVariant` and `Customer` (the
+  `Batch` pattern: model owns the rule, page hides Delete and says why,
+  controller refuses with a flash), `authorize` added to the variant destroy,
+  plus the two copy items cycle 11 deferred (short-close bodies, stepper
+  total netting short-closed units). No migrations — the FK cascades go to
+  `OPEN_QUESTIONS.md`. Awaiting the Implementer.
 - **Next after that:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
   route for the day + proof of delivery with signature) — a new feature
   that would want a design pass before a plan. Otherwise: push and deploy
