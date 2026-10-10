@@ -117,13 +117,12 @@ worth returning to.
   id 29 cancelled. Reviewed in the Implementer's session at Jon's request;
   the Planner re-verified on 2026-10-07 (suite 699 green, 47/47 titles,
   bodies traced) and archived it to `archive/2026-10-06-order-flow-polish/`.
-- **Cycle 12 "Delete guards" — READY 2026-10-07:** `plan.md` —
-  `deletionBlocker()` on `Product`, `ProductVariant` and `Customer` (the
-  `Batch` pattern: model owns the rule, page hides Delete and says why,
-  controller refuses with a flash), `authorize` added to the variant destroy,
-  plus the two copy items cycle 11 deferred (short-close bodies, stepper
-  total netting short-closed units). No migrations — the FK cascades go to
-  `OPEN_QUESTIONS.md`. Awaiting the Implementer.
+- **Cycle 12 "Delete guards" — PARKED 2026-10-10** (Jon: work on the deploy
+  script first). Plan + the Implementer's IN PROGRESS report are in
+  `parked/2026-10-10-delete-guards/`; its half-done tree is commit `a8f75d6`
+  on branch **`wip/cycle-12-delete-guards`** (off `095c250`). `main` is clean
+  — deliberately, because `deploy/bin/ship` auto-commits *everything* in the
+  working tree. Resume instructions are at the top of the parked plan.
 - **Next after that:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
   route for the day + proof of delivery with signature) — a new feature
   that would want a design pass before a plan. Otherwise: push and deploy

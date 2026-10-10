@@ -1,9 +1,20 @@
 # Delete guards: products, variants and customers refuse when history depends on them
 
-Status: READY
+Status: PARKED
 Revision: 1
 Planner: Fable 5.1
 Date: 2026-10-07
+
+**Parked 2026-10-10** — Jon put this aside to work on the deploy script.
+The Implementer had started (steps 1–4 partly done: models, controllers,
+docs; views and `DeletionGuardTest` not yet): its uncommitted tree is
+preserved as commit(s) on branch **`wip/cycle-12-delete-guards`** (based on
+`095c250`), and its `implemented.md` (IN PROGRESS) sits beside this file.
+**To resume:** `git merge wip/cycle-12-delete-guards` (or cherry-pick) onto
+`main`, copy this file back to `docs/planImp/plan.md` and `implemented.md`
+beside it, re-check *Context* against the code (line numbers, the suite
+count), set `Status: READY`, and tell the Implementer to continue from its
+report.
 
 ## Goal
 
