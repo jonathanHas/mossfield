@@ -1,0 +1,51 @@
+{
+  "_note": "Products shown on the website. Required: slug, name, type (milk, yoghurt or cheese), description. Optional: image (a file name in resources/site/product-images), sort, show (default true). Blank line in description = new paragraph.",
+  "products": [
+    {
+      "slug": "organic-milk",
+      "name": "Organic Milk",
+      "type": "milk",
+      "description": "Nearly all the milk sold in shops is standardised, homogenised and pasteurised. Ours is simply pasteurised and bottled.\n\nNot homogenised: homogenisation forces milk through tiny holes at very high pressure to break up the cream so it never separates. It makes milk look whiter and last longer, but it changes the natural structure of the milk for largely cosmetic reasons. We leave ours alone, so the cream rises to the top the way it always did.\n\nNot standardised: even whole milk usually has some cream removed. Our milk has all the cream from the day we milked the cows.\n\nPasteurised: so it is safe for children and expectant mothers, and that is the only processing it gets.",
+      "image": "milk.jpg",
+      "sort": 10
+    },
+    {
+      "slug": "organic-yoghurt",
+      "name": "Natural Yoghurt",
+      "type": "yoghurt",
+      "description": "Our natural yoghurt has two ingredients: our own milk and live cultures. Nothing else.\n\nMany yoghurts that say \"no added ingredients\" can still contain added cream, milk powder or whey powder, because lactic ingredients do not have to be declared. Ours is made in small batches from whole milk, which gives it a thick, creamy texture and a mild tang.\n\nIt works at breakfast, lunch, dinner and dessert. A favourite in the farmhouse: natural yoghurt, honey, granola and a chopped banana.",
+      "image": "yoghurt.jpg",
+      "sort": 20
+    },
+    {
+      "slug": "farmhouse-cheese",
+      "name": "Farmhouse Cheese",
+      "type": "cheese",
+      "description": "Our original cheese, handmade in small batches from the morning's milk and ripened on the farm. Young wheels are mild and creamy; with more months in the ripening room it becomes firmer and more full-flavoured.\n\nAll of our cheeses are made with vegetarian rennet.",
+      "image": "farmhouse.jpg",
+      "sort": 30
+    },
+    {
+      "slug": "mediterranean-cheese",
+      "name": "Mediterranean",
+      "type": "cheese",
+      "description": "Our farmhouse cheese with sun-dried tomato and Mediterranean herbs folded through the curd. A bronze medal winner at the International Cheese Awards.",
+      "image": "mediterranean.jpg",
+      "sort": 31
+    },
+    {
+      "slug": "garlic-basil-cheese",
+      "name": "Garlic & Basil",
+      "type": "cheese",
+      "description": "Young farmhouse cheese with garlic and fresh basil. Aromatic and creamy, it is best enjoyed young.",
+      "sort": 32
+    },
+    {
+      "slug": "cumin-cheese",
+      "name": "Cumin",
+      "type": "cheese",
+      "description": "Young farmhouse cheese studded with whole cumin seed, in the Dutch tradition. Gently spiced and good with a slice of apple.",
+      "sort": 33
+    }
+  ]
+}

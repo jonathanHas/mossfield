@@ -1,0 +1,4 @@
+{
+  "_note": "Shops shown on the 'Where to buy' page. Required: name, county, products (any of milk, yoghurt, cheese). Optional: address, phone, website, show (default true). Empty since 2026-10-26: the 2015 list is kept in stockists-2015.json for reference and is NOT published.",
+  "stockists": []
+}

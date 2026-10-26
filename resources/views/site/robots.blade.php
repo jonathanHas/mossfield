@@ -1,0 +1,3 @@
+User-agent: *
+Disallow:
+Sitemap: {!! $site['base_url'] !!}/sitemap.xml
