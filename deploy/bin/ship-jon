@@ -75,11 +75,19 @@ fi
 
 # deploy-on-prod runs as root on the box via `ssh -t … sudo`. With a
 # password-less sudo it runs straight through; otherwise sudo prompts on
-# the box during the remote step. Say which, don't fail.
-if ssh -o BatchMode=yes -o ConnectTimeout=5 "$MOSSFIELD_PROD_HOST" 'sudo -n true' >/dev/null 2>&1; then
+# the box during the remote step. Say which, don't fail. The probe uses
+# BatchMode, so it can only run once the key is in the agent — deploy2
+# loads it later in this same run; until then say so rather than guess.
+IDENTITY_FILE=$(ssh -G "$MOSSFIELD_PROD_HOST" 2>/dev/null | awk '/^identityfile /{print $2; exit}')
+IDENTITY_FILE="${IDENTITY_FILE/#\~/$HOME}"
+KEY_FP=$( [ -f "$IDENTITY_FILE" ] && ssh-keygen -lf "$IDENTITY_FILE" 2>/dev/null | awk '{print $2}' || true)
+if [ -z "$KEY_FP" ] || ! ssh-add -l 2>/dev/null | grep -q -- "$KEY_FP"; then
+  echo "ⓘ sudo on $MOSSFIELD_PROD_HOST: not checked (key not in the agent yet — deploy2 loads it next;"
+  echo "  the remote step prompts for a sudo password on the box if one is needed)."
+elif ssh -o BatchMode=yes -o ConnectTimeout=5 "$MOSSFIELD_PROD_HOST" 'sudo -n true' >/dev/null 2>&1; then
   echo "ⓘ sudo on $MOSSFIELD_PROD_HOST: password-less"
 else
-  echo "ⓘ sudo on $MOSSFIELD_PROD_HOST: not password-less (or host unreachable / key not loaded yet) —"
+  echo "ⓘ sudo on $MOSSFIELD_PROD_HOST: not password-less (or host unreachable) —"
   echo "  expect a password prompt on the box during the remote step."
 fi
 
