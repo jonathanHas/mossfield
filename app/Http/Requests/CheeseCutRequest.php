@@ -36,6 +36,7 @@ class CheeseCutRequest extends FormRequest
             'vacuum_packs_created' => 'required|integer|min:1',
             'total_weight_kg' => 'required|numeric|min:0.001|lte:wheel_weight_kg',
             'notes' => 'nullable|string|max:1000',
+            'form_token' => 'nullable|uuid',
         ];
     }
 

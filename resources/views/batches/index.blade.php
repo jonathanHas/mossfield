@@ -147,6 +147,15 @@
                 </div>
             </details>
         @empty
+            @php $filtered = request()->hasAny(['type', 'status', 'maturation_status']); @endphp
+            @if ($filtered)
+                <div class="mf-panel p-10 text-center">
+                    <h3 class="text-[14px] font-semibold">No batches match these filters</h3>
+                    <div class="mt-4">
+                        <a href="{{ route('batches.index') }}" class="mf-btn-secondary">Clear filters</a>
+                    </div>
+                </div>
+            @else
             <div class="mf-panel p-10 text-center">
                 <h3 class="text-[14px] font-semibold">No batches found</h3>
                 <p class="mt-1 text-[13px]" style="color: var(--muted);">Get started by creating your first production batch.</p>
@@ -156,6 +165,7 @@
                     </div>
                 @endcan
             </div>
+            @endif
         @endforelse
 
         @if ($batches->hasPages())

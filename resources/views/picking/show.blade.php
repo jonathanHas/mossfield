@@ -112,6 +112,9 @@
                                 <div style="font-size: 14px; font-weight: 500;">{{ $nextOrder->customer->name }}</div>
                                 <div style="font-size: 12px; color: var(--muted);">
                                     {{ (int) $nextOrder->orderItems->sum('quantity_ordered') }} items{{ $nextOrder->delivery_date ? ' · '.($nextOrder->delivery_date->isToday() ? 'today' : $nextOrder->delivery_date->format('D j M')) : '' }}
+                                    @if ($nextOrder->isDeliveryOverdue())
+                                        <span class="mf-tag mf-tag-warn">Past its delivery date</span>
+                                    @endif
                                 </div>
                             </div>
                             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>

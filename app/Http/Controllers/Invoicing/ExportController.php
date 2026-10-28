@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Invoicing;
 
+use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Controller;
 use App\Models\CreditNote;
 use App\Models\Invoice;
@@ -60,7 +61,8 @@ class ExportController extends Controller
 
     /**
      * Invoices and credit notes in one sheet. Credit notes carry NEGATIVE
-     * amounts so a column sum is the period's net turnover.
+     * amounts so a column sum is the period's net turnover; void invoices are
+     * kept as rows with zero amounts so the sum is still the net turnover.
      */
     private function invoiceRows(Carbon $from, Carbon $to): \Generator
     {
@@ -72,6 +74,7 @@ class ExportController extends Controller
 
         foreach ($invoices as $invoice) {
             $net = round((float) $invoice->subtotal + (float) $invoice->delivery_charge_net, 2);
+            $money = fn (float $amount) => number_format($invoice->status === InvoiceStatus::Void ? 0 : $amount, 2, '.', '');
 
             yield [
                 $invoice->issued_at?->format('Y-m-d'),
@@ -79,12 +82,12 @@ class ExportController extends Controller
                 $invoice->number,
                 $invoice->bill_to_name,
                 $invoice->bill_to_vat_number,
-                number_format($net, 2, '.', ''),
-                number_format((float) $invoice->tax_amount, 2, '.', ''),
-                number_format((float) $invoice->total, 2, '.', ''),
-                number_format((float) $invoice->amount_paid, 2, '.', ''),
-                number_format((float) $invoice->amount_credited, 2, '.', ''),
-                number_format((float) $invoice->balance, 2, '.', ''),
+                $money($net),
+                $money((float) $invoice->tax_amount),
+                $money((float) $invoice->total),
+                $money((float) $invoice->amount_paid),
+                $money((float) $invoice->amount_credited),
+                $money((float) $invoice->balance),
                 $invoice->status->value,
                 $invoice->due_date?->format('Y-m-d'),
             ];

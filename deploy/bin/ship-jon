@@ -53,7 +53,10 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-cd "$(dirname "$0")/../.."
+# Resolve our own directory before changing it, so the hand-off below works
+# whether this is run as deploy/bin/ship-jon or ./ship-jon from inside deploy/bin.
+BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$BIN_DIR/../.."
 
 # Untracked files are not committed by this script (tracked-only). Say so
 # before deploy2's pre-flight commits, so nothing is silently left behind.
@@ -97,4 +100,4 @@ ARGS=(-m "$MSG")
 [ "$MAINTENANCE" -eq 1 ] && ARGS+=(--maintenance)
 [ "${#PASSTHRU[@]}" -gt 0 ] && ARGS+=("${PASSTHRU[@]}")
 
-exec "$(dirname "$0")/deploy-mossserv" "${ARGS[@]}"
+exec "$BIN_DIR/deploy-mossserv" "${ARGS[@]}"

@@ -169,7 +169,7 @@
                                 <th class="mf-th">Unit weight</th>
                                 <th class="mf-th text-right">Produced</th>
                                 <th class="mf-th text-right">On hand</th>
-                                <th class="mf-th text-right">Sold</th>
+                                <th class="mf-th text-right" title="Picked for an order — dispatched or still on the floor. Cut, converted and written-off units are their own columns.">Picked / sold</th>
                                 <th class="mf-th text-right" title="Wheels cut into vacuum packs">Cut</th>
                                 <th class="mf-th text-right" title="Wheels released into the Mature product">Converted</th>
                                 <th class="mf-th text-right" title="Lost — spoiled, damaged, sampled, expired (see Write-offs)">Written off</th>
@@ -182,7 +182,12 @@
                                     <td class="mf-td font-medium">{{ $item->productVariant->name }}</td>
                                     {{-- "wheel wheel" when size and unit are the same word (F-11). --}}
                                     <td class="mf-td" style="color: var(--muted);">{{ $item->productVariant->size }}@if(strcasecmp((string) $item->productVariant->size, (string) $item->productVariant->unit) !== 0) {{ $item->productVariant->unit }}@endif</td>
-                                    <td class="mf-td font-mono" style="color: var(--muted);">{{ $item->unit_weight_kg ? number_format($item->unit_weight_kg, 3) . ' kg' : '—' }}</td>
+                                    <td class="mf-td font-mono" style="color: var(--muted);">
+                                        {{ $item->unit_weight_kg ? number_format($item->unit_weight_kg, 3) . ' kg' : '—' }}
+                                        @if($batch->source_batch_id)
+                                            <span class="block text-[11px]">nominal from the source wheel</span>
+                                        @endif
+                                    </td>
                                     @php
                                         // Every unit in exactly one state — the same breakdown the
                                         // finished weight above is derived from, so the two agree
@@ -212,7 +217,7 @@
         </div>
 
         @if($batch->product->type === 'cheese' && $batch->cuttingLogs->count() > 0)
-            <div class="mf-panel mb-4">
+            <div class="mf-panel mb-4 mf-landing" id="cutting">
                 <div class="mf-panel-header">
                     <div class="flex-1"><div class="text-[13px] font-semibold">Cheese cutting history</div></div>
                     {{-- Trim loss = Σ (wheel − packs) over the cuts whose wheel was weighed.
@@ -273,13 +278,15 @@
 
         @include('batches.partials._write-offs')
 
+        {{-- Every action here is a cheese one (cutting, conversion, lineage):
+             milk and yoghurt get no panel rather than a heading over nothing. --}}
+        @if($batch->product->type === 'cheese')
         <div class="mf-panel">
             <div class="mf-panel-header">
                 <div class="text-[13px] font-semibold">Actions</div>
             </div>
             <div class="px-4 py-3">
                 <div class="flex flex-wrap gap-2">
-                    @if($batch->product->type === 'cheese')
                         @php
                             // Free wheels only (not raw quantity_remaining): a held or
                             // reserved wheel can't be cut, so it mustn't be offered.
@@ -298,7 +305,7 @@
                         @if($availableWheels->count() > 0 && $isReady)
                             @can('create', App\Models\CheeseCuttingLog::class)
                                 @foreach($availableWheels as $wheelItem)
-                                    <a href="{{ route('cheese-cutting.create', $wheelItem) }}" class="mf-btn-primary">
+                                    <a href="{{ route('cheese-cutting.create', ['batchItem' => $wheelItem, 'return' => 'batch']) }}" class="mf-btn-primary">
                                         Cut {{ $wheelItem->productVariant->name }}
                                         <span class="text-[11.5px] font-mono ml-1" style="opacity: 0.8;">({{ $wheelItem->available_quantity }} left)</span>
                                     </a>
@@ -331,7 +338,6 @@
                                 </button>
                             @endif
                         @endunless
-                    @endif
                 </div>
                 @php
                     // Releases that landed in this (mature) batch — each can be
@@ -359,7 +365,7 @@
                             @php $log = $entry['log']; $matureItem = $entry['item']; $canUndo = $matureItem->available_quantity >= $log->wheels_converted; @endphp
                             <div class="flex items-center gap-2 flex-wrap">
                                 <span>
-                                    Released {{ $log->wheels_converted }} wheel(s) on {{ $log->conversion_date->format('d/m/Y') }}
+                                    Released {{ $log->wheels_converted }} {{ Str::plural('wheel', $log->wheels_converted) }} on {{ $log->conversion_date->format('d/m/Y') }}
                                     @if($log->sourceBatchItem?->batch)
                                         from <span class="font-mono">{{ $log->sourceBatchItem->batch->batch_code }}</span>
                                     @endif
@@ -367,7 +373,7 @@
                                 @can('delete', $log)
                                     @if($canUndo)
                                         <form method="POST" action="{{ route('cheese-conversion.undo', $log) }}"
-                                              data-confirm-title="Return to farmhouse hold?" data-confirm="Return {{ $log->wheels_converted }} wheel(s) to the farmhouse maturing hold?" data-confirm-label="Return" data-confirm-danger>
+                                              data-confirm-title="Return to farmhouse hold?" data-confirm="They go back into the farmhouse batch's maturing hold; this mature batch loses them." data-confirm-label="Return" data-confirm-danger>
                                             @csrf
                                             <button type="submit" class="mf-link" style="color: var(--accent-ink);">Return to farmhouse hold</button>
                                         </form>
@@ -381,5 +387,6 @@
                 @endif
             </div>
         </div>
+        @endif
     </div>
 </x-app-layout>

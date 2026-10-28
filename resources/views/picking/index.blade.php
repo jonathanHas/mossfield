@@ -50,6 +50,9 @@
                 <h1 class="font-display" style="font-size: 24px; font-weight: 500; letter-spacing: -0.5px; margin: 0; font-family: Fraunces, Georgia, serif;">
                     {{ $dayLabel($selected) }}
                 </h1>
+                @if ($selected !== null && $selected !== 'none' && \Illuminate\Support\Carbon::parse($selected)->lt(today()))
+                    <span class="mf-tag mf-tag-warn">Past its delivery date</span>
+                @endif
                 @if ($nextDay)
                     <a href="{{ route('picking.index', ['date' => $nextDay]) }}" class="mob-day-nav" title="{{ $dayLabel($nextDay) }}" aria-label="Next day: {{ $dayLabel($nextDay) }}">▶</a>
                 @endif
@@ -162,7 +165,7 @@
         <div class="mob-footer">
             <a href="{{ route('picking.show', $continueTo['order']) }}" class="mob-fab accent">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16V8l-8-4-8 4v8l8 4 8-4z"/></svg>
-                Continue picking
+                {{ $continueTo['state'] === 'todo' ? 'Start picking' : 'Continue picking' }}
             </a>
         </div>
     @endif

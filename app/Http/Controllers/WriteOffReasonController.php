@@ -19,7 +19,11 @@ class WriteOffReasonController extends Controller
     {
         $this->authorize('viewAny', WriteOffReason::class);
 
-        $reasons = WriteOffReason::ordered()->withCount('writeOffs')->get();
+        // "Used" counts write-offs that stand; reversed ones are named apart.
+        $reasons = WriteOffReason::ordered()->withCount([
+            'writeOffs as active_count' => fn ($q) => $q->whereNull('reversed_at'),
+            'writeOffs as reversed_count' => fn ($q) => $q->whereNotNull('reversed_at'),
+        ])->get();
 
         return view('write-off-reasons.index', compact('reasons'));
     }

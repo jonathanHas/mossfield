@@ -90,6 +90,137 @@ baseline.
 
 ---
 
+## 2026-10-28 — UX review, part 2 (Plan/Implement cycle 14)
+
+**Scope:** the Planner walked the app in Chrome as every role — production,
+factory on a phone, driver, admin, finance off the happy path, the sad paths,
+1280 px and 390 px — and wrote 25 findings to `UX_REVIEW_2026-10-28.md`
+(A1–A4 data loss and lock-out, B5–B12 figures, C13–C16 roles, D17–D25 words
+and states). All 25 landed in one cycle of 24 steps, plus the cheap polish.
+One migration (`form_token` on `stock_write_offs` and `cheese_cutting_logs`),
+one new error view, one new test file. No change to the free-stock
+expression or the five-state reconciliation. Suite afterwards: **780 tests,
+0 failed** (+34; `UserManagementTest` is new).
+
+- **The backup covers the finance tables** — `BackupService::TABLES` is now
+  25 tables in FK order (`document_sequences`, `invoices`, `invoice_lines`,
+  `credit_notes`, `credit_note_lines`, `payments`, `payment_allocations`,
+  `statements`, `document_emails` added; `invoices` precedes `orders` for
+  `orders.invoice_id`), all `ADDED_LATER => true` so a pre-invoicing backup
+  still restores (as empty — exact). `FORMAT_VERSION` stays 2. The `/backup`
+  page labels every table. `BackupRestoreTest::test_finance_tables_round_trip`
+  pins invoice number + balance, `orders.invoice_id`, the payment allocation,
+  credit note, statement and the full `document_sequences` map;
+  `test_a_backup_from_before_invoicing_still_restores` the fallback.
+  **Still to say somewhere the operator reads it:** a restore sets invoice
+  numbering back to the backup's (next cycle).
+- **An admin can't demote or deactivate themselves** — the old path ran
+  `logOutEverywhere()` on the admin's own session and dropped them on the
+  login page with no message. `UserController::update()` now refuses
+  (before the last-admin checks) with "You can't change your own role or
+  deactivate yourself — ask another admin." under `role` / `is_active`; the
+  edit form disables both controls for yourself and carries the current
+  values in hidden inputs so saving your own name still works; the flash on
+  someone else says "User updated — {name} has been signed out everywhere."
+  New users default to Office, not Admin. `destroy()`/`deactivate()` already
+  refused self. `UserManagementTest` (7 cases).
+- **Back + submit no longer records a second write-off or cut** — the
+  payment form's per-render `form_token` (unique, nullable, 36 chars) on
+  both tables; `old('form_token', uuid)` keeps the token across a refused
+  submit and only a successful write stores it; the controllers pre-check
+  and also catch `UniqueConstraintViolationException` outside the
+  transaction (double-click race) → "Already recorded — this was a repeat
+  submission." On cuts the repeat check runs *before* the free-wheel check,
+  so re-posting the last wheel's cut says "Already recorded", not "No free
+  wheels". `StockWriteOffTest`, `CheeseCutWeightTest` (two cases each).
+- **419 has a page** — `errors/419.blade.php` on the error layout: "Your
+  session ended before that was saved — sign in and try again." with the
+  usual one link home. `ErrorPagesTest` (two cases, via a throwaway
+  `Route::get('/_test-419')` inside the test).
+- **Undoing a release removes the empty mature batch** — a release
+  get-or-creates one Mature batch per source; undo used to leave it at 0
+  produced on every stock screen ("Matured into G…-1" on a card that held
+  nothing). `undoRelease()` now deletes the mature batch after the log
+  delete when every item is at 0 produced **and** `Batch::deletionBlocker()`
+  is null (its counts are re-queried after the delete; a reversed write-off
+  keeps the batch), and redirects to the source batch: "…Batch {code} held
+  nothing else and was removed." A second release recreates the batch with
+  the same code. `CheeseConversionTest` (one changed, two new cases).
+- **Figures**: "Active" and "Ready to sell" on `/batches` exclude expired
+  batches (closed, or active past expiry), and a filtered empty result says
+  "No batches match these filters" with Clear filters (`DashboardTest`);
+  the batch page's "Sold" column is **Picked / sold** with a title, and a
+  converted item's Unit weight says "nominal from the source wheel"; **void
+  invoices export with 0.00** in all six money columns so the Gross column
+  still sums to turnover (`InvoicingExportTest`); a run with no charge shows
+  "run has no charge" linking to the run's edit page instead of a toggle
+  that does nothing (`DeliveryChargeTest`); the write-off reasons' Used
+  column counts active write-offs and names "+ N reversed"
+  (`StockWriteOffTest`).
+- **Roles**: the factory's Expired tile no longer says "· write off"
+  (gated on `can('create', StockWriteOff::class)`); the products index Edit
+  link is under `@can('update')` (`ProductStockFigureTest`); the driver
+  dashboard says "The run sheet hasn't been opened to drivers yet. The
+  office has your stops for today." instead of promising a route manifest.
+- **Mature not set up**: the allocator hides Release (control *and* the
+  sibling hidden form) and shows a warn strip —
+  `CheeseConversionController::MATURE_NOT_SET_UP`, one string shared by the
+  view, `release()`'s refusal and the tests — with a link to add the product.
+  The release flash names where the wheels went: "Released N wheels into
+  mature batch {code} ({product}). Undo from that batch's page."
+  `Str::plural` replaces every "wheel(s)" and "units across"; the three
+  conversion dialogs' bodies are consequences, not the title again.
+- **Picking**: a refused weight hands back the weights already typed (the
+  pick form's Alpine state is seeded from `old()`, 0-based to match
+  `weights[i-1]`, with `init() { this.clamp(); }`); the stepper says "N in
+  this batch" from the batch's real stock, not the need-clamped max, and
+  batch rows read "M in stock · oldest first" (no "pickable", no "(FIFO)");
+  **next up never points at a dead order** (same day, else the first with
+  `delivery_date` null or ≥ today) and a past day or past next-up carries a
+  "Past its delivery date" tag; the queue footer says "Start picking" for an
+  untouched order. `PickingTest` (five new cases; the two item-page cases
+  set `ready_date` after create because `Batch::boot()` makes the helper's
+  cheese batch unready — see *Traps*).
+- **Credit-note form**: `x-model.number` on inputs whose Alpine model
+  started `{}` blanked their `value=` prefill, so every line showed empty
+  amounts with no explanation. The state is now seeded in `creditNoteForm(
+  creditable, rates, amounts)` — VAT from the invoice line, amounts blank
+  unless `old()` hands them back — the `value=` attributes are gone, and the
+  copy says "Enter the amount to credit on each line and leave the others
+  blank." `lines.*.amount` was already nullable and `issue()` drops ≤ 0.
+  `CreditNoteTest`.
+- **Cut from the batch page returns to the batch** — `?return=batch` on the
+  Cut buttons; `create()` computes `$returnTo`; a hidden `return` on the
+  form; success, repeat and refusal all land on `batches.show#cutting`
+  (the cutting-history panel is now `mf-landing`); Back/Cancel read "← Back
+  to batch"; `cut_date` carries `min`/`max`. `CheeseCutWeightTest`.
+- **No empty Actions panel** on milk and yoghurt batches — the whole panel
+  is cheese-only (`UxCopyTest`). **Generate statement** lands on the new row
+  (`invoicing.statements.index#statement-{id}`, rows `mf-landing`) instead of
+  `back()` (`StatementTest`).
+
+**Traps recorded this cycle:**
+
+- A flash that names a mature batch (`G030426-1`) prefix-matches the source
+  code (`G030426`), so a test doing `strpos($html, $code)` after the release
+  or undo finds the flash, not the card. `flushSession()` (or a GET that
+  consumes the flash) first — `ConsolidationPassTest`, `CheeseConversionTest`.
+- `Batch::boot()` sets `ready_date = production + maturation days` on
+  create, overriding a value the factory/helper passed; set it *after*
+  create when a test needs a ready cheese batch (`PickingTest`).
+- A grep for retired copy ("pickable") can hit a PHP variable name; grep
+  rendered text, don't rename variables for a grep.
+
+**Dev DB:** the empty mature batch G030426-1 (batch 25) was deleted and the
+dev Mature Whole Wheel variant (id 15) set from 2.300 to 5.000 kg to match
+the dev Farmhouse wheel; `review_test` (user 9) left alone; the
+`form_token` migration is applied.
+
+**Not done, on purpose:** the 2026-10-13 leftovers (D20–D26, E29, F34 —
+next cycle); driver run-sheet access (fulfilment plan phase 4); the dev
+box's PCRE JIT and placeholder mail address; the seeder's 2.5/2.3 kg
+weights (coherent as seeded).
+
 ## 2026-10-13 — UX review, part 1 (Plan/Implement cycle 13, revision 2)
 
 **Scope:** the Planner walked the app in Chrome as the office role and wrote

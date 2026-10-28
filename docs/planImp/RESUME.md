@@ -1,4 +1,4 @@
-# Resume point — 2026-10-13
+# Resume point — 2026-10-28
 
 Where things stand, so a fresh session (or a fresh machine after a reboot) can
 pick up exactly here. Update or replace this file whenever you stop at a point
@@ -135,15 +135,29 @@ worth returning to.
   **727 tests, 0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-13.
   Jon archives `plan.md` + `implemented.md` to
   `archive/2026-10-13-ux-review-part-1/`.
-- **Next: UX review part 2** — a new plan for D20–D26 (customer form
-  required fields and defaults, order-form hints, list filters/search), E29
-  (finance nav), F34 (run-sheet address line) and the fulfil/pick wording;
-  finding 4 (Email invoice from the order page) stays deferred until Jon
-  says so.
-- **Next after that:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
-  route for the day + proof of delivery with signature) — a new feature
-  that would want a design pass before a plan. Otherwise: push and deploy
-  when the server is back (see below).
+- **Cycle 14 "UX review, part 2" — ACCEPTED 2026-10-28:** the Planner's
+  second walk-through (every role, phone widths, sad paths) → 25 findings in
+  `UX_REVIEW_2026-10-28.md`, all landed: backup covers the nine finance
+  tables; an admin can't demote/deactivate themselves; `form_token` on
+  write-off and cut forms (one migration); a 419 page; undo-release deletes
+  the empty mature batch; honest Active/Ready filters, void-invoice export,
+  "run has no charge", reversed write-offs named; factory/driver copy;
+  Release hidden when Mature isn't set up; pick form keeps typed weights and
+  names real batch stock; next-up never a dead order; credit-note form
+  prefills VAT; cut-from-batch returns to the batch; statement landing.
+  Suite **780 tests, 0 failed**. Write-up in `TESTING_AND_FIXES.md` →
+  2026-10-28. Jon archives `plan.md` + `implemented.md` +
+  `UX_REVIEW_2026-10-28.md` to `archive/2026-10-28-ux-review-part-2/` and
+  commits (explicit `git add` paths; the tree also holds the untracked
+  migration, `errors/419.blade.php` and `UserManagementTest`).
+- **Next: the 2026-10-13 leftovers** — a new plan for D20–D26 (customer
+  form required fields and defaults, order-form hints, list filters/search),
+  E29 (finance nav), F34 (run-sheet address line) and the fulfil/pick
+  wording, plus two small carry-overs from cycle 14's review: a
+  "restoring resets invoice numbering" line on `/backup` and in
+  `DEPLOYMENT.md`; `PickingTest::batchItem()` setting `ready_date` after
+  create. Finding 4 of 2026-10-13 (Email invoice from the
+  order page) stays deferred until Jon
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -175,7 +189,7 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **727 tests, 0 failing** as of 2026-10-13 (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **780 tests, 0 failing** as of 2026-10-28 (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
 
 ## Dev database — state on 2026-10-13

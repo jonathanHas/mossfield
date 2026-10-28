@@ -122,7 +122,9 @@ class PickingController extends Controller
             : null;
 
         // The order after this one in the queue, for the ready screen's "next up" card.
-        // Same delivery day first, then the queue order as before.
+        // Same delivery day first, then the first one not already past its
+        // delivery date — a months-old order is never offered as "next" unless
+        // it shares the day just finished.
         $nextOrder = null;
         if ($order->isPickingComplete()) {
             $candidates = Order::with('orderItems')
@@ -133,7 +135,7 @@ class PickingController extends Controller
                 ->orderBy('created_at')
                 ->get();
             $nextOrder = $candidates->first(fn ($candidate) => self::dayKey($candidate) === self::dayKey($order))
-                ?? $candidates->first();
+                ?? $candidates->first(fn ($candidate) => $candidate->delivery_date === null || $candidate->delivery_date->gte(today()));
         }
 
         return view('picking.show', compact('order', 'nextItem', 'suggestedBatch', 'nextOrder'));

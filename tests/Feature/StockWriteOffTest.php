@@ -310,6 +310,42 @@ class StockWriteOffTest extends TestCase
         $this->assertSame(10, $item->fresh()->quantity_remaining);
     }
 
+    public function test_a_repeat_submission_of_the_same_form_is_refused(): void
+    {
+        $item = $this->item($this->bottle, 10);
+        $payload = $this->payload($item, ['form_token' => (string) \Illuminate\Support\Str::uuid()]);
+
+        $this->actingAs($this->office)
+            ->post(route('batches.write-offs.store', $item->batch), $payload)
+            ->assertSessionHas('success', 'Written off 2 × 1L Bottle — Damaged / dropped.');
+
+        // Back + submit: the browser re-posts the same rendered form.
+        $this->actingAs($this->office)
+            ->post(route('batches.write-offs.store', $item->batch), $payload)
+            ->assertRedirect(route('batches.show', $item->batch).'#write-offs')
+            ->assertSessionHas('success', 'Already recorded — this was a repeat submission.');
+
+        $this->assertSame(1, StockWriteOff::count());
+        $this->assertSame(8, $item->fresh()->quantity_remaining);
+
+        // A fresh form (new token) is a new write-off; no token still works.
+        $this->actingAs($this->office)
+            ->post(route('batches.write-offs.store', $item->batch), $this->payload($item, ['form_token' => (string) \Illuminate\Support\Str::uuid()]));
+        $this->actingAs($this->office)
+            ->post(route('batches.write-offs.store', $item->batch), $this->payload($item));
+        $this->assertSame(3, StockWriteOff::count());
+        $this->assertSame(4, $item->fresh()->quantity_remaining);
+    }
+
+    public function test_the_form_carries_a_token(): void
+    {
+        $item = $this->item($this->bottle, 10);
+
+        $this->actingAs($this->office)->get(route('batches.show', $item->batch))
+            ->assertOk()
+            ->assertSee('name="form_token"', false);
+    }
+
     public function test_a_refusal_comes_back_to_the_panel_with_the_message(): void
     {
         $item = $this->item($this->bottle, 10);
@@ -363,6 +399,25 @@ class StockWriteOffTest extends TestCase
     }
 
     // ---------------------------------------------------------------- reasons
+
+    public function test_used_counts_active_write_offs_and_names_reversed_ones(): void
+    {
+        $item = $this->item($this->bottle, 10);
+        $this->service->reverse($this->writeOff($item, 1, null, 'spoiled'), $this->office);
+        $this->writeOff($item, 1, null, 'damaged');
+
+        $html = $this->actingAs($this->office)->get(route('write-off-reasons.index'))->assertOk()->getContent();
+        $row = function (string $code) use ($html): string {
+            $id = $this->reason($code)->id;
+            preg_match('/id="reason-'.$id.'".*?<\/tr>/s', $html, $m);
+
+            return preg_replace('/\s+/', ' ', strip_tags($m[0] ?? ''));
+        };
+
+        $this->assertMatchesRegularExpression('/ 0 \+ 1 reversed /', $row('spoiled'));
+        $this->assertMatchesRegularExpression('/ 1 Active/', $row('damaged'));
+        $this->assertStringNotContainsString('reversed', $row('damaged'));
+    }
 
     public function test_office_adds_renames_and_deactivates_reasons(): void
     {

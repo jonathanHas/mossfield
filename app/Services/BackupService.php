@@ -34,9 +34,11 @@ class BackupService
 
     /**
      * Backed-up tables in foreign-key (insert) order. Restore deletes in the
-     * reverse of this order. `batches` is self-referential (source_batch_id),
-     * so its rows are exported/inserted ordered by id — a source batch always
-     * predates its mature offspring.
+     * reverse of this order — `document_emails` first, `users` last. `batches`
+     * is self-referential (source_batch_id), so its rows are exported/inserted
+     * ordered by id — a source batch always predates its mature offspring.
+     * `invoices` precedes `orders` (orders.invoice_id); `invoice_lines` follows
+     * `order_items`, `credit_note_lines` follows `invoice_lines`.
      *
      * Framework/infra tables (migrations, sessions, cache, jobs, …) are
      * deliberately excluded — they are recreated by `php artisan migrate`.
@@ -51,6 +53,8 @@ class BackupService
         'delivery_runs',
         'product_variants',
         'customers',
+        'document_sequences',
+        'invoices',
         'batches',
         'batch_items',
         'stock_write_offs',
@@ -60,6 +64,13 @@ class BackupService
         'cheese_cutting_logs',
         'cheese_conversion_logs',
         'order_allocations',
+        'invoice_lines',
+        'credit_notes',
+        'credit_note_lines',
+        'payments',
+        'payment_allocations',
+        'statements',
+        'document_emails',
     ];
 
     /**
@@ -76,6 +87,17 @@ class BackupService
         'stock_write_offs' => true,
         'write_off_reasons' => false,
         'settings' => false,
+        // cycle 14, finance — a backup from before the invoicing module had no
+        // invoices, payments or sequences; restoring it as empty is exact.
+        'document_sequences' => true,
+        'invoices' => true,
+        'invoice_lines' => true,
+        'credit_notes' => true,
+        'credit_note_lines' => true,
+        'payments' => true,
+        'payment_allocations' => true,
+        'statements' => true,
+        'document_emails' => true,
     ];
 
     /**

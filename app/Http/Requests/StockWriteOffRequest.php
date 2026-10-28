@@ -37,6 +37,7 @@ class StockWriteOffRequest extends FormRequest
             'weight_kg' => ['nullable', 'numeric', 'min:0.001'],
             'note' => ['nullable', 'string', 'max:255'],
             'written_off_on' => ['required', 'date'],
+            'form_token' => ['nullable', 'uuid'],
         ];
     }
 

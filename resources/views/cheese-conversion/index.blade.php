@@ -40,6 +40,17 @@
                 @endif
             </div>
 
+            {{-- Nowhere to release into: say so once, rather than offer a
+                 Release button that refuses. --}}
+            @if(! $matureReady && $canConvert)
+                <div class="mf-flash mf-flash-warn mt-4" data-mature-not-set-up>
+                    <div>
+                        {{ \App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP }}
+                        <a href="{{ route('products.create') }}" class="mf-link">Add a product</a>
+                    </div>
+                </div>
+            @endif
+
             <div class="flex items-center gap-2.5" style="margin-top: 26px; margin-bottom: 12px;">
                 <span class="text-[15px] font-semibold">Ready to mature</span>
                 <span class="mc-pill-warn">{{ $batchCount }} {{ Str::plural('batch', $batchCount) }}</span>
@@ -72,7 +83,7 @@
                             <x-mature.meta label="Age" :value="(int) $batch->production_date->diffInMonths(now()).' months'" />
                             <x-mature.meta label="Raw milk" :value="number_format($batch->raw_milk_litres, 1).'L'" />
                         </div>
-                        @if($canConvert && $eligible && $maturing > 0)
+                        @if($canConvert && $eligible && $maturing > 0 && $matureReady)
                             {{-- Release part or all of the SAVED hold (F-13). The count
                                  input and button belong to the sibling release form via
                                  form=; release() validates 1 ≤ quantity ≤ saved hold, so
@@ -83,12 +94,12 @@
                                 <input type="number" id="release-qty-{{ $item->id }}" name="quantity" form="release-form-{{ $item->id }}"
                                        min="1" max="{{ $maturing }}" value="{{ $maturing }}" required
                                        class="mf-input font-mono" style="width: 64px; padding: 4px 6px;"
-                                       x-on:input="$refs.releaseBtn.dataset.confirm = `Release ${$event.target.value} held wheel(s) into mature cheese?`">
+                                       x-on:input="$refs.releaseBtn.dataset.confirm = `${$event.target.value} ${$event.target.value == 1 ? 'wheel leaves' : 'wheels leave'} this farmhouse batch and become mature cheese stock, in a batch traced back to it.`">
                                 <span>of {{ $maturing }} to mature</span>
                                 <button type="submit" form="release-form-{{ $item->id }}" x-ref="releaseBtn"
                                         class="mc-btn mc-btn-mature"
                                         :disabled="mature.length !== {{ $maturing }}"
-                                        data-confirm-title="Release to mature?" data-confirm="Release {{ $maturing }} held wheel(s) into mature cheese?" data-confirm-label="Release">
+                                        data-confirm-title="Release to mature?" data-confirm="The wheels leave this farmhouse batch and become mature cheese stock, in a batch traced back to it." data-confirm-label="Release">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M12 6v6l4 2"/></svg>
                                     Release
                                 </button>
@@ -265,7 +276,7 @@
                         @endif
                     </div>
                 </form>
-                @if($canConvert && $eligible && $maturing > 0)
+                @if($canConvert && $eligible && $maturing > 0 && $matureReady)
                     {{-- Release form (sibling — a form can't nest in the hold form).
                          Its quantity input sits in the card header (form= attribute). --}}
                     <form id="release-form-{{ $item->id }}" method="POST" action="{{ route('cheese-conversion.release', $item) }}" hidden>

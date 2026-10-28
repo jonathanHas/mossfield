@@ -85,6 +85,11 @@
                                         @if ($stop->delivery_charge_percent !== null)
                                             <span class="mf-tag mf-tag-neutral text-[11px]" x-show="showCharges" x-cloak
                                                   title="Set on the customer's page">{{ rtrim(rtrim(number_format((float) $stop->delivery_charge_percent, 2), '0'), '.') }} % of order value</span>
+                                        @elseif ((float) $run->delivery_charge <= 0)
+                                            {{-- Nothing to switch on: the run itself charges nothing. --}}
+                                            <span class="text-[11px]" x-show="showCharges" x-cloak style="color: var(--muted);">
+                                                <a href="{{ route('delivery-runs.edit', $run) }}" class="mf-link" title="Set a delivery charge on the run first">run has no charge</a>
+                                            </span>
                                         @else
                                             <form method="POST" action="{{ route('delivery-runs.toggle-charge', $stop) }}" x-show="showCharges" x-cloak>
                                                 @csrf

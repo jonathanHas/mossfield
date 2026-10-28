@@ -15,6 +15,7 @@ class CheeseCuttingLog extends Model
         'wheel_weight_kg',
         'total_weight_kg',
         'notes',
+        'form_token',
     ];
 
     protected $casts = [

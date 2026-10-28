@@ -10,6 +10,7 @@ use App\Models\WriteOffReason;
 use App\Services\StockException;
 use App\Services\StockWriteOffService;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -27,6 +28,12 @@ class StockWriteOffController extends Controller
         $validated = $request->validated();
         $item = BatchItem::with('productVariant')->findOrFail($validated['batch_item_id']);
         $reason = WriteOffReason::findOrFail($validated['write_off_reason_id']);
+        $formToken = $validated['form_token'] ?? null;
+
+        // Back + submit re-posts the same rendered form: refuse, don't re-run.
+        if ($formToken && StockWriteOff::where('form_token', $formToken)->exists()) {
+            return $this->repeatSubmission($batch);
+        }
 
         try {
             $writeOff = $this->writeOffs->record(
@@ -37,7 +44,11 @@ class StockWriteOffController extends Controller
                 $validated['note'] ?? null,
                 CarbonImmutable::parse($validated['written_off_on']),
                 $request->user(),
+                $formToken,
             );
+        } catch (UniqueConstraintViolationException) {
+            // Two near-simultaneous posts of the same form.
+            return $this->repeatSubmission($batch);
         } catch (StockException $e) {
             return $this->toPanel($batch)->withErrors(['write_off' => $e->getMessage()])->withInput();
         }
@@ -97,6 +108,11 @@ class StockWriteOffController extends Controller
 
         return $this->toPanel($batch)->with('success', 'Write-off reversed — '.$writeOff->quantity.' '
             .Str::plural('unit', $writeOff->quantity).' returned to free stock.');
+    }
+
+    private function repeatSubmission(Batch $batch): RedirectResponse
+    {
+        return $this->toPanel($batch)->with('success', 'Already recorded — this was a repeat submission.');
     }
 
     private function toPanel(Batch $batch): RedirectResponse

@@ -197,6 +197,9 @@ class ConsolidationPassTest extends TestCase
     {
         $wheelItem = $this->workedBatch();
         $code = $wheelItem->batch->batch_code;
+        // The release flash names the mature batch (cycle 14), whose code
+        // starts with this one: drop it so strpos() finds the card.
+        $this->flushSession();
 
         foreach (['batches.index' => ['type' => 'cheese'], 'cheese-cutting.index' => []] as $route => $params) {
             $html = $this->actingAs($this->office)->get(route($route, $params))->assertOk()->getContent();
@@ -218,6 +221,7 @@ class ConsolidationPassTest extends TestCase
         $wheelItem = $this->workedBatch();
         // The raw figure lumps 2 sold + 1 cut + 1 converted together.
         $this->assertSame(4, $wheelItem->quantity_sold);
+        $this->flushSession(); // the release flash names the mature batch (cycle 14)
 
         $html = $this->actingAs($this->office)->get(route('batches.index', ['type' => 'cheese']))->assertOk()->getContent();
         $card = substr($html, strpos($html, $wheelItem->batch->batch_code), 20000);

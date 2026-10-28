@@ -152,6 +152,20 @@ class DeliveryChargeTest extends TestCase
             ->assertSee(route('delivery-runs.toggle-charge', Customer::sole()), false);
     }
 
+    public function test_a_run_with_no_charge_offers_no_toggle(): void
+    {
+        $office = User::factory()->create();
+        $run = $this->makeRun(['delivery_charge' => 0]);
+        $stop = $this->customerOnRun($run, 'Corner Shop');
+
+        $this->actingAs($office)
+            ->get(route('delivery-runs.index'))
+            ->assertOk()
+            ->assertDontSee(route('delivery-runs.toggle-charge', $stop), false)
+            ->assertSee('run has no charge')
+            ->assertSee(route('delivery-runs.edit', $run), false);
+    }
+
     // ── Snapshot at creation ─────────────────────────────────────────
 
     public function test_office_store_snapshots_charge_and_vat_for_a_flagged_customer(): void

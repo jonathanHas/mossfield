@@ -345,7 +345,7 @@
                         </svg>
                         <div>
                             <b>Supplied short.</b>
-                            {{ $shortLines->sum('quantity_short') }} units across
+                            {{ $shortLines->sum('quantity_short') }} {{ Str::plural('unit', $shortLines->sum('quantity_short')) }} across
                             {{ $shortLines->count() }} {{ Str::plural('line', $shortLines->count()) }} weren't supplied.
                             @can('see-financials') They're excluded from the invoice. @endcan
                             <ul class="mt-1.5 ml-4 list-disc text-[12.5px]">

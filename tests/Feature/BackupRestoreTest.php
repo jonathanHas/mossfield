@@ -239,6 +239,107 @@ class BackupRestoreTest extends TestCase
         $this->assertSame(7, \App\Models\WriteOffReason::count());
     }
 
+    /** A delivered, fully-picked order for the seeded customer, invoiced. */
+    private function invoicedOrder(Customer $customer): \App\Models\Invoice
+    {
+        $order = Order::create([
+            'order_number' => 'ORD-20260703-001',
+            'customer_id' => $customer->id,
+            'order_date' => '2026-07-03', 'delivery_date' => '2026-07-03',
+            'status' => 'delivered', 'payment_status' => 'pending',
+        ]);
+        OrderItem::create([
+            'order_id' => $order->id,
+            'product_variant_id' => $this->bottle->id,
+            'quantity_ordered' => 20, 'quantity_fulfilled' => 20, 'unit_price' => 1.50,
+        ]);
+        $order->calculateTotals();
+
+        return app(\App\Services\InvoiceService::class)->issueForOrder($order->fresh(), $this->admin);
+    }
+
+    public function test_finance_tables_round_trip(): void
+    {
+        $customer = $this->seedBusinessData();
+        $invoice = $this->invoicedOrder($customer);
+        $payment = app(\App\Services\PaymentService::class)->record($customer, [
+            'amount' => 10.00, 'received_at' => '2026-07-04', 'method' => 'cash',
+        ], [$invoice->id => 10.00], $this->admin);
+        $creditNote = app(\App\Services\CreditNoteService::class)->issue($invoice, [
+            ['description' => 'Returned', 'quantity' => 1, 'amount' => 4.00, 'vat_rate' => 0],
+        ], 'Damaged', $this->admin);
+        $statement = app(\App\Services\StatementService::class)->generate(
+            $customer, \Illuminate\Support\Carbon::parse('2026-07-01'), \Illuminate\Support\Carbon::parse('2026-07-31')
+        );
+        $sequences = \App\Models\DocumentSequence::orderBy('key')->pluck('next_value', 'key')->all();
+        $balance = (float) $invoice->fresh()->balance;
+
+        $upload = $this->archiveUpload();
+
+        // Wipe the finance tables (children first).
+        foreach (['document_emails', 'statements', 'payment_allocations', 'payments', 'credit_note_lines',
+            'credit_notes', 'invoice_lines'] as $table) {
+            \Illuminate\Support\Facades\DB::table($table)->delete();
+        }
+        Order::query()->update(['invoice_id' => null]);
+        \Illuminate\Support\Facades\DB::table('invoices')->delete();
+        \Illuminate\Support\Facades\DB::table('document_sequences')->delete();
+
+        $this->actingAs($this->admin)
+            ->post(route('backup.restore'), [
+                'backup_file' => $upload, 'password' => self::PASSWORD, 'confirm' => 'RESTORE',
+            ])
+            ->assertSessionHas('success');
+
+        $restored = \App\Models\Invoice::sole();
+        $this->assertSame($invoice->number, $restored->number);
+        $this->assertSame($balance, (float) $restored->balance);
+        $this->assertSame($restored->id, Order::where('order_number', 'ORD-20260703-001')->value('invoice_id'));
+        $this->assertSame($restored->lines()->count(), $invoice->lines()->count());
+
+        $allocation = \App\Models\PaymentAllocation::sole();
+        $this->assertSame($payment->id, $allocation->payment_id);
+        $this->assertSame($restored->id, $allocation->invoice_id);
+        $this->assertSame(10.0, (float) $allocation->amount);
+
+        $restoredNote = \App\Models\CreditNote::sole();
+        $this->assertSame($creditNote->number, $restoredNote->number);
+        $this->assertSame((float) $creditNote->total, (float) $restoredNote->total);
+        $this->assertSame(1, $restoredNote->lines()->count());
+
+        $restoredStatement = \App\Models\Statement::sole();
+        $this->assertSame($statement->id, $restoredStatement->id);
+        $this->assertSame((float) $statement->closing_balance, (float) $restoredStatement->closing_balance);
+
+        $this->assertSame($sequences, \App\Models\DocumentSequence::orderBy('key')->pluck('next_value', 'key')->all());
+    }
+
+    public function test_a_backup_from_before_invoicing_still_restores(): void
+    {
+        $customer = $this->seedBusinessData();
+        $payload = app(BackupService::class)->export();
+        foreach (['document_sequences', 'invoices', 'invoice_lines', 'credit_notes', 'credit_note_lines',
+            'payments', 'payment_allocations', 'statements', 'document_emails'] as $table) {
+            unset($payload['tables'][$table]);
+        }
+        $upload = $this->archiveUpload($payload);
+
+        // An invoice made since then goes.
+        $this->invoicedOrder($customer);
+
+        $this->actingAs($this->admin)
+            ->post(route('backup.restore'), [
+                'backup_file' => $upload, 'password' => self::PASSWORD, 'confirm' => 'RESTORE',
+            ])
+            ->assertSessionHas('success');
+
+        $this->assertSame(0, \App\Models\Invoice::count());
+        $this->assertSame(0, \App\Models\DocumentSequence::count());
+        $this->assertSame(1, Order::count());
+        $this->assertSame(1, Customer::where('name', 'Dublin Market')->count());
+        $this->assertSame(100, BatchItem::first()->quantity_remaining);
+    }
+
     public function test_a_stored_setting_round_trips(): void
     {
         $this->seedBusinessData();

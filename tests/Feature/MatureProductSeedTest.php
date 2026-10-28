@@ -65,7 +65,7 @@ class MatureProductSeedTest extends TestCase
             ->post(route('cheese-conversion.release', $held), ['quantity' => 2]);
 
         $response->assertRedirect(route('cheese-conversion.index'))->assertSessionHasNoErrors();
-        $this->followRedirects($response)->assertOk()->assertDontSee('Mature cheese product is not configured');
+        $this->followRedirects($response)->assertOk()->assertDontSee(\App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP);
 
         $held->refresh();
         $this->assertSame(3, $held->quantity_remaining);

@@ -42,7 +42,7 @@
                 </thead>
                 <tbody>
                     @forelse($statements as $statement)
-                        <tr class="mf-tr-divide">
+                        <tr class="mf-tr-divide mf-landing" id="statement-{{ $statement->id }}">
                             <td class="mf-td">
                                 <a href="{{ route('invoicing.statements.preview', $statement->customer) }}" class="mf-link">
                                     {{ $statement->customer?->name }}

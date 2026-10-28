@@ -8,6 +8,8 @@
     $woItems = $batch->batchItems->filter(fn ($i) => (int) $i->quantity_produced > 0)->values();
     $weighedIds = $woItems->filter(fn ($i) => $i->productVariant?->is_variable_weight)->pluck('id')->map(fn ($id) => (string) $id)->values();
     $firstItemId = (string) old('batch_item_id', $woItems->first()?->id);
+    // One token per rendered form: Back + submit re-posts it and is refused.
+    $writeOffFormToken = old('form_token', (string) \Illuminate\Support\Str::uuid());
 @endphp
 
 <div class="mf-panel mb-4 mf-landing" id="write-offs">
@@ -24,6 +26,7 @@
                   style="border-bottom: 1px solid var(--line-2);"
                   x-data="{ item: @js($firstItemId), weighed: @js($weighedIds), qty: @js((string) old('quantity', '1')) }">
                 @csrf
+                <input type="hidden" name="form_token" value="{{ $writeOffFormToken }}">
                 @if($woItems->count() > 1)
                     <div class="md:col-span-2">
                         <label for="wo-item" class="mf-label">Item</label>

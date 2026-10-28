@@ -11,6 +11,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class CheeseConversionController extends Controller
@@ -20,12 +21,18 @@ class CheeseConversionController extends Controller
      */
     private const MATURE_PRODUCT_NAME = 'Mossfield Mature Cheese';
 
+    /** Shown on the allocator and as release()'s refusal when there is nowhere to release into. */
+    public const MATURE_NOT_SET_UP = "Mature cheese isn't set up as a product yet — add it under Products with 'Made only by conversion' ticked, with a Whole Wheel variant.";
+
     public function index(): View
     {
         $this->authorize('viewAny', CheeseConversionLog::class);
 
         $months = (int) config('mossfield.mature_conversion_months', 5);
-        $matureProductId = $this->matureProduct()?->id;
+        $matureProduct = $this->matureProduct();
+        $matureProductId = $matureProduct?->id;
+        // Release needs somewhere to go: a Mature product with an active wheel variant.
+        $matureReady = $matureProduct !== null && $this->matureWheelVariant($matureProduct) !== null;
 
         // Active, non-mature cheese batches that have whole wheels — at ANY age.
         // Wheels can be set aside (held) to mature long before they're eligible
@@ -53,7 +60,7 @@ class CheeseConversionController extends Controller
             ->orderBy('production_date', 'asc')
             ->get();
 
-        return view('cheese-conversion.index', compact('readyBatches', 'months'));
+        return view('cheese-conversion.index', compact('readyBatches', 'months', 'matureReady'));
     }
 
     /**
@@ -74,7 +81,7 @@ class CheeseConversionController extends Controller
         $batchItem->update(['quantity_maturing' => (int) $validated['quantity']]);
 
         return redirect()->route('cheese-conversion.index')
-            ->with('success', "Maturing hold updated — {$validated['quantity']} wheel(s) set aside.");
+            ->with('success', "Maturing hold updated — {$validated['quantity']} ".Str::plural('wheel', (int) $validated['quantity']).' set aside.');
     }
 
     /**
@@ -112,10 +119,10 @@ class CheeseConversionController extends Controller
         $matureWheelVariant = $matureProduct ? $this->matureWheelVariant($matureProduct) : null;
         if (! $matureWheelVariant) {
             return redirect()->route('cheese-conversion.index')
-                ->withErrors(['error' => 'Mature cheese product is not configured. Run the product seeder.']);
+                ->withErrors(['error' => self::MATURE_NOT_SET_UP]);
         }
 
-        DB::transaction(function () use ($batchItem, $wheels, $matureProduct, $matureWheelVariant) {
+        $matureBatch = DB::transaction(function () use ($batchItem, $wheels, $matureProduct, $matureWheelVariant) {
             $perWheel = $batchItem->unit_weight_kg;
 
             // One Mature batch per source ⇒ stable batch_code + 1:1 traceability.
@@ -160,10 +167,14 @@ class CheeseConversionController extends Controller
                 'wheels_converted' => $wheels,
                 'total_weight_kg' => round(((float) $perWheel) * $wheels, 3),
             ]);
+
+            return $matureBatch;
         });
 
+        // Stays on the allocator (the office is usually working down several
+        // batches); the flash says where the result is and where undo lives.
         return redirect()->route('cheese-conversion.index')
-            ->with('success', "Released {$wheels} wheel(s) to mature cheese.");
+            ->with('success', "Released {$wheels} ".Str::plural('wheel', $wheels)." into mature batch {$matureBatch->batch_code} ({$matureProduct->name}). Undo from that batch's page.");
     }
 
     /**
@@ -187,7 +198,7 @@ class CheeseConversionController extends Controller
             return back()->withErrors(['error' => 'These mature wheels have been cut, sold or allocated — release can no longer be undone.']);
         }
 
-        DB::transaction(function () use ($log, $matureItem, $source, $wheels) {
+        $removedCode = DB::transaction(function () use ($log, $matureItem, $source, $wheels) {
             $matureItem->decrement('quantity_produced', $wheels);
             $matureItem->decrement('quantity_remaining', $wheels);
             $matureItem->batch->decrement('wheels_produced', $wheels);
@@ -197,9 +208,32 @@ class CheeseConversionController extends Controller
             $source->increment('quantity_maturing', $wheels);
 
             $log->delete();
+
+            // A mature batch that now holds nothing would sit at 0 produced on
+            // every stock screen. Remove it — but only through the delete guard:
+            // any history row (even a reversed write-off) keeps it. The next
+            // release from this source recreates it.
+            $matureBatch = $matureItem->batch->fresh('batchItems');
+            if ($matureBatch->batchItems->every(fn (BatchItem $item) => (int) $item->quantity_produced === 0)
+                && $matureBatch->deletionBlocker() === null) {
+                $code = $matureBatch->batch_code;
+                $matureBatch->delete();
+
+                return $code;
+            }
+
+            return null;
         });
 
-        return back()->with('success', "Returned {$wheels} wheel(s) to the farmhouse maturing hold.");
+        $returned = "Returned {$wheels} ".Str::plural('wheel', $wheels).' to the farmhouse maturing hold.';
+
+        if ($removedCode !== null) {
+            // The mature batch page we came from is gone.
+            return redirect()->route('batches.show', $source->batch_id)
+                ->with('success', $returned." Batch {$removedCode} held nothing else and was removed.");
+        }
+
+        return back()->with('success', $returned);
     }
 
     /**

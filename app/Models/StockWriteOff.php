@@ -24,6 +24,7 @@ class StockWriteOff extends Model
         'quantity',
         'weight_kg',
         'note',
+        'form_token',
         'written_off_on',
         'written_off_by',
         'reversed_at',

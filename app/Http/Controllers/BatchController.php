@@ -58,6 +58,12 @@ class BatchController extends Controller
                     $q->where('status', 'expired')
                         ->orWhere(fn ($q) => $q->where('status', 'active')->where('expiry_date', '<=', today()));
                 });
+            } elseif ($request->status === 'active') {
+                // "Active" means sellable: the complement of the expired
+                // filter above, so an active-past-expiry batch is under
+                // Expired and not here too.
+                $query->where('status', 'active')
+                    ->where(fn ($q) => $q->whereNull('expiry_date')->orWhere('expiry_date', '>', today()));
             } else {
                 $query->where('status', $request->status);
             }
@@ -66,10 +72,13 @@ class BatchController extends Controller
         // Filter by maturation status for cheese
         if ($request->filled('maturation_status')) {
             if ($request->maturation_status === 'ready') {
+                // Ready to sell: matured, and not expired (closed or past date).
                 $query->where(function ($q) {
                     $q->whereNull('ready_date')
                         ->orWhere('ready_date', '<=', now());
-                });
+                })
+                    ->where('status', '!=', 'expired')
+                    ->where(fn ($q) => $q->whereNull('expiry_date')->orWhere('expiry_date', '>', today()));
             } elseif ($request->maturation_status === 'maturing') {
                 $query->where('ready_date', '>', now());
             }

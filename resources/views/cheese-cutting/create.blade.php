@@ -7,7 +7,7 @@
                 <div class="text-[12px] font-mono" style="color: var(--muted);">{{ $batchItem->batch->batch_code }} · {{ $batchItem->batch->product->name }}</div>
                 <h1 class="mt-0.5 text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">Cut cheese wheel</h1>
             </div>
-            <a href="{{ route('cheese-cutting.index') }}" class="mf-btn-ghost">← Back to cutting</a>
+            <a href="{{ $returnTo }}" class="mf-btn-ghost">{{ $returnParam ? '← Back to batch' : '← Back to cutting' }}</a>
         </div>
 
         <div class="mf-panel">
@@ -39,17 +39,23 @@
                         </div>
                     </div>
                     <div class="flex items-center justify-end gap-2 pt-4">
-                        <a href="{{ route('cheese-cutting.index') }}" class="mf-btn-secondary">← Back to cutting</a>
+                        <a href="{{ $returnTo }}" class="mf-btn-secondary">{{ $returnParam ? '← Back to batch' : '← Back to cutting' }}</a>
                     </div>
                 </div>
             @else
             <form method="POST" action="{{ route('cheese-cutting.store', $batchItem) }}" class="px-4 pb-5 pt-2" style="border-top: 1px solid var(--line-2);">
                 @csrf
+                {{-- One token per rendered form: Back + submit re-posts it and is refused. --}}
+                <input type="hidden" name="form_token" value="{{ old('form_token', $formToken) }}">
+                @if ($returnParam)
+                    <input type="hidden" name="return" value="{{ $returnParam }}">
+                @endif
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 mb-4">
                     <div>
                         <x-input-label for="cut_date" :value="__('Cut date')" />
-                        <x-text-input id="cut_date" type="date" name="cut_date" :value="old('cut_date', date('Y-m-d'))" required />
+                        <x-text-input id="cut_date" type="date" name="cut_date" :value="old('cut_date', date('Y-m-d'))"
+                                      min="{{ $batchItem->batch->production_date->toDateString() }}" max="{{ today()->toDateString() }}" required />
                         <x-input-error :messages="$errors->get('cut_date')" class="mt-1" />
                     </div>
 
@@ -117,7 +123,7 @@
                 </div>
 
                 <div class="flex items-center justify-end gap-2 pt-4" style="border-top: 1px solid var(--line-2);">
-                    <a href="{{ route('cheese-cutting.index') }}" class="mf-btn-ghost">Cancel</a>
+                    <a href="{{ $returnTo }}" class="mf-btn-ghost">Cancel</a>
                     <x-primary-button>{{ __('Cut wheel') }}</x-primary-button>
                 </div>
             </form>

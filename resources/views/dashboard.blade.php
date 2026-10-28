@@ -57,8 +57,7 @@
                     {{ $greeting }}, {{ $user->name }}.
                 </div>
                 <p class="mt-3 text-[13.5px]" style="color: var(--ink-2); line-height: 1.6;">
-                    Your route manifest will appear here once delivery routes are set up.
-                    For now, contact the office if you need your stops for today.
+                    The run sheet hasn't been opened to drivers yet. The office has your stops for today.
                 </p>
             </div>
         </div>
@@ -148,7 +147,7 @@
                 <div class="grid gap-3 mb-4 grid-cols-1 sm:grid-cols-3">
                     <a href="{{ route('batches.index', ['status' => 'expired']) }}">
                         <x-dash-kpi label="Expired stock" :value="$expiredCount"
-                            :sub="number_format($expiredUnits).' units · write off'"
+                            :sub="number_format($expiredUnits).' units'.($user->can('create', \App\Models\StockWriteOff::class) ? ' · write off' : '')"
                             tone="danger" />
                     </a>
                 </div>

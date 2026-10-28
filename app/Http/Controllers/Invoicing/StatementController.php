@@ -75,19 +75,22 @@ class StatementController extends Controller
             $request->user(),
         );
 
+        // Land on the new row in the list, where its PDF and email button are.
+        $landing = redirect()->route('invoicing.statements.index')->withFragment('statement-'.$statement->id);
+
         if (! $request->boolean('send')) {
-            return back()->with('success', 'Statement generated for '.$customer->name.'.');
+            return $landing->with('success', 'Statement generated for '.$customer->name.'.');
         }
 
         try {
             $row = $this->mailer->sendNow($statement, $request->user());
         } catch (InvoicingException $e) {
-            return back()->with('error', 'Statement generated, but not sent: '.$e->getMessage());
+            return $landing->with('error', 'Statement generated, but not sent: '.$e->getMessage());
         }
 
         return $row->status->value === 'sent'
-            ? back()->with('success', 'Statement emailed to '.$row->recipient.'.')
-            : back()->with('error', 'Statement generated, but the email could not be sent.');
+            ? $landing->with('success', 'Statement emailed to '.$row->recipient.'.')
+            : $landing->with('error', 'Statement generated, but the email could not be sent.');
     }
 
     public function pdf(Request $request, Statement $statement)

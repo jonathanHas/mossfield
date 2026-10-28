@@ -172,7 +172,7 @@ class LayoutFeedbackTest extends TestCase
 
         $this->followRedirects($response)
             ->assertOk()
-            ->assertSee('Mature cheese product is not configured');
+            ->assertSee(\App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP);
 
         $this->assertSame(2, $wheel->fresh()->quantity_maturing, 'nothing was released');
     }

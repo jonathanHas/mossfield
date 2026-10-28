@@ -136,10 +136,13 @@ class StatementTest extends InvoicingTestCase
                 'from' => today()->startOfMonth()->toDateString(),
                 'to' => today()->endOfMonth()->toDateString(),
             ])
-            ->assertRedirect()
+            ->assertRedirect(route('invoicing.statements.index').'#statement-'.Statement::sole()->id)
             ->assertSessionHas('success');
 
         $this->assertSame(1, Statement::count());
+        $this->actingAs($office)->get(route('invoicing.statements.index'))
+            ->assertOk()
+            ->assertSee('id="statement-'.Statement::sole()->id.'"', false);
     }
 
     public function test_generating_and_sending_emails_and_logs_it(): void

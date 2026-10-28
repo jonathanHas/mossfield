@@ -142,7 +142,7 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
         $driver = User::factory()->driver()->create();
 
         $this->actingAs($driver)->get(route('dashboard'))->assertOk()
-            ->assertSee('route manifest')
+            ->assertSee("The run sheet hasn't been opened to drivers yet.", false)
             ->assertDontSee('€');
         $this->actingAs($driver)->get(route('profile.edit'))->assertOk();
     }

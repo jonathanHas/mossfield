@@ -71,9 +71,20 @@ class DashboardTest extends TestCase
         $office->assertSee('12 units · write off'); // cycle 7: write-offs exist now
         $office->assertSee(route('batches.index', ['status' => 'expired']), false);
 
+        // Factory can't write off, so the tile doesn't tell them to.
         $this->actingAs(User::factory()->factoryWorker()->create())->get('/dashboard')
             ->assertOk()
-            ->assertSee('Expired stock');
+            ->assertSee('Expired stock')
+            ->assertSee('12 units')
+            ->assertDontSee('write off');
+    }
+
+    public function test_the_driver_dashboard_tells_the_truth(): void
+    {
+        $this->actingAs(User::factory()->driver()->create())->get('/dashboard')
+            ->assertOk()
+            ->assertSee("The run sheet hasn't been opened to drivers yet. The office has your stops for today.", false)
+            ->assertDontSee('once delivery routes are set up');
     }
 
     public function test_the_tile_is_absent_when_nothing_is_expired(): void
@@ -96,6 +107,42 @@ class DashboardTest extends TestCase
             ->assertOk()
             ->assertSee($stale->batch_code)
             ->assertDontSee($fresh->batch_code);
+    }
+
+    public function test_the_active_filter_leaves_out_batches_past_expiry(): void
+    {
+        $fresh = $this->batch(now()->addDays(5), 50);
+        $stale = $this->batch(now()->subDay(), 12);
+
+        $this->actingAs(User::factory()->create())->get(route('batches.index', ['status' => 'active']))
+            ->assertOk()
+            ->assertSee($fresh->batch_code)
+            ->assertDontSee($stale->batch_code);
+    }
+
+    public function test_ready_to_sell_leaves_out_expired_batches(): void
+    {
+        $fresh = $this->batch(now()->addDays(5), 50);
+        $stale = $this->batch(now()->subDay(), 12);
+        $closed = $this->batch(now()->addDays(5), 10);
+        $closed->update(['status' => 'expired']);
+
+        $this->actingAs(User::factory()->create())->get(route('batches.index', ['maturation_status' => 'ready']))
+            ->assertOk()
+            ->assertSee($fresh->batch_code)
+            ->assertDontSee($stale->batch_code)
+            ->assertDontSee($closed->batch_code);
+    }
+
+    public function test_a_filtered_empty_list_says_so(): void
+    {
+        $this->batch(now()->addDays(5), 50);
+
+        $this->actingAs(User::factory()->create())->get(route('batches.index', ['status' => 'sold_out']))
+            ->assertOk()
+            ->assertSee('No batches match these filters')
+            ->assertSee('Clear filters')
+            ->assertDontSee('Create first batch');
     }
 
     private function order(string $status, $deliveryDate = null): Order

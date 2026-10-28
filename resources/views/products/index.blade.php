@@ -73,8 +73,10 @@
 
                                 <div class="flex items-center gap-2 text-[13px] flex-shrink-0">
                                     <a href="{{ route('products.show', $product) }}" class="mf-link">View</a>
-                                    <span style="color: var(--faint);">·</span>
-                                    <a href="{{ route('products.edit', $product) }}" class="mf-link">Edit</a>
+                                    @can('update', $product)
+                                        <span style="color: var(--faint);">·</span>
+                                        <a href="{{ route('products.edit', $product) }}" class="mf-link">Edit</a>
+                                    @endcan
                                     @can('delete', $product)
                                         <span style="color: var(--faint);">·</span>
                                         <form action="{{ route('products.destroy', $product) }}" method="POST" class="inline">

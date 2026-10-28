@@ -25,6 +25,10 @@
         $batchMaxJson = $pickable
             ->mapWithKeys(fn ($option) => [$option['batchItem']->id => min($needed, $option['max'])])
             ->toJson();
+        // What the batch really holds — batchMax above is clamped to the need.
+        $batchStockJson = $pickable
+            ->mapWithKeys(fn ($option) => [$option['batchItem']->id => $option['max']])
+            ->toJson();
     @endphp
 
     <div class="mob-head">
@@ -49,7 +53,7 @@
                 @if ($initial)
                     <div class="flex items-center gap-1.5 mt-2 flex-wrap">
                         <span class="swatch-batch">{{ $initial['batchItem']->batch->batch_code }}</span>
-                        <span style="font-size: 11px; color: var(--muted);">Produced {{ $initial['batchItem']->batch->production_date->format('d/m') }} · {{ $initial['max'] }} in stock (FIFO)</span>
+                        <span style="font-size: 11px; color: var(--muted);">Produced {{ $initial['batchItem']->batch->production_date->format('d/m') }} · {{ $initial['max'] }} in stock · oldest first</span>
                     </div>
                 @endif
             </div>
@@ -174,11 +178,14 @@
         {{-- ── Pick form ── --}}
         <form method="POST" action="{{ route('picking.pick', [$order, $orderItem]) }}"
               x-data="{
-                  batch: '{{ $initial['batchItem']->id }}',
+                  {{-- From old() so a refused weight hands back what was typed. --}}
+                  batch: @js((string) old('batch_item_id', $initial['batchItem']->id)),
                   batchMax: {{ $batchMaxJson }},
-                  qty: {{ $initialQty }},
-                  weights: {},
-                  bulkWeight: '',
+                  batchStock: {{ $batchStockJson }},
+                  qty: {{ (int) old('quantity', $initialQty) }},
+                  weights: @js((object) array_values((array) old('weights', []))),
+                  bulkWeight: @js((string) old('actual_weight_kg', '')),
+                  init() { this.clamp(); },
                   get maxQty() { return this.batchMax[this.batch] || 0; },
                   clamp() { if (this.qty > this.maxQty) this.qty = this.maxQty; if (this.qty < 1 && this.maxQty > 0) this.qty = 1; },
                   get total() {
@@ -261,7 +268,7 @@
                     <button type="button" class="mob-step-btn" @click="qty = Math.max(1, qty - 1)" :disabled="qty <= 1">−</button>
                     <div class="flex-1 text-center">
                         <div style="font-family: Fraunces, Georgia, serif; font-size: 40px; font-weight: 500; letter-spacing: -1.5px; line-height: 1;" x-text="qty"></div>
-                        <div style="font-size: 11px; color: var(--muted); margin-top: 4px;">of {{ $needed }} needed · <span x-text="maxQty"></span> in batch</div>
+                        <div style="font-size: 11px; color: var(--muted); margin-top: 4px;">of {{ $needed }} needed · <span x-text="batchStock[batch]"></span> in this batch</div>
                     </div>
                     <button type="button" class="mob-step-btn" @click="qty = Math.min(maxQty, qty + 1)" :disabled="qty >= maxQty">+</button>
                 </div>
@@ -289,7 +296,7 @@
                             <div class="flex-1">
                                 <div class="font-mono" style="font-size: 13px; font-weight: 500;">{{ $bi->batch->batch_code }}</div>
                                 <div style="font-size: 11px; color: var(--muted);">
-                                    Produced {{ $bi->batch->production_date->format('d/m') }} · {{ min($needed, $option['max']) }} pickable{{ $j === 0 ? ' (FIFO)' : '' }}
+                                    Produced {{ $bi->batch->production_date->format('d/m') }} · {{ $option['max'] }} in stock{{ $j === 0 ? ' · oldest first' : '' }}
                                     @if ($option['reserved'] > 0)
                                         · <span style="color: var(--info);">{{ $option['reserved'] }} reserved for this line</span>
                                     @endif

@@ -136,6 +136,23 @@ class CreditNoteTest extends InvoicingTestCase
         $this->assertSame('12.00', $invoice->fresh()->balance);
     }
 
+    public function test_the_form_prefills_vat_and_leaves_amounts_blank(): void
+    {
+        $invoice = $this->issue($this->deliveredOrder(10, deliveryCharge: 4.50));
+
+        $html = $this->actingAs(User::factory()->create())
+            ->get(route('invoicing.credit-notes.create', $invoice))
+            ->assertOk()
+            ->assertSee('Enter the amount to credit on each line and leave the others blank.')
+            ->getContent();
+
+        // Product line 0 % VAT, delivery line 23 %, handed to the Alpine state.
+        $this->assertMatchesRegularExpression('/creditNoteForm\([0-9.]+, JSON\.parse\(\'\[0,23\]\'\)/', $html);
+        // No amount input carries a value — the operator types what to credit.
+        $this->assertSame(0, preg_match('/name="lines\[\d+\]\[amount\]"[^>]*value=/', $html));
+        $this->assertSame(0, preg_match('/value="[^"]*"[^>]*name="lines\[\d+\]\[amount\]"/', $html));
+    }
+
     public function test_zero_lines_are_dropped_and_an_empty_note_is_refused(): void
     {
         $invoice = $this->issue($this->deliveredOrder(10));

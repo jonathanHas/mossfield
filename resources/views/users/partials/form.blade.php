@@ -36,23 +36,43 @@
         <p class="text-[12px] mt-1" style="color: var(--muted);">Minimum 8 characters. Share this with the user in person; they can change it via Profile.</p>
     </div>
 
+    @php
+        // An admin can't demote or deactivate themselves: the controls are
+        // disabled (so not posted) and hidden inputs carry the current values.
+        $isSelf = $user !== null && $user->id === auth()->id();
+    @endphp
+
     <div>
         <label for="role" class="mf-label">Role</label>
-        <select name="role" id="role" required class="mf-select">
+        @if ($isSelf)
+            <input type="hidden" name="role" value="{{ $user->role->value }}">
+        @endif
+        <select name="role" id="role" required class="mf-select" @disabled($isSelf)>
             @foreach ($roles as $role)
-                <option value="{{ $role->value }}" {{ old('role', $user?->role?->value) === $role->value ? 'selected' : '' }}>
+                <option value="{{ $role->value }}" {{ old('role', $user?->role?->value ?? \App\Enums\UserRole::Office->value) === $role->value ? 'selected' : '' }}>
                     {{ $role->label() }}
                 </option>
             @endforeach
         </select>
+        @if ($isSelf)
+            <p class="text-[12px] mt-1" style="color: var(--muted);">You can't change your own role — ask another admin.</p>
+        @endif
     </div>
 
     <div class="md:col-span-2">
         <label class="inline-flex items-center">
-            <input type="hidden" name="is_active" value="0">
-            <input type="checkbox" name="is_active" value="1"
-                   {{ old('is_active', $user?->is_active ?? true) ? 'checked' : '' }} class="mf-checkbox">
+            @if ($isSelf)
+                <input type="hidden" name="is_active" value="{{ $user->is_active ? 1 : 0 }}">
+                <input type="checkbox" value="1" {{ $user->is_active ? 'checked' : '' }} class="mf-checkbox" disabled>
+            @else
+                <input type="hidden" name="is_active" value="0">
+                <input type="checkbox" name="is_active" value="1"
+                       {{ old('is_active', $user?->is_active ?? true) ? 'checked' : '' }} class="mf-checkbox">
+            @endif
             <span class="ml-2 text-[13px]">Active (can log in)</span>
         </label>
+        @if ($isSelf)
+            <p class="text-[12px] mt-1" style="color: var(--muted);">You can't change your own active flag — ask another admin.</p>
+        @endif
     </div>
 </div>

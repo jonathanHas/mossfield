@@ -8,13 +8,13 @@
             </h1>
             <div class="mt-0.5 text-[13px]" style="color: var(--muted);">
                 {{ $invoice->customer?->name }} · up to €{{ number_format($creditable, 2) }} can still be credited.
-                Set any line you're not crediting to zero.
+                Enter the amount to credit on each line and leave the others blank.
             </div>
         </div>
 
 
         <form method="POST" action="{{ route('invoicing.credit-notes.store', $invoice) }}"
-              x-data="creditNoteForm({{ $creditable }})">
+              x-data="creditNoteForm({{ $creditable }}, @js(array_map(fn ($l) => (float) $l['vat_rate'], $suggested)), @js(array_map(fn ($i) => (string) old("lines.$i.amount", ''), array_keys($suggested))))">
             @csrf
 
             <div class="mf-panel mb-4">
@@ -44,12 +44,12 @@
                                 <td class="mf-td text-right">
                                     <input type="number" step="0.01" min="0" max="100" name="lines[{{ $index }}][vat_rate]"
                                            class="mf-input text-right font-mono" style="width: 80px;"
-                                           value="{{ $line['vat_rate'] }}" x-model.number="rates[{{ $index }}]">
+                                           x-model.number="rates[{{ $index }}]">
                                 </td>
                                 <td class="mf-td text-right">
                                     <input type="number" step="0.01" min="0" name="lines[{{ $index }}][amount]"
                                            class="mf-input text-right font-mono" style="width: 130px;"
-                                           value="{{ $line['amount'] }}" x-model.number="amounts[{{ $index }}]">
+                                           x-model.number="amounts[{{ $index }}]">
                                 </td>
                             </tr>
                         @endforeach
@@ -85,12 +85,15 @@
 
         <script>
             /* Live total so the operator sees the credit build up, and can't
-               submit more than the invoice has left to give. */
-            function creditNoteForm(creditable) {
+               submit more than the invoice has left to give. The state is
+               seeded here, not from value= (x-model blanks an input whose
+               model starts undefined): VAT from the invoice line, amounts
+               blank unless a refused submit is handing them back. */
+            function creditNoteForm(creditable, rates, amounts) {
                 return {
                     creditable,
-                    amounts: {},
-                    rates: {},
+                    amounts: { ...amounts },
+                    rates: { ...rates },
                     total() {
                         return Object.keys(this.amounts).reduce((sum, key) => {
                             const amount = parseFloat(this.amounts[key]) || 0;

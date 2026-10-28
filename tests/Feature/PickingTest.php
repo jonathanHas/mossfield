@@ -261,6 +261,53 @@ class PickingTest extends TestCase
         $this->assertSame(0, $item->fresh()->quantity_fulfilled);
     }
 
+    public function test_a_refused_weight_keeps_the_weights_already_typed(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $wheel = $this->variant([
+            'is_variable_weight' => true, 'is_bulk_weighed' => false, 'is_priced_by_weight' => true,
+            'weight_kg' => 2.5, 'base_price' => 14.00,
+        ]);
+        [$order, $item] = $this->orderWithItem($wheel, 2);
+        $batchItem = $this->batchItem($wheel, 5);
+        // Batch::boot() sets a cheese ready_date 90 days out; the pick form renders for ready stock only.
+        $batchItem->batch->update(['ready_date' => now()->subDay()]);
+
+        $this->actingAs($factory)
+            ->from(route('picking.item', [$order, $item]))
+            ->post(route('picking.pick', [$order, $item]), [
+                'batch_item_id' => $batchItem->id,
+                'quantity' => 2,
+                'weights' => ['5.1', '52'],
+            ])
+            ->assertRedirect(route('picking.item', [$order, $item]))
+            ->assertSessionHasInput('weights');
+
+        // The form's Alpine state starts from old(), so the inputs refill.
+        $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
+            ->assertOk()
+            ->assertSee('Check the decimal point')
+            ->assertSeeInOrder(['weights:', '5.1', '52', 'bulkWeight:'], false);
+        $this->assertSame(0, $item->fresh()->quantity_fulfilled);
+    }
+
+    public function test_the_pick_screen_names_the_real_batch_stock(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $variant = $this->variant();
+        [$order, $item] = $this->orderWithItem($variant, 2);
+        // Batch::boot() sets a cheese ready_date 90 days out; the chooser lists ready stock only.
+        $this->batchItem($variant, 23)->batch->update(['ready_date' => now()->subDay()]);
+
+        $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
+            ->assertOk()
+            ->assertSee('23 in stock')
+            ->assertSee('in this batch')
+            ->assertSee('oldest first')
+            ->assertDontSee('pickable')
+            ->assertDontSee('(FIFO)');
+    }
+
     public function test_variable_weight_pick_records_weight_and_prices_by_it(): void
     {
         $factory = User::factory()->factoryWorker()->create();
@@ -430,6 +477,53 @@ class PickingTest extends TestCase
         $this->actingAs($factory)->get(route('picking.index', ['date' => $past->toDateString()]))
             ->assertOk()
             ->assertSee($late->order_number);
+    }
+
+    /** A finished order today: its line fully picked, status ready. */
+    private function finishedOrderFor($deliveryDate): Order
+    {
+        $order = $this->orderFor($deliveryDate, 2, 'ready');
+        $order->orderItems()->update(['quantity_fulfilled' => 2]);
+
+        return $order->fresh();
+    }
+
+    public function test_next_up_never_points_at_an_order_past_its_date(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $done = $this->finishedOrderFor(today());
+        $this->orderFor(today()->subMonths(3), 4);          // July, still confirmed
+        $tomorrow = $this->orderFor(today()->addDay(), 1);
+
+        $this->actingAs($factory)->get(route('picking.show', $done))
+            ->assertOk()
+            ->assertViewHas('nextOrder', fn ($next) => $next?->id === $tomorrow->id)
+            ->assertDontSee('Past its delivery date');
+
+        $tomorrow->update(['status' => 'cancelled']);
+        $this->actingAs($factory)->get(route('picking.show', $done))
+            ->assertOk()
+            ->assertViewHas('nextOrder', null)
+            ->assertDontSee('Next up');
+    }
+
+    public function test_a_past_day_says_so_and_an_untouched_day_says_start(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+        $past = today()->subDays(5);
+        $this->orderFor($past, 2);
+        $this->orderFor(today(), 1);
+
+        $this->actingAs($factory)->get(route('picking.index', ['date' => $past->toDateString()]))
+            ->assertOk()
+            ->assertSee('Past its delivery date');
+
+        $this->actingAs($factory)->get(route('picking.index'))
+            ->assertOk()
+            ->assertViewHas('selected', today()->toDateString())
+            ->assertDontSee('Past its delivery date')
+            ->assertSee('Start picking')
+            ->assertDontSee('Continue picking');
     }
 
     public function test_queue_defaults_to_today_when_today_has_work(): void

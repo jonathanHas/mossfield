@@ -233,7 +233,7 @@ class CheeseConversionTest extends TestCase
         $office = $this->office();
         $this->hold($office, $wheel, 3);
 
-        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3])
+        $response = $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3])
             ->assertRedirect(route('cheese-conversion.index'));
 
         $wheel->refresh();
@@ -247,6 +247,39 @@ class CheeseConversionTest extends TestCase
         $this->assertSame(3, $matureItem->quantity_remaining);
         $this->assertTrue($matureBatch->isReadyToSell()); // production carried forward
         $this->assertSame(3, (int) CheeseConversionLog::first()->wheels_converted);
+
+        // The flash says where the wheels went and where the undo lives.
+        $flash = session('success');
+        $this->assertStringContainsString($matureBatch->batch_code, $flash);
+        $this->assertStringContainsString('Undo from', $flash);
+        $this->assertStringStartsWith('Released 3 wheels into mature batch', $flash);
+    }
+
+    public function test_release_is_hidden_when_mature_cheese_is_not_set_up(): void
+    {
+        $this->matureVacuum->delete();
+        $this->matureWheel->delete();
+        $this->mature->delete();
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 2);
+
+        $this->actingAs($office)->get(route('cheese-conversion.index'))
+            ->assertOk()
+            ->assertSee(\App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP)
+            ->assertSee(route('products.create'), false)
+            ->assertDontSee('release-form-', false);
+
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 2])
+            ->assertRedirect(route('cheese-conversion.index'))
+            ->assertSessionHasErrors(['error' => \App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP]);
+        $this->assertSame(2, $wheel->fresh()->quantity_maturing);
+
+        // Factory can't release anyway: neither the strip nor the button.
+        $this->actingAs(User::factory()->factoryWorker()->create())->get(route('cheese-conversion.index'))
+            ->assertOk()
+            ->assertDontSee('data-mature-not-set-up', false)
+            ->assertDontSee('release-form-', false);
     }
 
     public function test_release_with_no_hold_is_rejected(): void
@@ -371,15 +404,77 @@ class CheeseConversionTest extends TestCase
         $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3]);
 
         $log = CheeseConversionLog::first();
-        $this->actingAs($office)->post(route('cheese-conversion.undo', $log))->assertRedirect();
+        $matureBatch = Batch::where('product_id', $this->mature->id)->sole();
+        $this->actingAs($office)
+            ->from(route('batches.show', $matureBatch))
+            ->post(route('cheese-conversion.undo', $log))
+            ->assertRedirect(route('batches.show', $wheel->batch_id))
+            ->assertSessionHas('success', "Returned 3 wheels to the farmhouse maturing hold. Batch {$matureBatch->batch_code} held nothing else and was removed.");
 
         $wheel->refresh();
         $this->assertSame(5, $wheel->quantity_remaining);  // wheels back
         $this->assertSame(3, $wheel->quantity_maturing);   // back into the hold
         $this->assertNull(CheeseConversionLog::find($log->id));
 
-        $matureItem = BatchItem::where('product_variant_id', $this->matureWheel->id)->first();
-        $this->assertSame(0, $matureItem->quantity_remaining);
+        // The mature batch held nothing else: it is gone, not a 0-unit ghost.
+        $this->assertNull(Batch::find($matureBatch->id));
+        $this->assertSame(0, BatchItem::where('product_variant_id', $this->matureWheel->id)->count());
+
+        $this->actingAs($office)->get(route('dashboard')); // consumes the flash, which names the code
+        $this->actingAs($office)->get(route('batches.index'))->assertOk()->assertDontSee($matureBatch->batch_code);
+        $this->actingAs($office)->get(route('stock.index'))->assertOk()->assertDontSee($matureBatch->batch_code);
+    }
+
+    public function test_undo_keeps_a_mature_batch_that_still_holds_history(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 3);
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3]);
+
+        $matureItem = BatchItem::where('product_variant_id', $this->matureWheel->id)->sole();
+        $writeOffs = app(\App\Services\StockWriteOffService::class);
+        $writeOff = $writeOffs->record(
+            $matureItem, \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(), 1, null, null, today(), $office,
+        );
+        $writeOffs->reverse($writeOff, $office);
+        $this->assertSame(3, $matureItem->fresh()->available_quantity);
+
+        $matureBatch = $matureItem->batch;
+        $this->actingAs($office)
+            ->from(route('batches.show', $matureBatch))
+            ->post(route('cheese-conversion.undo', CheeseConversionLog::sole()))
+            ->assertRedirect(route('batches.show', $matureBatch))
+            ->assertSessionHas('success', 'Returned 3 wheels to the farmhouse maturing hold.');
+
+        $this->assertSame(5, $wheel->fresh()->quantity_remaining);
+        $kept = Batch::find($matureBatch->id);
+        $this->assertNotNull($kept, 'a reversed write-off is history: the batch stays');
+        $this->assertSame(0, (int) $kept->batchItems()->sum('quantity_produced'));
+
+        // The converted item's unit weight says where it came from; a farmhouse batch doesn't.
+        $this->actingAs($office)->get(route('batches.show', $kept))->assertOk()->assertSee('nominal from the source wheel');
+        $this->actingAs($office)->get(route('batches.show', $wheel->batch_id))->assertOk()->assertDontSee('nominal from the source wheel');
+    }
+
+    public function test_a_second_release_after_undo_recreates_the_batch_with_the_same_code(): void
+    {
+        $wheel = $this->farmhouseBatch(6, 5);
+        $office = $this->office();
+        $this->hold($office, $wheel, 2);
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 2]);
+        $firstCode = Batch::where('product_id', $this->mature->id)->sole()->batch_code;
+
+        $this->actingAs($office)->post(route('cheese-conversion.undo', CheeseConversionLog::sole()));
+        $this->assertSame(0, Batch::where('product_id', $this->mature->id)->count());
+
+        $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 2])
+            ->assertSessionHasNoErrors();
+
+        $again = Batch::where('product_id', $this->mature->id)->sole();
+        $this->assertSame($firstCode, $again->batch_code);
+        $this->assertSame($wheel->batch_id, $again->source_batch_id);
+        $this->assertSame(1, CheeseConversionLog::count());
     }
 
     public function test_undo_release_blocked_once_mature_wheels_are_cut(): void

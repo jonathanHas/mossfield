@@ -161,6 +161,27 @@ class UxCopyTest extends TestCase
             ->assertDontSee('coming soon');
     }
 
+    public function test_milk_and_yoghurt_batches_have_no_empty_actions_panel(): void
+    {
+        $office = User::factory()->create();
+        $this->assertNotSame('cheese', $this->product->type);
+        $milk = $this->batch(now()->addDays(7));
+
+        $this->actingAs($office)->get(route('batches.show', $milk))
+            ->assertOk()
+            ->assertDontSee('>Actions<', false);
+
+        $cheese = Product::create(['name' => 'Copy Cheese', 'type' => 'cheese', 'maturation_days' => 30, 'is_active' => true]);
+        $cheeseBatch = Batch::create([
+            'product_id' => $cheese->id, 'production_date' => now()->subDays(60)->toDateString(),
+            'raw_milk_litres' => 100, 'status' => 'active',
+        ]);
+
+        $this->actingAs($office)->get(route('batches.show', $cheeseBatch))
+            ->assertOk()
+            ->assertSee('>Actions<', false);
+    }
+
     // ── Step 12: dead controls ───────────────────────────────────────
 
     public function test_profile_has_no_delete_account_panel_and_topbar_has_no_bell(): void

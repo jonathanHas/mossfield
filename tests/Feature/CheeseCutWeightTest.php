@@ -271,4 +271,72 @@ class CheeseCutWeightTest extends TestCase
             ->assertOk()
             ->assertSee('not weighed');
     }
+
+    // ------------------------------------------------- repeat submissions
+
+    public function test_a_repeat_submission_of_the_same_cut_is_refused(): void
+    {
+        $wheel = $this->wheels();
+        $payload = $this->cut(['form_token' => (string) \Illuminate\Support\Str::uuid()]);
+
+        $this->cutPost($wheel, $payload)->assertRedirect(route('cheese-cutting.index'));
+        $this->cutPost($wheel, $payload)
+            ->assertRedirect(route('cheese-cutting.index'))
+            ->assertSessionHas('success', 'Already recorded — this was a repeat submission.');
+
+        $this->assertSame(1, CheeseCuttingLog::count());
+        $this->assertSame(4, $wheel->fresh()->quantity_remaining);
+        $packs = BatchItem::where('product_variant_id', $this->vacuum->id)->sole();
+        $this->assertSame(18, $packs->quantity_produced);
+        $this->assertSame(18, $packs->quantity_remaining);
+    }
+
+    public function test_the_cut_form_carries_a_token(): void
+    {
+        $wheel = $this->wheels();
+
+        $this->actingAs($this->office)->get(route('cheese-cutting.create', $wheel))
+            ->assertOk()
+            ->assertSee('name="form_token"', false);
+    }
+
+    // ------------------------------------------------- started from the batch page
+
+    public function test_a_cut_started_from_the_batch_page_returns_there(): void
+    {
+        $wheel = $this->wheels();
+        $batchPage = route('batches.show', $wheel->batch);
+
+        $this->actingAs($this->office)->get($batchPage)
+            ->assertOk()
+            ->assertSee(route('cheese-cutting.create', ['batchItem' => $wheel, 'return' => 'batch']), false);
+
+        $create = $this->actingAs($this->office)
+            ->get(route('cheese-cutting.create', ['batchItem' => $wheel, 'return' => 'batch']))
+            ->assertOk()
+            ->assertSee('href="'.$batchPage.'#cutting" class="mf-btn-ghost">Cancel</a>', false)
+            ->assertSee('name="return" value="batch"', false);
+        $this->assertMatchesRegularExpression(
+            '/id="cut_date"[^>]*min="'.$wheel->batch->production_date->toDateString().'"[^>]*max="'.today()->toDateString().'"/',
+            preg_replace('/\s+/', ' ', $create->getContent())
+        );
+
+        $this->cutPost($wheel, $this->cut(['return' => 'batch']))
+            ->assertRedirect($batchPage.'#cutting')
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($this->office)->get($batchPage)->assertSee('id="cutting"', false);
+    }
+
+    public function test_a_cut_started_from_the_index_still_returns_to_the_index(): void
+    {
+        $wheel = $this->wheels();
+
+        $this->actingAs($this->office)->get(route('cheese-cutting.create', $wheel))
+            ->assertOk()
+            ->assertSee('href="'.route('cheese-cutting.index').'" class="mf-btn-ghost">Cancel</a>', false)
+            ->assertDontSee('name="return"', false);
+
+        $this->cutPost($wheel, $this->cut())->assertRedirect(route('cheese-cutting.index'));
+    }
 }

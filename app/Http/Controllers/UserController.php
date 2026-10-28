@@ -65,6 +65,14 @@ class UserController extends Controller
         $roleChanging = $user->role !== UserRole::from($data['role']);
         $deactivating = $user->is_active && ! $data['is_active'];
 
+        // logOutEverywhere() on yourself would end this very session and drop
+        // the admin on the login page without a word.
+        if ($user->id === $request->user()->id && ($roleChanging || $deactivating)) {
+            return back()->withInput()->withErrors([
+                ($roleChanging ? 'role' : 'is_active') => "You can't change your own role or deactivate yourself — ask another admin.",
+            ]);
+        }
+
         if ($roleChanging && $user->isLastActiveAdmin() && $data['role'] !== UserRole::Admin->value) {
             return back()->withInput()->withErrors([
                 'role' => 'Cannot demote the only active administrator. Promote another user first.',
@@ -88,6 +96,9 @@ class UserController extends Controller
 
         if ($roleChanging || $deactivating) {
             $user->logOutEverywhere();
+
+            return redirect()->route('users.index')
+                ->with('success', "User updated — {$user->name} has been signed out everywhere.");
         }
 
         return redirect()->route('users.index')->with('success', 'User updated.');

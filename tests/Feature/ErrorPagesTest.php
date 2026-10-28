@@ -45,6 +45,29 @@ class ErrorPagesTest extends TestCase
             ->assertDontSee('Stack trace');
     }
 
+    public function test_a_lost_session_gets_a_page_with_sign_in(): void
+    {
+        \Illuminate\Support\Facades\Route::get('/_test-419', fn () => abort(419))->middleware('web');
+
+        $this->get('/_test-419')
+            ->assertStatus(419)
+            ->assertSee('Your session ended before that was saved — sign in and try again.')
+            ->assertSee('href="'.route('login').'"', false)
+            ->assertSee('Sign in')
+            ->assertDontSee('PAGE EXPIRED')
+            ->assertDontSee('Stack trace');
+    }
+
+    public function test_a_signed_in_419_links_to_the_dashboard(): void
+    {
+        \Illuminate\Support\Facades\Route::get('/_test-419', fn () => abort(419))->middleware('web');
+
+        $this->actingAs(User::factory()->create())->get('/_test-419')
+            ->assertStatus(419)
+            ->assertSee('Your session ended before that was saved')
+            ->assertSee('href="'.route('dashboard').'"', false);
+    }
+
     public function test_json_requests_still_get_json(): void
     {
         $this->actingAs(User::factory()->create())->getJson('/orders/999999')

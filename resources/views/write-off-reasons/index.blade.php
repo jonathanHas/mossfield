@@ -37,7 +37,12 @@
                                 @endcan
                             </td>
                             <td class="mf-td font-mono text-[12px]" style="color: var(--muted);">{{ $reason->code }}</td>
-                            <td class="mf-td font-mono text-right">{{ $reason->write_offs_count }}</td>
+                            <td class="mf-td font-mono text-right">
+                                {{ $reason->active_count }}
+                                @if ($reason->reversed_count > 0)
+                                    <span class="block text-[11.5px]" style="color: var(--muted);">+ {{ $reason->reversed_count }} reversed</span>
+                                @endif
+                            </td>
                             <td class="mf-td">
                                 <span class="mf-tag mf-tag-{{ $reason->is_active ? 'accent' : 'neutral' }}">{{ $reason->is_active ? 'Active' : 'Inactive' }}</span>
                             </td>

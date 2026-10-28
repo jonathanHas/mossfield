@@ -69,6 +69,33 @@ class InvoicingExportTest extends InvoicingTestCase
         $this->assertSame(11.0, round($net, 2));
     }
 
+    /** A void invoice keeps its row but adds nothing to the column sums. */
+    public function test_a_void_invoice_exports_with_zero_money(): void
+    {
+        $this->actingAs(User::factory()->create());
+        $live = $this->issue($this->deliveredOrder(10));
+        $void = $this->issue($this->deliveredOrder(4));
+        app(\App\Services\InvoiceService::class)->void($void, 'Wrong customer');
+
+        $rows = $this->csv([
+            'type' => 'invoices',
+            'from' => today()->subDay()->toDateString(),
+            'to' => today()->addDay()->toDateString(),
+        ]);
+
+        $voidRow = collect($rows)->firstWhere(2, $void->number);
+        $this->assertSame('void', $voidRow[11]);
+        $this->assertSame($void->bill_to_name, $voidRow[3]);
+        $this->assertSame(['0.00', '0.00', '0.00', '0.00', '0.00', '0.00'], array_slice($voidRow, 5, 6));
+
+        $liveRow = collect($rows)->firstWhere(2, $live->number);
+        $this->assertSame('15.00', $liveRow[5]);
+        $this->assertSame('15.00', $liveRow[7]);
+        $this->assertSame('15.00', $liveRow[10]);
+
+        $this->assertSame(15.0, round(collect($rows)->skip(1)->sum(fn ($r) => (float) $r[7]), 2));
+    }
+
     public function test_the_payment_sheet_names_what_each_payment_settled(): void
     {
         $office = User::factory()->create();

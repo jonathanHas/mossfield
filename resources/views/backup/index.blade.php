@@ -4,18 +4,30 @@
     @php
         $tableLabels = [
             'users' => 'Users',
+            'settings' => 'Settings',
+            'write_off_reasons' => 'Write-off reasons',
             'products' => 'Products',
             'delivery_runs' => 'Delivery runs',
             'product_variants' => 'Product variants',
             'customers' => 'Customers',
+            'document_sequences' => 'Invoice numbering',
+            'invoices' => 'Invoices',
             'batches' => 'Batches',
             'batch_items' => 'Batch items (stock)',
+            'stock_write_offs' => 'Stock write-offs',
             'orders' => 'Orders',
             'customer_special_prices' => 'Customer special prices',
             'order_items' => 'Order items',
             'cheese_cutting_logs' => 'Cheese cutting logs',
             'cheese_conversion_logs' => 'Cheese conversion logs',
             'order_allocations' => 'Order allocations',
+            'invoice_lines' => 'Invoice lines',
+            'credit_notes' => 'Credit notes',
+            'credit_note_lines' => 'Credit note lines',
+            'payments' => 'Payments',
+            'payment_allocations' => 'Payment allocations',
+            'statements' => 'Statements',
+            'document_emails' => 'Documents sent',
         ];
         $totalRows = array_sum($rowCounts);
     @endphp

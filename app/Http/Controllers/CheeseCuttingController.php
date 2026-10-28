@@ -7,9 +7,11 @@ use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseCuttingLog;
 use App\Models\ProductVariant;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 class CheeseCuttingController extends Controller
@@ -77,7 +79,7 @@ class CheeseCuttingController extends Controller
         return view('cheese-cutting.index', compact('readyBatches', 'spokenFor'));
     }
 
-    public function create(BatchItem $batchItem): View
+    public function create(Request $request, BatchItem $batchItem): View
     {
         $this->authorize('create', CheeseCuttingLog::class);
 
@@ -93,7 +95,19 @@ class CheeseCuttingController extends Controller
             ->where('is_active', true)
             ->get();
 
-        return view('cheese-cutting.create', compact('batchItem', 'vacuumPackVariants'));
+        // A cut started from the batch page goes back there, not to the index.
+        $returnTo = $request->query('return') === 'batch'
+            ? route('batches.show', $batchItem->batch).'#cutting'
+            : route('cheese-cutting.index');
+
+        return view('cheese-cutting.create', [
+            'batchItem' => $batchItem,
+            'vacuumPackVariants' => $vacuumPackVariants,
+            'returnTo' => $returnTo,
+            'returnParam' => $request->query('return') === 'batch' ? 'batch' : null,
+            // One token per rendered form: Back + submit re-posts it and is refused.
+            'formToken' => (string) Str::uuid(),
+        ]);
     }
 
     public function store(CheeseCutRequest $request, BatchItem $batchItem): RedirectResponse
@@ -103,17 +117,37 @@ class CheeseCuttingController extends Controller
         // as does the policy check (its authorize() runs before this body).
         $this->authorize('create', CheeseCuttingLog::class);
         $validated = $request->validated();
+        $formToken = $validated['form_token'] ?? null;
+
+        if ($formToken && CheeseCuttingLog::where('form_token', $formToken)->exists()) {
+            return $this->repeatSubmission($request, $batchItem);
+        }
 
         // Ensure we have enough free wheels to cut — wheels reserved by an order
         // or set aside for maturing aren't cuttable. Redirect to the form
         // explicitly rather than back(): a refusal must land where the operator
         // can read it, whatever page the request came from.
         if ($batchItem->available_quantity < 1) {
-            return redirect()->route('cheese-cutting.create', $batchItem)
+            return redirect()->route('cheese-cutting.create', array_filter([
+                'batchItem' => $batchItem, 'return' => $request->input('return') === 'batch' ? 'batch' : null,
+            ]))
                 ->withErrors(['error' => 'No free wheels remaining to cut (remaining wheels are allocated or set aside for maturing).']);
         }
 
-        DB::transaction(function () use ($validated, $batchItem) {
+        try {
+            $this->cut($validated, $batchItem, $formToken);
+        } catch (UniqueConstraintViolationException) {
+            // Two near-simultaneous posts of the same form.
+            return $this->repeatSubmission($request, $batchItem);
+        }
+
+        return $this->afterCut($request, $batchItem)
+            ->with('success', 'Cheese wheel cut successfully! Created '.$validated['vacuum_packs_created'].' vacuum packs.');
+    }
+
+    private function cut(array $validated, BatchItem $batchItem, ?string $formToken): void
+    {
+        DB::transaction(function () use ($validated, $batchItem, $formToken) {
             // Get or create batch item for vacuum packs in the same batch
             $vacuumPackBatchItem = BatchItem::firstOrCreate(
                 [
@@ -143,10 +177,22 @@ class CheeseCuttingController extends Controller
                 'wheel_weight_kg' => $validated['wheel_weight_kg'],
                 'total_weight_kg' => $validated['total_weight_kg'],
                 'notes' => $validated['notes'] ?? null,
+                'form_token' => $formToken,
             ]);
         });
+    }
 
-        return redirect()->route('cheese-cutting.index')
-            ->with('success', 'Cheese wheel cut successfully! Created '.$validated['vacuum_packs_created'].' vacuum packs.');
+    private function repeatSubmission(Request $request, BatchItem $batchItem): RedirectResponse
+    {
+        return $this->afterCut($request, $batchItem)
+            ->with('success', 'Already recorded — this was a repeat submission.');
+    }
+
+    /** Where a cut lands: the batch page when it was started there, else the index. */
+    private function afterCut(Request $request, BatchItem $batchItem): RedirectResponse
+    {
+        return $request->input('return') === 'batch'
+            ? redirect()->route('batches.show', $batchItem->batch)->withFragment('cutting')
+            : redirect()->route('cheese-cutting.index');
     }
 }

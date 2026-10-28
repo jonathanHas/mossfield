@@ -236,4 +236,15 @@ class ProductStockFigureTest extends TestCase
         $this->assertSame(22 + 3, $expected, 'sanity check on the reference figure');
         $this->assertFigureReads($expected, $this->wheel, 'the product figure is the bulk form of available_quantity');
     }
+
+    public function test_the_factory_gets_no_edit_link_on_the_products_index(): void
+    {
+        $this->actingAs(User::factory()->factoryWorker()->create())->get(route('products.index'))
+            ->assertOk()
+            ->assertDontSee(route('products.edit', $this->milk), false);
+
+        $this->actingAs(User::factory()->create())->get(route('products.index'))
+            ->assertOk()
+            ->assertSee(route('products.edit', $this->milk), false);
+    }
 }

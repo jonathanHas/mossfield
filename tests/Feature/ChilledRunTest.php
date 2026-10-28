@@ -405,7 +405,9 @@ class ChilledRunTest extends TestCase
 
     public function test_run_page_has_position_inputs_one_save_and_a_percent_tag(): void
     {
-        $run = $this->makeRun();
+        // A run that charges, so a fixed-charge stop has a toggle (cycle 14: a
+        // run with no charge shows "run has no charge" instead).
+        $run = $this->makeRun(['delivery_charge' => 4.50]);
         $a = $this->customerOnRun($run, 'Shop A', 1);
         $pct = $this->customerOnRun($run, 'Percent Deli', 2);
         $pct->update(['delivery_charge_percent' => 5]);

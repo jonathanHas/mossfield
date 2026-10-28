@@ -31,6 +31,7 @@ class StockWriteOffService
         ?string $note,
         CarbonInterface $on,
         User $by,
+        ?string $formToken = null,
     ): StockWriteOff {
         if ($quantity < 1) {
             throw new StockException('Write off at least one unit.');
@@ -39,7 +40,7 @@ class StockWriteOffService
             throw new StockException("The reason \"{$reason->label}\" is no longer in use — choose another.");
         }
 
-        return DB::transaction(function () use ($item, $reason, $quantity, $weightKg, $note, $on, $by) {
+        return DB::transaction(function () use ($item, $reason, $quantity, $weightKg, $note, $on, $by, $formToken) {
             /** @var BatchItem $locked */
             $locked = BatchItem::with(['batch', 'productVariant'])->whereKey($item->id)->lockForUpdate()->firstOrFail();
 
@@ -90,6 +91,7 @@ class StockWriteOffService
                 'note' => $note !== null && trim($note) !== '' ? trim($note) : null,
                 'written_off_on' => $on->toDateString(),
                 'written_off_by' => $by->id,
+                'form_token' => $formToken,
             ]);
 
             $writeOff->holdReducedTo = $locked->quantity_maturing < $holdBefore ? (int) $locked->quantity_maturing : null;
