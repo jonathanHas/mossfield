@@ -130,7 +130,7 @@ class UxCopyTest extends TestCase
             ->assertSee('No limit')
             ->assertSee('€500.00');
 
-        $hint = '0 = no limit — the app warns, never blocks, when an order would exceed it.';
+        $hint = 'Leave blank for no limit — the app warns, never blocks, when an order would exceed it.';
         $this->actingAs($office)->get(route('customers.create'))->assertOk()->assertSee($hint);
         $this->actingAs($office)->get(route('customers.edit', $capped))->assertOk()->assertSee($hint);
     }

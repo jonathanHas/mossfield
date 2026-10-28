@@ -150,14 +150,39 @@ worth returning to.
   `UX_REVIEW_2026-10-28.md` to `archive/2026-10-28-ux-review-part-2/` and
   commits (explicit `git add` paths; the tree also holds the untracked
   migration, `errors/419.blade.php` and `UserManagementTest`).
-- **Next: the 2026-10-13 leftovers** — a new plan for D20–D26 (customer
-  form required fields and defaults, order-form hints, list filters/search),
-  E29 (finance nav), F34 (run-sheet address line) and the fulfil/pick
-  wording, plus two small carry-overs from cycle 14's review: a
-  "restoring resets invoice numbering" line on `/backup` and in
-  `DEPLOYMENT.md`; `PickingTest::batchItem()` setting `ready_date` after
-  create. Finding 4 of 2026-10-13 (Email invoice from the
-  order page) stays deferred until Jon
+- **Cycle 15 "The 2026-10-13 leftovers" — ACCEPTED 2026-10-28 (revision 2):**
+  D20–D26, E29, F34 and the last "fulfil" copy, the two cycle-14 carry-overs
+  and the dev-DB data fixes: customer email/city/postal code optional
+  (migration `2026_10_28_130000`, email required only while invoice
+  delivery is Email, trailing commas stripped); order-form run hint,
+  "if different" address, `~` estimates; `/orders` search + date range,
+  filters apply as they change; customers search as you type;
+  `App\View\FinanceNav` behind the sidebar and the finance tab bar; town on
+  the run sheet with the address on hover; "Pick" wording; backup
+  numbering sentence; `PickingTest::batchItem()` sets `ready_date`.
+  Revision 2 fixed the Implementer's enum-vs-string fallback in
+  `CustomerController::rules()`. Suite **808 tests, 0 failed**. Write-up in
+  `TESTING_AND_FIXES.md` → 2026-10-28 (cycle 15). Jon archives `plan.md` +
+  `implemented.md` to `archive/2026-10-28-leftovers/`, runs the browser
+  checks in the plan's *Verification*, commits with explicit `git add`
+  paths (the tree holds the untracked migration, `FinanceNav.php` and four
+  new test files) and deploys with `deploy/bin/ship-jon` — **the migration
+  must run on `mossserv`**. The four data fixes (Avoca rename; 16L bucket
+  €72 flat; Garlic & Basil wheel €16/kg; Mature wheel €20/kg by weight)
+  were applied in production by Jon through the app on 2026-10-28.
+- **Next: cycle 16 resumes parked cycle 12 (delete guards)** — plan and the
+  IN PROGRESS report in `parked/2026-10-10-delete-guards/`, tree on branch
+  `wip/cycle-12-delete-guards` (commit `a8f75d6` off `095c250`); resume
+  instructions at the top of the parked plan. **Fold in the post-acceptance
+  finding** `findings/2026-10-28-cycle-15-browser-checks.md` (four "N of M
+  fulfilled" strings on the order page that step 13's grep was blind to;
+  option 1 there: change to "picked", add an `assertDontSee` to
+  `OrderShowAllocationInlineTest`, fix the grep) and move the file into
+  cycle 16's archive folder on acceptance. The other eight browser checks
+  passed. Still deferred: finding 4 of
+  2026-10-13 (Email invoice from the order page), the sync "never
+  completed" message, and the orders search box's autofocus on a phone (see
+  cycle 15's write-up) until Jon's browser check says it bites.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -189,8 +214,17 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **780 tests, 0 failing** as of 2026-10-28 (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **808 tests, 0 failing** as of 2026-10-28 (after cycle 15) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
+
+## Dev database — cycle 15 changes, 2026-10-28
+
+Migration `2026_10_28_130000` (customer email/city/postal_code nullable) is
+applied on dev. By tinker: customer 20 renamed "Avoca Ballsbridge"; variant
+14 (16L Bucket) flat €72; variant 15 (Mature Whole Wheel) €20/kg by weight;
+nine one-letter placeholder postcodes NULL; customer 10's trailing comma
+gone. Mature on dev has no Vacuum Pack variant (the seeder makes one) —
+drift, left alone.
 
 ## Dev database — state on 2026-10-13
 

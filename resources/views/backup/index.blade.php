@@ -100,6 +100,7 @@
                     This <strong>replaces all data</strong> with the contents of the uploaded file — anything
                     created since that backup was taken will be lost. The whole restore runs in one transaction,
                     so if anything goes wrong nothing is changed.
+                    Document numbering (invoices, credit notes, statements) returns to where it stood when the backup was taken, so anything issued since would reuse a number — restore before issuing, not after.
                 </div>
             </div>
 

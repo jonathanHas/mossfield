@@ -18,10 +18,19 @@
         </div>
 
         <div class="mf-panel mb-4">
+            {{-- Filters apply as you change them (D25); Search still submits for no-JS / Enter. --}}
             <form method="GET" class="flex flex-wrap gap-3 items-end p-4">
                 <div>
+                    <label for="q" class="mf-label">Search</label>
+                    <input type="search" name="q" id="q" value="{{ $filters['q'] ?? '' }}" class="mf-input"
+                           placeholder="Order no., customer or their PO ref"
+                           x-data
+                           x-init="if ($el.value) { $el.focus(); $el.setSelectionRange($el.value.length, $el.value.length) }"
+                           x-on:input.debounce.500ms="$el.form.requestSubmit()">
+                </div>
+                <div>
                     <label for="status" class="mf-label">Status</label>
-                    <select name="status" id="status" class="mf-select">
+                    <select name="status" id="status" class="mf-select" onchange="this.form.requestSubmit()">
                         <option value="">All statuses</option>
                         <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
                         <option value="confirmed" {{ request('status') == 'confirmed' ? 'selected' : '' }}>Confirmed</option>
@@ -34,7 +43,7 @@
                 </div>
                 <div>
                     <label for="payment_status" class="mf-label">Payment</label>
-                    <select name="payment_status" id="payment_status" class="mf-select">
+                    <select name="payment_status" id="payment_status" class="mf-select" onchange="this.form.requestSubmit()">
                         <option value="">All</option>
                         <option value="pending" {{ request('payment_status') == 'pending' ? 'selected' : '' }}>Pending</option>
                         <option value="paid" {{ request('payment_status') == 'paid' ? 'selected' : '' }}>Paid</option>
@@ -44,7 +53,7 @@
                 </div>
                 <div>
                     <label for="customer_id" class="mf-label">Customer</label>
-                    <select name="customer_id" id="customer_id" class="mf-select">
+                    <select name="customer_id" id="customer_id" class="mf-select" onchange="this.form.requestSubmit()">
                         <option value="">All customers</option>
                         @foreach($customers as $customer)
                             <option value="{{ $customer->id }}" {{ request('customer_id') == $customer->id ? 'selected' : '' }}>
@@ -53,8 +62,16 @@
                         @endforeach
                     </select>
                 </div>
-                <button type="submit" class="mf-btn-secondary">Filter</button>
-                @if(request()->hasAny(['status', 'payment_status', 'customer_id']))
+                <div>
+                    <label for="from" class="mf-label">Delivery from</label>
+                    <input type="date" name="from" id="from" value="{{ $filters['from'] ?? '' }}" class="mf-input" onchange="this.form.requestSubmit()">
+                </div>
+                <div>
+                    <label for="to" class="mf-label">to</label>
+                    <input type="date" name="to" id="to" value="{{ $filters['to'] ?? '' }}" class="mf-input" onchange="this.form.requestSubmit()">
+                </div>
+                <button type="submit" class="mf-btn-secondary">Search</button>
+                @if($filters !== [])
                     <a href="{{ route('orders.index') }}" class="mf-btn-ghost">Clear</a>
                 @endif
             </form>
@@ -79,7 +96,7 @@
                     </thead>
                     <tbody>
                         @php
-                            $rowFilters = array_filter(request()->only(['status', 'payment_status', 'customer_id']), fn ($v) => $v !== null && $v !== '');
+                            $rowFilters = $filters;
                         @endphp
                         @forelse($orders as $order)
                             @php
@@ -112,13 +129,14 @@
                                 </td>
                                 <td class="mf-td whitespace-nowrap">
                                     <span class="mf-tag mf-tag-{{ $statusTone }}">{{ $order->statusLabel() }}</span>
-                                    @if($order->hasReachedReady())
-                                        <a href="{{ route('orders.docket', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View dispatch docket in a new window">Docket</a>
-                                    @endif
                                 </td>
                                 @can('see-financials')
                                     <td class="mf-td whitespace-nowrap">
-                                        <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span>
+                                        @if($order->status === 'cancelled')
+                                            <span style="color: var(--faint);">—</span>
+                                        @else
+                                            <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst($order->payment_status) }}</span>
+                                        @endif
                                         @if($order->invoice_id)
                                             <a href="{{ route('invoicing.invoices.show', $order->invoice_id) }}" class="mf-link ml-1 text-[11.5px]" title="Open the invoice in Finance">inv</a>
                                         @endif
@@ -131,6 +149,10 @@
                                         <span style="color: var(--faint);"> · </span>
                                         <a href="{{ route('orders.edit', $order) }}" class="mf-link">Edit</a>
                                     @endcan
+                                    @if($order->hasReachedReady())
+                                        <span style="color: var(--faint);"> · </span>
+                                        <a href="{{ route('orders.docket', $order) }}" class="mf-link" target="_blank" rel="noopener" title="View dispatch docket in a new window">Docket</a>
+                                    @endif
                                 </td>
                             </tr>
                         @empty

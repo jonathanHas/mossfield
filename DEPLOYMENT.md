@@ -354,6 +354,7 @@ If a deploy goes wrong:
 - **`SESSION_ENCRYPT=true` rotates the session key format.** First time you set it, all existing browser sessions are invalidated once. Users log back in; no further impact.
 - **Cron is mandatory for automated sync.** Code + env flags do not, by themselves, run the job. Without a cron entry `SYNC_SCHEDULE_ENABLED=true` does nothing.
 - **PII encryption is one-way at rest.** Encrypted columns cannot be queried by value. Anything that needs a lookup (email) stays plaintext.
+- **Restoring a backup rewinds document numbering.** `/backup` → Restore replaces `document_sequences` with the backup's, so the next invoice number is the backup's next, not today's; an invoice issued between the backup and the restore would be re-numbered on re-issue. Treat a restore as a whole-system rewind and check `/invoicing` afterwards.
 
 ---
 
@@ -388,3 +389,4 @@ After completing §1 – §6, these should all pass:
 | 2026-06-04 | Add chilled run sheet smoke test (office entry + confirm-all, factory read-only + loaded tick) |
 | 2026-06-20 | Add Mature Conversion: §4.1a seed Mossfield Mature Cheese product + `MATURE_CONVERSION_MONTHS`; `quantity_maturing` migration; conversion smoke test |
 | 2026-06-27 | Add optional Customer Reference / PO number: `orders.customer_reference` + `customers.requires_reference` migrations (additive, no env); customer-ref smoke test |
+| 2026-10-28 | Note that a restore rewinds document numbering (§9) |

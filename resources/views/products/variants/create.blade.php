@@ -79,7 +79,7 @@
                             <input type="checkbox" name="is_variable_weight" value="1" {{ old('is_variable_weight', $source?->is_variable_weight) ? 'checked' : '' }} class="mt-0.5 mf-checkbox">
                             <span class="ml-2">
                                 <span class="text-[13px] font-medium">Variable weight</span>
-                                <span class="block text-[12px]" style="color: var(--muted);">Requires weighing at fulfillment (e.g., cheese wheels).</span>
+                                <span class="block text-[12px]" style="color: var(--muted);">Weighed when picked (e.g. cheese wheels).</span>
                             </span>
                         </label>
                         <label class="flex items-start">
@@ -93,7 +93,7 @@
                             <input type="checkbox" name="is_bulk_weighed" value="1" {{ old('is_bulk_weighed', $source?->is_bulk_weighed) ? 'checked' : '' }} class="mt-0.5 mf-checkbox">
                             <span class="ml-2">
                                 <span class="text-[13px] font-medium">Weigh in bulk (single total)</span>
-                                <span class="block text-[12px]" style="color: var(--muted);">Enter one total weight at fulfilment instead of per-unit (e.g. vacuum packs). Only used when Variable weight is on.</span>
+                                <span class="block text-[12px]" style="color: var(--muted);">Enter one total weight when picking instead of per-unit (e.g. vacuum packs). Only used when Variable weight is on.</span>
                             </span>
                         </label>
                     </div>

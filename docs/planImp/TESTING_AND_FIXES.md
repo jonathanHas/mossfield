@@ -90,6 +90,103 @@ baseline.
 
 ---
 
+## 2026-10-28 — The 2026-10-13 leftovers (Plan/Implement cycle 15, revision 2)
+
+**Scope:** the findings of the 2026-10-13 office walk-through that cycle 13
+left open (D20–D26, E29, F34 and the last "fulfil" copy — Jon's decisions of
+2026-10-28 are in `UX_REVIEW_2026-10-13.md` → *Decisions for the leftovers*),
+two carry-overs from cycle 14's review, and four dev-DB data fixes. Sixteen
+steps plus one from the review (step 17). One migration, one new class
+(`App\View\FinanceNav`), four new test files. No change to stock arithmetic.
+Suite afterwards: **808 tests, 0 failed** (+28).
+
+- **The customer form stops forcing junk into fields the office doesn't have
+  (D20, D21)** — `customers.email`, `city` and `postal_code` are nullable
+  (migration `2026_10_28_130000`; `down()` backfills `''` first because
+  `nullable(false)` fails on NULL rows). `CustomerController::store()` and
+  `update()` share `rules()` + `normalise()`; `email` is
+  `Rule::requiredIf(delivery === InvoiceDelivery::Email)` with a message that
+  names the setting ("…or choose Print / post or No invoice sent"), where the
+  delivery is the posted select, else the stored preference, else Email;
+  `tidyInput()` trims name/email/address/city/postal_code/country and strips
+  trailing commas ("Kilmantin Hill,," → "Kilmantin Hill"), blanks becoming
+  NULL; a blank credit limit stores 0 and the edit form shows 0 as blank;
+  `Customer::full_address` skips blank parts so the docket and dispatch
+  confirmation print no empty commas; the duplicate-email warning skips a
+  blank email; the index prints "—" for no email. The create/edit forms drop
+  the asterisks and say what is optional. `CustomerFormTest` (12 cases),
+  `UxCopyTest`.
+- **The order form explains itself (D22–D24)** — `#deliveryDateHint` names
+  the run that filled the delivery date ("Dublin · every Tuesday" / "… · any
+  day that week", from `customerRuns` over the eager-loaded `deliveryRun`);
+  the delivery-address box is labelled "Delivery address (if different)"
+  with a hint on create and edit; weight-priced options carry
+  `data-by-weight` / `data-weight` so their line totals read `~€… · est. N kg`
+  and the Items/Total figures carry `~` with `#orderEstimateNote`.
+  `OrderCreateFormTest` (5 cases).
+- **The orders list filters as you use it (D25)** — `q` (order number,
+  customer name, PO ref; trimmed, `\ % _` escaped), `from`/`to` on the
+  delivery date (an unreadable date is dropped, never a redirect), a debounced
+  search box, `onchange` selects and dates, Clear only when something is
+  applied; all six filters live in `OrderController::applyOrderFilters()`,
+  shared with `show()`'s sibling pane so a clicked row keeps its search; a
+  cancelled row shows "—" for payment; Docket sits after View/Edit.
+  `OrdersIndexFilterTest` (6 cases).
+- **The customers list searches as you type (D26)** — same debounced submit
+  with caret restore; the Delete form untouched. `CustomerFormTest`.
+- **One Finance navigation (E29)** — `App\View\FinanceNav::items()` is the
+  single list of the eight finance screens; the sidebar group and the finance
+  tab bar (`invoicing/partials/_nav`) both render it, in the tab bar's order,
+  with three new icons. `FinanceNavTest` (4 cases).
+- **Run sheet shows the town (F34)** — `.ad` prints the city only; the full
+  address is the stop cell's `title`. Still €-free. `ChilledRunTest`.
+- **"Pick", not "fulfil"** on the order page, variant forms, products index
+  and batch card ("To pick", "Picked", "Weighed when picked"); no id, route,
+  JS or PHP name changed. `OrderShowAllocationInlineTest`, `UxCopyTest`.
+- **Carry-overs from cycle 14**: `/backup`'s Restore panel and
+  `DEPLOYMENT.md` §9 say a restore returns document numbering to where it
+  stood (`BackupRestoreTest`); `PickingTest::batchItem()` sets `ready_date`
+  by `forceFill()->save()` after create, so the four hand patches went.
+- **Step 17 (revision 2)** — the review found the Implementer's absent-select
+  fallback comparing the stored `invoice_delivery` (cast to the
+  `InvoiceDelivery` enum) to the string `'email'`, always false, so an update
+  posted without the select could save an Email customer with no email. Fixed
+  enum-to-enum; two `CustomerFormTest` cases pin both stored preferences.
+
+**Traps recorded this cycle:**
+
+- `Customer::$casts['invoice_delivery']` is a backed enum: a stored value
+  compared to `'email'` is always false. Compare enum to enum
+  (`InvoiceDelivery::tryFrom()` on input, `=== InvoiceDelivery::Email`).
+- `Rule::requiredIf` is implicit and runs before `nullable` short-circuits,
+  so `['nullable', …, Rule::requiredIf(…)]` still refuses a null — that is
+  the intended behaviour, not a bug to "fix" by reordering.
+- A grep that excludes `{{--` sees only a blade comment's first line; the
+  continuation lines of a multi-line comment survive. Strip `{{-- … --}}`
+  first (`perl -0pe`) if the grep is reused.
+- `Batch::creating` overwrites a passed cheese `ready_date`; the `PickingTest`
+  helper now sets it after create, so no test needs its own patch.
+
+**Dev DB (`mossfield_cl`):** migration `2026_10_28_130000` applied; by tinker
+through the models — customer 20 "Avoa Ballsbridge" → "Avoca Ballsbridge";
+variant 14 (16L Bucket) flat €72.00 (the price was already 72, only
+`is_priced_by_weight` changed); variant 7 (Garlic & Basil wheel) already
+€16/kg, a no-op; variant 15 (Mature wheel) €20.00/kg by weight (was €55
+flat); nine one-letter placeholder postcodes (customers 11, 14–18, 20–22)
+NULL; customer 10's trailing comma stripped. Existing orders keep their
+snapshotted `unit_price`. **Production copies of the four data fixes are
+Jon's, through Products and Customers in the app.** Mature on dev has only a
+Whole Wheel variant (the seeder makes both) — drift, left alone.
+
+**Deferred:** the orders search box autofocuses on every filtered load,
+which will raise a phone keyboard (fix if it bites: skip the `x-init` focus
+below `md`); the new JavaScript (run hint, `~` estimates, debounced search)
+is attribute-tested only — Jon's browser checks in the archived plan's
+*Verification* are the real test; finding 4 of 2026-10-13 (Email invoice from
+the order page) stays deferred.
+
+---
+
 ## 2026-10-28 — UX review, part 2 (Plan/Implement cycle 14)
 
 **Scope:** the Planner walked the app in Chrome as every role — production,

@@ -425,7 +425,9 @@ Both controllers delegate to FormRequests (`app/Http/Requests/ProductRequest.php
 ### Customers
 Buyers placing orders through the office system or online portal.
 
-**Key Fields**: `name`; `email` (unique); `phone` (optional); `address`/`city`/`postal_code`/`country`; `credit_limit` (€); `payment_terms` (enum: `immediate`, `net_7`, `net_14`, `net_30`); `is_active`; `requires_reference` (boolean, default false — when set, the optional "Customer ref" field auto-expands for this customer on the order forms and Chilled Runs row; plain boolean, safe to query); `notes`; `mossorders_user_id` (nullable, unique).
+**Key Fields**: `name`; `email` (not unique; **optional unless `invoice_delivery` is Email** — `CustomerController::rules()` uses `Rule::requiredIf`, an absent select meaning the stored/default Email); `phone` (optional); `address` (required)/`city`/`postal_code` (both optional — NULL, never `''`; migration `2026_10_28_130000`)/`country`; `credit_limit` (€; blank = 0 = no limit); `payment_terms` (enum: `immediate`, `net_7`, `net_14`, `net_30`); `is_active`; `requires_reference` (boolean, default false — when set, the optional "Customer ref" field auto-expands for this customer on the order forms and Chilled Runs row; plain boolean, safe to query); `notes`; `mossorders_user_id` (nullable, unique).
+
+**Form tidy (cycle 15)**: store/update share `rules()` + `normalise()`; `tidyInput()` trims name/email/address/city/postal_code/country and strips trailing commas/whitespace before validation ("Kilmantin Hill,," → "Kilmantin Hill"). `full_address` skips blank parts (the docket and dispatch confirmation read it). The duplicate-email warning skips a blank email.
 
 **Helper Methods**: `hasOnlineAccount()`; `getOutstandingBalanceAttribute()`; `creditWarning(float $orderTotal): ?string`; `canPlaceOrder(float $orderAmount)` (= active and no credit warning; unused by the app).
 
@@ -452,6 +454,7 @@ Track customer purchases and fulfillment status.
 
 **Helper Methods**: `scopeFromMossorders($query)`; `isFullyAllocated()`; `canBeCancelled()`.
 
+- **Create form**: the delivery date still defaults to the customer's next run date (`customerRunDates`); `customerRuns` names the run in `#deliveryDateHint` ("Dublin · every Tuesday" / "… · any day that week"). Weight-priced options carry `data-by-weight`/`data-weight`, so their line totals read `~€… · est. N kg` and the Items/Total carry `~` with `#orderEstimateNote`. The `/orders` list filters apply as they change (debounced search, `onchange` selects/dates).
 - **Status transitions**: the only statuses `OrderController::update()` accepts are unchanged, `pending → confirmed`, and `→ cancelled` via `canBeCancelled()` (`isAllowedStatusChange()`); anything else is refused with a flash and nothing written. Every other move has its own route: picking/allocation (`markPickingStarted()`, `reconcilePickingStatus()`), `orders.dispatch` (→ `DispatchService`), `orders.deliver`. The edit form no longer posts `status` (read-only tag); the show page's Confirm / Cancel quick-actions are the only `status` posters (E2E F-19, `OrderTransitionsTest`).
 
 ### Currency
@@ -482,7 +485,7 @@ A **VAT-inclusive (gross)** € delivery charge defined **per DeliveryRun** (`de
 ### Orders Master-Detail View
 `/orders` is a paginated table; `/orders/{order}` is master-detail — sibling orders in a left pane (`lg:grid-cols-[320px_1fr]`, hidden below `lg`), selected order detail on the right.
 
-- `OrderController::show(Request $request, Order $order)` accepts the same filters as `index()` (`status`, `payment_status`, `customer_id`) via query string, fetches up to 50 matching sibling orders, and force-includes the selected order even when outside the cap. View receives `$orderList`, `$listFilters`, `$listTotal`, `$listLimit`. **Don't drop these from `show()`** — the blade depends on them and degrades to an empty list otherwise.
+- `OrderController::show(Request $request, Order $order)` accepts the same six filters as `index()` (`status`, `payment_status`, `customer_id`, `q` — order number / customer name / PO ref, `from`/`to` — delivery date) via query string, both through `applyOrderFilters()` (returns the filters it applied; an unreadable date is dropped, never a redirect), fetches up to 50 matching sibling orders, and force-includes the selected order even when outside the cap. View receives `$orderList`, `$listFilters`, `$listTotal`, `$listLimit`. **Don't drop these from `show()`** — the blade depends on them and degrades to an empty list otherwise.
 - `orders/index.blade.php` rows link via `route('orders.show', array_merge($rowFilters, ['order' => $order->id]))` so filter state flows into the master pane. Apply the same pattern from any new entry point that should preserve filter context.
 
 ## Order Allocation & Fulfillment
@@ -629,6 +632,7 @@ Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design
 - **Stock footer** (`Stock available` row): free stock per column from **one** `withSum` query in `ChilledRunController::stockByVariant()` — mirroring `BatchItem::available_quantity` (remaining − unfulfilled reservations − maturing) in PHP. **Never read `available_quantity` in a loop**: `getHoldableQuantityAttribute()` fires a `SUM` on every access. A column is flagged `short` when `outstanding` (= ordered − already-allocated) exceeds free, so the flag clears once the run is covered rather than lighting up the moment its own reservations land.
 - **No € anywhere on the sheet** — quantities only, so the `see-financials` gate is intentionally unused (don't add price columns without re-gating; covered by a feature test).
 - **Sticky header**: in display mode, when the sheet fits its panel, the panel and wrapper are `overflow-visible`, so the `<thead>` is sticky (`top: var(--mf-feedback-h)` — under the sticky flash, flush once it's dismissed) and a saved row's `#stop-…` lands under it. **Where it fits is keyed on the column count** (`$stickyHead` in `_run-table`; 60 px per quantity column): ≤ 11 quantity columns → `xl:overflow-visible`, ≤ 15 → `2xl:overflow-visible`, more → never. Otherwise, and while a row is being edited (its inputs are ~35 px wider than the columns), the wrapper is `overflow-x-auto` and the header scrolls away. The table is `border-collapse: separate; border-spacing: 0` — with `collapse`, Chrome let body text paint through the stuck header.
+- **Stop cell** shows the customer's town only (`.ad`), the full address in the cell's `title` (hover) — F34.
 - **Views/CSS**: `resources/views/chilled-runs/index.blade.php` + `partials/{_day-tabs,_summary-strip,_run-table,_empty}.blade.php`; run management at `resources/views/delivery-runs/`. Run-sheet classes (`mf-daytab*`, `mf-run*`, `mf-run-check`, `mf-crate-*`, `mf-run-qin`, `col-cheese`) live at the bottom of `resources/css/app.css`. Nav: "Chilled Runs" (snow icon, admin/office/factory) and "Delivery Runs" (truck icon, office/admin) in the Sales group.
 - Tests: `tests/Feature/ChilledRunTest.php` (role access, stop ordering, no-order/cancelled/inactive rows, column model, crate math, loaded-tick policy, run CRUD/assign/reorder, `dateFor()` week resolution, € redaction, the full inline-entry suite, and the allocation suite — run/stop allocate, pending skip, run+date isolation, FIFO order, shortfall, idempotence, maturing/expired exclusion, release-on-edit-down, role gating, and the tag/bar/stock-footer renders). Trait-level coverage in `tests/Feature/AutoAllocateTest.php`.
 
@@ -833,8 +837,9 @@ cron but no worker, so the scheduler drains the queue itself.
 `resources/views/invoicing/**` (index/show/queues/forms), PDFs at
 `invoicing/{invoices,credit-notes,statements}/pdf.blade.php` over the shared
 `resources/views/documents/_pdf-{styles,header}` + `_seller-footer` partials
-(extracted from the old order invoice). Nav: **Finance** group (Invoices, To
-Invoice, Payments, Statements, Overdue), office/admin only. Customer show gains
+(extracted from the old order invoice). Nav: **Finance** group, office/admin
+only — the sidebar group and the finance tab bar (`invoicing/partials/_nav`)
+both render `App\View\FinanceNav::items()` (eight screens, one order). Customer show gains
 an Account panel (open/credit/aged + Record payment, Statement, Apply credit),
 Recent invoices, and Documents sent.
 

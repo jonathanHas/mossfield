@@ -512,7 +512,7 @@
                                     </div>
                                     @if($order->status === 'ready')
                                         <p class="text-[11.5px] mt-2" style="color: var(--muted);">
-                                            Adding to a ready order reopens picking — it returns to <b>Picking</b> until the new line is fulfilled.
+                                            Adding to a ready order reopens picking — it returns to <b>Picking</b> until the new line is picked.
                                         </p>
                                     @endif
                                 </form>

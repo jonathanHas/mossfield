@@ -126,14 +126,20 @@ These are not bugs until someone says they are.
 
 - [ ] **Customer name "Avoa Ballsbridge"** — almost certainly "Avoca". The record has
   an order against it, so renaming is a data edit rather than a delete-and-recreate.
+  *Decision (Jon, 2026-10-28): rename to "Avoca Ballsbridge" — dev by tinker in
+  cycle 15; production by Jon in the app.*
 
 - [ ] **Yoghurt 16L Bucket priced at €72.00/kg** against a 16.000 kg unit weight,
   which implies €1,152 a bucket. Likely meant as €72.00 flat, or the
   `is_priced_by_weight` flag is set wrongly.
+  *Decision (Jon, 2026-10-28): €72.00 flat — clear `is_priced_by_weight`. Dev
+  by tinker in cycle 15; production by Jon in the app.*
 
 - [ ] **Garlic & Basil Whole Wheel is €40.00 flat** where every other whole wheel is
   €16.00/kg, and it carries the variable-weight flag without the €/kg flag. A 2 kg
   wheel at €16/kg would be €32, so this is either a deliberate premium or an error.
+  *Decision (Jon, 2026-10-28): an error — €16.00/kg, priced by weight, like the
+  other wheels. Dev by tinker in cycle 15; production by Jon in the app.*
 
 - [ ] **Mature Cheese Whole Wheel is €55.00 flat for a 2.300 kg wheel** — €23.91/kg
   against €16.00/kg for farmhouse. This came from `ProductSeeder` when the Mature
@@ -143,12 +149,17 @@ These are not bugs until someone says they are.
   *Source: 2026-09-13 verification of the dev-database repair; seen again in
   the 2026-10-06 order-flow walk (€55.00 per unit beside Farmhouse/Cumin
   wheels at €16.00/kg). Data, not code — Jon's call.*
+  *Decision (Jon, 2026-10-28): **€20.00/kg**, priced by weight. Dev by tinker in
+  cycle 15; production by Jon in the app. Note the dev variant's nominal weight
+  was set to 5.000 kg in cycle 14 (finding 6) and the seeder still says 2.300.*
 
 ## Not investigated
 
 - [ ] **Dashboard reports the online order sync has never completed successfully.**
   Untouched by any pass so far. Could be configuration (`services.sync.enabled`),
   could be real. Needs its own look rather than a polish fix.
+  *Decision (Jon, 2026-10-28): leave it while the Mossorders surface is behind
+  `MOSSORDERS_UI_ENABLED`; look at it when that integration is picked up again.*
 
 ---
 

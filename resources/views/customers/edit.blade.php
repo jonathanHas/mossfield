@@ -26,8 +26,9 @@
                         @error('name') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label for="email" class="mf-label">Email <span style="color: var(--danger);">*</span></label>
-                        <input type="email" name="email" id="email" value="{{ old('email', $customer->email) }}" required class="mf-input">
+                        <label for="email" class="mf-label">Email</label>
+                        <input type="email" name="email" id="email" value="{{ old('email', $customer->email) }}" class="mf-input">
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">Needed while Invoice delivery is Email. Print and no-invoice customers can leave it blank.</p>
                         @error('email') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
@@ -45,13 +46,13 @@
                         @error('address') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label for="city" class="mf-label">City <span style="color: var(--danger);">*</span></label>
-                        <input type="text" name="city" id="city" value="{{ old('city', $customer->city) }}" required class="mf-input">
+                        <label for="city" class="mf-label">City</label>
+                        <input type="text" name="city" id="city" value="{{ old('city', $customer->city) }}" class="mf-input">
                         @error('city') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
-                        <label for="postal_code" class="mf-label">Postal code <span style="color: var(--danger);">*</span></label>
-                        <input type="text" name="postal_code" id="postal_code" value="{{ old('postal_code', $customer->postal_code) }}" required class="mf-input">
+                        <label for="postal_code" class="mf-label">Postal code</label>
+                        <input type="text" name="postal_code" id="postal_code" value="{{ old('postal_code', $customer->postal_code) }}" class="mf-input">
                         @error('postal_code') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
@@ -65,10 +66,10 @@
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
                      x-data="{ terms: '', mode: '' }" x-init="terms = $refs.terms.value; mode = $refs.mode.value">
                     <div>
-                        <label for="credit_limit" class="mf-label">Credit limit (€) <span style="color: var(--danger);">*</span></label>
-                        <input type="number" name="credit_limit" id="credit_limit" value="{{ old('credit_limit', $customer->credit_limit) }}"
-                               step="0.01" min="0" required class="mf-input">
-                        <p class="text-[12px] mt-1" style="color: var(--muted);">0 = no limit — the app warns, never blocks, when an order would exceed it.</p>
+                        <label for="credit_limit" class="mf-label">Credit limit (€)</label>
+                        <input type="number" name="credit_limit" id="credit_limit" value="{{ old('credit_limit', (float) $customer->credit_limit > 0 ? $customer->credit_limit : '') }}"
+                               step="0.01" min="0" class="mf-input">
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">Leave blank for no limit — the app warns, never blocks, when an order would exceed it.</p>
                         @error('credit_limit') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>

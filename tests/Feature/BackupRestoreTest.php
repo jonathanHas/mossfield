@@ -97,7 +97,7 @@ class BackupRestoreTest extends TestCase
 
     public function test_admin_can_view_the_backup_page(): void
     {
-        $this->actingAs($this->admin)->get(route('backup.index'))->assertOk();
+        $this->actingAs($this->admin)->get(route('backup.index'))->assertOk()->assertSee('returns to where it stood');
     }
 
     public function test_office_and_factory_are_denied(): void

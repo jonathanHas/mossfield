@@ -55,10 +55,11 @@ class PickingTest extends TestCase
         $batch = Batch::create([
             'product_id' => $this->product->id,
             'production_date' => now()->subDay()->toDateString(),
-            'ready_date' => now()->subDay()->toDateString(),
             'raw_milk_litres' => 100,
             'status' => 'active',
         ]);
+        // Batch::creating overwrites a cheese ready_date; set it after, so the stock is pickable.
+        $batch->forceFill(['ready_date' => now()->subDay()->toDateString()])->save();
 
         return BatchItem::create([
             'batch_id' => $batch->id,
@@ -270,8 +271,6 @@ class PickingTest extends TestCase
         ]);
         [$order, $item] = $this->orderWithItem($wheel, 2);
         $batchItem = $this->batchItem($wheel, 5);
-        // Batch::boot() sets a cheese ready_date 90 days out; the pick form renders for ready stock only.
-        $batchItem->batch->update(['ready_date' => now()->subDay()]);
 
         $this->actingAs($factory)
             ->from(route('picking.item', [$order, $item]))
@@ -296,8 +295,7 @@ class PickingTest extends TestCase
         $factory = User::factory()->factoryWorker()->create();
         $variant = $this->variant();
         [$order, $item] = $this->orderWithItem($variant, 2);
-        // Batch::boot() sets a cheese ready_date 90 days out; the chooser lists ready stock only.
-        $this->batchItem($variant, 23)->batch->update(['ready_date' => now()->subDay()]);
+        $this->batchItem($variant, 23);
 
         $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
             ->assertOk()
@@ -559,8 +557,7 @@ class PickingTest extends TestCase
         $factory = User::factory()->factoryWorker()->create();
         $variant = $this->variant();
         [$order, $item] = $this->orderWithItem($variant, 3);
-        // Matured, so the stepper (not the no-stock dead end) renders.
-        $this->batchItem($variant)->batch->forceFill(['ready_date' => now()->subDay()])->saveQuietly();
+        $this->batchItem($variant);
 
         $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
             ->assertOk()
@@ -573,7 +570,7 @@ class PickingTest extends TestCase
         $factory = User::factory()->factoryWorker()->create();
         $variant = $this->variant(['weight_kg' => 0, 'is_variable_weight' => true]);
         [$order, $item] = $this->orderWithItem($variant, 1);
-        $this->batchItem($variant)->batch->forceFill(['ready_date' => now()->subDay()])->saveQuietly();
+        $this->batchItem($variant);
 
         $this->actingAs($factory)->get(route('picking.item', [$order, $item]))
             ->assertOk()

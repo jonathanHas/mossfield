@@ -44,12 +44,14 @@
                     <div>
                         <x-input-label for="delivery_date" :value="__('Delivery date')" />
                         <x-text-input id="delivery_date" name="delivery_date" type="date" :value="old('delivery_date')" />
+                        <p id="deliveryDateHint" class="text-[12px] mt-1" style="color: var(--muted);"></p>
                         <x-input-error :messages="$errors->get('delivery_date')" class="mt-1" />
                     </div>
 
                     <div>
-                        <x-input-label for="delivery_address" :value="__('Delivery address')" />
-                        <textarea id="delivery_address" name="delivery_address" rows="3" class="mf-textarea">{{ old('delivery_address') }}</textarea>
+                        <x-input-label for="delivery_address" :value="__('Delivery address (if different)')" />
+                        <textarea id="delivery_address" name="delivery_address" rows="2" class="mf-textarea">{{ old('delivery_address') }}</textarea>
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">Leave blank to deliver to the customer's address.</p>
                         <x-input-error :messages="$errors->get('delivery_address')" class="mt-1" />
                     </div>
                 </div>
@@ -88,7 +90,7 @@
                                                 @foreach($productVariants as $productName => $variants)
                                                     <optgroup label="{{ $productName }}">
                                                         @foreach($variants as $variant)
-                                                            <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}"
+                                                            <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}" data-by-weight="{{ $variant->is_priced_by_weight ? 1 : 0 }}" data-weight="{{ $variant->is_priced_by_weight ? (float) $variant->weight_kg : '' }}"
                                                                 {{ $item['product_variant_id'] == $variant->id ? 'selected' : '' }}>
                                                                 {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                             </option>
@@ -121,7 +123,7 @@
                                             @foreach($productVariants as $productName => $variants)
                                                 <optgroup label="{{ $productName }}">
                                                     @foreach($variants as $variant)
-                                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}">
+                                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}" data-by-weight="{{ $variant->is_priced_by_weight ? 1 : 0 }}" data-weight="{{ $variant->is_priced_by_weight ? (float) $variant->weight_kg : '' }}">
                                                             {{ $variant->picker_label }} ({{ $variant->price_label }})
                                                         </option>
                                                     @endforeach
@@ -160,6 +162,7 @@
                         <span class="text-[13px] font-semibold">Total</span>
                         <span id="orderTotal" class="font-mono text-[18px] font-semibold">€0.00</span>
                     </div>
+                    <p id="orderEstimateNote" class="px-4 pb-3 -mt-1 text-[12px]" style="color: var(--muted);" hidden>~ Estimated from nominal weights — the invoice uses the picked weight.</p>
                 </div>
 
                 <div class="flex items-center justify-end gap-2">
@@ -218,7 +221,7 @@
                             @foreach($productVariants as $productName => $variants)
                                 <optgroup label="{{ $productName }}">
                                     @foreach($variants as $variant)
-                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}">
+                                        <option value="{{ $variant->id }}" data-price="{{ $variant->estimated_unit_price }}" data-picker="{{ $variant->picker_label }}" data-by-weight="{{ $variant->is_priced_by_weight ? 1 : 0 }}" data-weight="{{ $variant->is_priced_by_weight ? (float) $variant->weight_kg : '' }}">
                                             {{ $variant->picker_label }} ({{ $variant->price_label }})
                                         </option>
                                     @endforeach
@@ -284,6 +287,7 @@
         const customerChargedDates = @json($customerChargedDates);
         const customerPriceLabels = @json($customerPriceLabels);
         const customerRunDates = @json($customerRunDates);
+        const customerRuns = @json($customerRuns);
 
         // Option text shows the customer's price where they have a special;
         // the server-rendered label (standard price) otherwise.
@@ -306,12 +310,29 @@
         let autoDeliveryDate = null;
         function fillDeliveryDate() {
             const input = document.getElementById('delivery_date');
-            if (input.value && input.value !== autoDeliveryDate) {
+            if (! input.value || input.value === autoDeliveryDate) {
+                const next = customerRunDates[currentCustomerId()] || '';
+                input.value = next;
+                autoDeliveryDate = next || null;
+            }
+            updateDeliveryHint();
+        }
+
+        // Says which run the date came from (D22) — the default itself is unchanged.
+        function updateDeliveryHint() {
+            const hint = document.getElementById('deliveryDateHint');
+            const customerId = currentCustomerId();
+            if (! customerId) {
+                hint.textContent = '';
                 return;
             }
-            const next = customerRunDates[currentCustomerId()] || '';
-            input.value = next;
-            autoDeliveryDate = next || null;
+            const run = customerRuns[customerId];
+            if (! run) {
+                hint.textContent = 'No delivery run — pick a date.';
+                return;
+            }
+            const input = document.getElementById('delivery_date');
+            hint.textContent = run + (autoDeliveryDate && input.value === autoDeliveryDate ? ' — next run date filled in' : '');
         }
 
         function currentCustomerId() {
@@ -333,17 +354,29 @@
             const quantity = parseInt(quantityInput.value) || 0;
             const lineTotal = price * quantity;
 
-            lineTotalInput.value = '€' + lineTotal.toFixed(2);
+            // Weight-priced lines are an estimate from the nominal weight (D24).
+            if (isByWeight(selectedOption)) {
+                const kg = parseFloat((parseFloat(selectedOption.dataset.weight || 0) * quantity).toFixed(3));
+                lineTotalInput.value = '~€' + lineTotal.toFixed(2) + ' · est. ' + kg + ' kg';
+            } else {
+                lineTotalInput.value = '€' + lineTotal.toFixed(2);
+            }
             updateOrderTotal();
+        }
+
+        function isByWeight(option) {
+            return !! option && !! option.value && option.dataset.byWeight === '1';
         }
 
         function updateOrderTotal() {
             let total = 0;
+            let estimated = false;
             document.querySelectorAll('.order-item').forEach(function(item) {
                 const productSelect = item.querySelector('.product-select');
                 const quantityInput = item.querySelector('.quantity-input');
 
                 if (productSelect.value && quantityInput.value) {
+                    estimated = estimated || isByWeight(productSelect.selectedOptions[0]);
                     const price = unitPrice(productSelect.selectedOptions[0]);
                     const quantity = parseInt(quantityInput.value);
                     total += Math.round(price * quantity * 100) / 100;
@@ -358,9 +391,11 @@
                 : 0;
             document.getElementById('orderDeliveryNote').textContent = waived ? '(already charged on ' + chargedOn + ' that day)' : '';
 
-            document.getElementById('orderItemsTotal').textContent = '€' + total.toFixed(2);
+            const approx = estimated ? '~' : '';
+            document.getElementById('orderItemsTotal').textContent = approx + '€' + total.toFixed(2);
             document.getElementById('orderDelivery').textContent = '€' + delivery.toFixed(2);
-            document.getElementById('orderTotal').textContent = '€' + (total + delivery).toFixed(2);
+            document.getElementById('orderTotal').textContent = approx + '€' + (total + delivery).toFixed(2);
+            document.getElementById('orderEstimateNote').hidden = ! estimated;
         }
 
         // Prices and delivery depend on the customer: re-price every line.
@@ -412,7 +447,10 @@
                 fillDeliveryDate();
                 repriceAllLines();
             });
-            document.getElementById('delivery_date').addEventListener('change', updateOrderTotal);
+            document.getElementById('delivery_date').addEventListener('change', function() {
+                updateDeliveryHint();
+                updateOrderTotal();
+            });
             relabelOptions();
             if (currentCustomerId()) {
                 fillDeliveryDate();

@@ -225,7 +225,7 @@
                                 <td class="mf-td">
                                     {{ $item->productVariant->name }}
                                     @if($item->productVariant->is_variable_weight)
-                                        <span class="mf-tag mf-tag-warn ml-1" title="Weighed at fulfillment">Var. wt</span>
+                                        <span class="mf-tag mf-tag-warn ml-1" title="Weighed when picked">Var. wt</span>
                                     @endif
                                 </td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $item->productVariant->size }}</td>

@@ -29,13 +29,8 @@
 
     // Finance — invoicing, money in, and what's owed
     if ($canSeeFinance) {
-        $groups[] = ['label' => 'Finance', 'items' => [
-            ['id' => 'invoices', 'label' => 'Invoices', 'route' => 'invoicing.invoices.index', 'match' => 'invoicing.invoices.*', 'icon' => 'invoice'],
-            ['id' => 'tobill', 'label' => 'To Invoice', 'route' => 'invoicing.uninvoiced.index', 'match' => 'invoicing.uninvoiced.*', 'icon' => 'euro'],
-            ['id' => 'payments', 'label' => 'Payments', 'route' => 'invoicing.payments.index', 'match' => 'invoicing.payments.*', 'icon' => 'euro'],
-            ['id' => 'statements', 'label' => 'Statements', 'route' => 'invoicing.statements.index', 'match' => 'invoicing.statements.*', 'icon' => 'statement'],
-            ['id' => 'overdue', 'label' => 'Overdue', 'route' => 'invoicing.overdue.index', 'match' => 'invoicing.overdue.*', 'icon' => 'alert'],
-        ]];
+        // The same list the finance tab bar renders (E29).
+        $groups[] = ['label' => 'Finance', 'items' => \App\View\FinanceNav::items()];
     }
 
     // Fulfillment — picking + allocation
@@ -101,6 +96,9 @@
         'invoice'   => ['M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z', 'M14 2v6h6', 'M8 13h8M8 17h5'],
         'euro'      => ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M15.5 8.5a4.5 4.5 0 0 0-6.9 5.6 4.5 4.5 0 0 0 6.9.9', 'M7 11h6M7 13.5h5'],
         'statement' => ['M4 3h16v18l-3-2-2 2-3-2-3 2-2-2-3 2z', 'M8 8h8M8 12h8M8 16h4'],
+        'layers'    => ['M12 2l10 5-10 5L2 7z', 'M2 12l10 5 10-5', 'M2 17l10 5 10-5'],
+        'send'      => ['M22 2L11 13', 'M22 2l-7 20-4-9-9-4z'],
+        'download'  => ['M22 12h-6l-2 3h-4l-2-3H2', 'M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z', 'M12 3v8M9 8l3 3 3-3'],
         'alert'     => ['M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4M12 17h.01'],
         'truck'     => ['M1 5h13v11H1z', 'M14 9h4l3 3v4h-7V9z', 'M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4z'],
         'chevron'   => ['M6 9l6 6 6-6'],

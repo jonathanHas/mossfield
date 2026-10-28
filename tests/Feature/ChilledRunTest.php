@@ -268,6 +268,21 @@ class ChilledRunTest extends TestCase
             ->assertDontSee('€');
     }
 
+    public function test_a_stop_shows_its_town_with_the_full_address_on_hover(): void
+    {
+        $run = $this->makeRun();
+        $shop = $this->customerOnRun($run, 'Corner Shop');
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->orderFor($shop, [[$oneL, 6]]);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee('<div class="ad">Wicklow</div>', false)
+            ->assertSee('title="Main St, Wicklow, A67"', false)
+            ->assertDontSee('>Main St', false);
+    }
+
     // ── Loaded tick ──────────────────────────────────────────────────
 
     public function test_factory_can_toggle_loaded_and_driver_cannot(): void

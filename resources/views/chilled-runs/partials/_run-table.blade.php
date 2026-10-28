@@ -253,10 +253,12 @@
                                         @endcan
                                     @endif
                                 </td>
-                                <td class="cust">
+                                {{-- The town on the sheet, the full address on hover (F34). --}}
+                                @php $fullAddress = collect([$customer->address, $customer->city, $customer->postal_code])->filter()->implode(', '); @endphp
+                                <td class="cust" @if ($fullAddress !== '') title="{{ $fullAddress }}" @endif>
                                     <div class="nm">{{ $customer->name }}</div>
-                                    @if ($customer->address || $customer->city)
-                                        <div class="ad">{{ collect([$customer->address, $customer->city, $customer->postal_code])->filter()->implode(', ') }}</div>
+                                    @if (filled($customer->city))
+                                        <div class="ad">{{ $customer->city }}</div>
                                     @endif
                                     @if ($hasOrders)
                                         @php $st = $row['stats']; @endphp

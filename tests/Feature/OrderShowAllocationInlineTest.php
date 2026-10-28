@@ -125,7 +125,7 @@ class OrderShowAllocationInlineTest extends TestCase
             ->get(route('orders.show', $order))
             ->assertOk()
             ->assertSee($this->product->name)
-            ->assertSee('Needs fulfilment')
+            ->assertSee('To pick')
             ->assertDontSee(route('order-allocations.allocate', $orderItem))
             ->assertDontSee(route('order-allocations.auto-allocate', $order));
     }

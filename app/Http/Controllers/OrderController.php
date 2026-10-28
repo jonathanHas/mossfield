@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductVariant;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -42,24 +43,60 @@ class OrderController extends Controller
     {
         $this->authorize('viewAny', Order::class);
         $query = Order::with(['customer', 'orderItems.productVariant']);
-
-        // Apply filters
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        if ($request->filled('payment_status')) {
-            $query->where('payment_status', $request->payment_status);
-        }
-
-        if ($request->filled('customer_id')) {
-            $query->where('customer_id', $request->customer_id);
-        }
+        $filters = $this->applyOrderFilters($request, $query);
 
         $orders = $query->orderBy('order_date', 'desc')->paginate(20);
         $customers = Customer::where('is_active', true)->orderBy('name')->get();
 
-        return view('orders.index', compact('orders', 'customers'));
+        return view('orders.index', compact('orders', 'customers', 'filters'));
+    }
+
+    /**
+     * The list filters shared by index() and show()'s sibling pane (D25):
+     * status, payment status, customer, a search over order number / customer
+     * name / their PO ref, and a delivery-date range. Returns the filters it
+     * actually applied — a date that can't be read is dropped, never a
+     * validation redirect on a GET.
+     */
+    private function applyOrderFilters(Request $request, Builder $query): array
+    {
+        $filters = [];
+
+        foreach (['status', 'payment_status', 'customer_id'] as $field) {
+            $value = $request->query($field);
+            if (is_string($value) && $value !== '') {
+                $query->where($field, $value);
+                $filters[$field] = $value;
+            }
+        }
+
+        $search = $request->query('q');
+        if (is_string($search) && trim($search) !== '') {
+            $search = trim($search);
+            $like = '%'.addcslashes($search, '\\%_').'%';
+            $query->where(function (Builder $q) use ($like) {
+                $q->where('order_number', 'like', $like)
+                    ->orWhere('customer_reference', 'like', $like)
+                    ->orWhereHas('customer', fn (Builder $c) => $c->where('name', 'like', $like));
+            });
+            $filters['q'] = $search;
+        }
+
+        foreach (['from' => '>=', 'to' => '<='] as $field => $operator) {
+            $value = $request->query($field);
+            if (! is_string($value) || $value === '') {
+                continue;
+            }
+            try {
+                $date = Carbon::parse($value)->toDateString();
+            } catch (\Throwable) {
+                continue;
+            }
+            $query->whereDate('delivery_date', $operator, $date);
+            $filters[$field] = $value;
+        }
+
+        return $filters;
     }
 
     public function show(Request $request, Order $order): View
@@ -71,15 +108,10 @@ class OrderController extends Controller
             'orderItems.orderAllocations.batchItem.batch',
         ]);
 
-        $listFilters = array_filter($request->only(['status', 'payment_status', 'customer_id']), fn ($v) => $v !== null && $v !== '');
-
         $listLimit = 50;
         $listQuery = Order::with(['customer', 'orderItems.productVariant.product'])
             ->orderBy('order_date', 'desc');
-
-        foreach ($listFilters as $field => $value) {
-            $listQuery->where($field, $value);
-        }
+        $listFilters = $this->applyOrderFilters($request, $listQuery);
 
         $listTotal = (clone $listQuery)->count();
         $orderList = $listQuery->limit($listLimit)->get();
@@ -252,6 +284,14 @@ class OrderController extends Controller
                 return [$customer->id => $date->toDateString()];
             });
 
+        // Which run filled that date, for the hint under the field (D22).
+        $customerRuns = $customers
+            ->filter(fn (Customer $customer) => $customer->deliveryRun !== null)
+            ->mapWithKeys(fn (Customer $customer) => [$customer->id => $customer->deliveryRun->day_of_week === null
+                ? "{$customer->deliveryRun->name} · any day that week"
+                : "{$customer->deliveryRun->name} · every {$customer->deliveryRun->day_label}",
+            ]);
+
         // Drops already carrying the run's charge in the next 14 days (one
         // query): [customer_id => [Y-m-d => order_number]], so the preview
         // shows €0 delivery for a second order on the same day (once per drop).
@@ -267,7 +307,7 @@ class OrderController extends Controller
                 ->mapWithKeys(fn ($o) => [$o->delivery_date->toDateString() => $o->order_number]));
 
         return view('orders.create', compact(
-            'customers', 'productVariants', 'customerPrices', 'customerCharges', 'customerPriceLabels', 'customerRunDates', 'customerChargedDates'
+            'customers', 'productVariants', 'customerPrices', 'customerCharges', 'customerPriceLabels', 'customerRunDates', 'customerRuns', 'customerChargedDates'
         ));
     }
 

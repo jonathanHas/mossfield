@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\InvoiceDelivery;
 use App\Models\Customer;
 use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
 class CustomerController extends Controller
@@ -49,43 +51,8 @@ class CustomerController extends Controller
 
     public function store(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
-            'phone' => 'nullable|string|max:255',
-            'address' => 'required|string',
-            'city' => 'required|string|max:255',
-            'postal_code' => 'required|string|max:255',
-            'country' => 'required|string|max:255',
-            'credit_limit' => 'required|numeric|min:0',
-            'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
-            // Billing preferences — how (and whether) this customer is invoiced.
-            'billing_email' => 'nullable|email|max:255',
-            'vat_number' => 'nullable|string|max:64',
-            // Nullable, not required: these have DB defaults, and older forms
-            // (and the chilled-run quick-create path) don't post them.
-            'invoice_delivery' => 'nullable|in:email,print,none',
-            'invoicing_mode' => 'nullable|in:per_order,weekly,monthly',
-            'send_statements' => 'boolean',
-            'is_active' => 'boolean',
-            'requires_reference' => 'boolean',
-            'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
-            'notes' => 'nullable|string',
-            'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id',
-        ]);
-
-        $validated['is_active'] = $request->has('is_active');
-        $validated['requires_reference'] = $request->has('requires_reference');
-        $validated['send_statements'] = $request->has('send_statements');
-
-        // An absent select must leave the stored preference alone rather than
-        // writing null over it.
-        foreach (['invoice_delivery', 'invoicing_mode'] as $field) {
-            if (blank($validated[$field] ?? null)) {
-                unset($validated[$field]);
-            }
-        }
-        $validated['delivery_charge_percent'] = $this->normalizeChargePercent($validated['delivery_charge_percent'] ?? null);
+        $this->tidyInput($request);
+        $validated = $this->normalise($request->validate($this->rules($request), $this->messages()), $request);
 
         $customer = Customer::create($validated);
 
@@ -137,15 +104,39 @@ class CustomerController extends Controller
 
     public function update(Request $request, Customer $customer): RedirectResponse
     {
-        $validated = $request->validate([
+        $this->tidyInput($request);
+        $validated = $this->normalise($request->validate($this->rules($request, $customer), $this->messages()), $request);
+
+        $customer->update($validated);
+
+        $redirect = redirect()->route('customers.show', $customer)
+            ->with('success', 'Customer updated successfully.');
+
+        return $this->withDuplicateEmailWarning($redirect, $customer);
+    }
+
+    /**
+     * The one rule set for create and edit. Email, city and postal code are
+     * optional (D20/D21) — except that an Email-delivery customer needs an
+     * email address to be sent anything.
+     */
+    private function rules(Request $request, ?Customer $customer = null): array
+    {
+        // An absent select keeps what is stored — the DB default (email) on create.
+        // Enum on both sides: the stored value is cast to InvoiceDelivery.
+        $delivery = InvoiceDelivery::tryFrom((string) $request->input('invoice_delivery'))
+            ?? $customer?->invoice_delivery
+            ?? InvoiceDelivery::Email;
+
+        return [
             'name' => 'required|string|max:255',
-            'email' => 'required|email|max:255',
+            'email' => ['nullable', 'email', 'max:255', Rule::requiredIf(fn () => $delivery === InvoiceDelivery::Email)],
             'phone' => 'nullable|string|max:255',
             'address' => 'required|string',
-            'city' => 'required|string|max:255',
-            'postal_code' => 'required|string|max:255',
+            'city' => 'nullable|string|max:255',
+            'postal_code' => 'nullable|string|max:255',
             'country' => 'required|string|max:255',
-            'credit_limit' => 'required|numeric|min:0',
+            'credit_limit' => 'nullable|numeric|min:0',
             'payment_terms' => 'required|in:immediate,net_7,net_14,net_30',
             // Billing preferences — how (and whether) this customer is invoiced.
             'billing_email' => 'nullable|email|max:255',
@@ -159,12 +150,47 @@ class CustomerController extends Controller
             'requires_reference' => 'boolean',
             'delivery_charge_percent' => 'nullable|numeric|min:0|max:100',
             'notes' => 'nullable|string',
-            'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id,'.$customer->id,
-        ]);
+            'mossorders_user_id' => 'nullable|integer|unique:customers,mossorders_user_id'.($customer ? ','.$customer->id : ''),
+        ];
+    }
 
+    private function messages(): array
+    {
+        return [
+            'email.required' => 'An email address is needed while Invoice delivery is Email — or choose Print / post or No invoice sent.',
+        ];
+    }
+
+    /**
+     * Trim the free-text contact fields and drop trailing commas, so
+     * "Kilmantin Hill,," is stored as "Kilmantin Hill" and a blank field is
+     * NULL, never ''.
+     */
+    private function tidyInput(Request $request): void
+    {
+        $tidied = [];
+        foreach (['name', 'email', 'address', 'city', 'postal_code', 'country'] as $field) {
+            if (! $request->has($field) || ! is_string($value = $request->input($field))) {
+                continue;
+            }
+            $value = preg_replace('/[\s,]+$/u', '', trim($value));
+            $tidied[$field] = $value === '' ? null : $value;
+        }
+
+        $request->merge($tidied);
+    }
+
+    /**
+     * Post-validation coercions shared by store() and update().
+     */
+    private function normalise(array $validated, Request $request): array
+    {
         $validated['is_active'] = $request->has('is_active');
         $validated['requires_reference'] = $request->has('requires_reference');
         $validated['send_statements'] = $request->has('send_statements');
+
+        // Blank means no limit, stored as 0 (the column is NOT NULL).
+        $validated['credit_limit'] = filled($validated['credit_limit'] ?? null) ? $validated['credit_limit'] : 0;
 
         // An absent select must leave the stored preference alone rather than
         // writing null over it.
@@ -175,12 +201,7 @@ class CustomerController extends Controller
         }
         $validated['delivery_charge_percent'] = $this->normalizeChargePercent($validated['delivery_charge_percent'] ?? null);
 
-        $customer->update($validated);
-
-        $redirect = redirect()->route('customers.show', $customer)
-            ->with('success', 'Customer updated successfully.');
-
-        return $this->withDuplicateEmailWarning($redirect, $customer);
+        return $validated;
     }
 
     /**
@@ -200,6 +221,10 @@ class CustomerController extends Controller
      */
     private function withDuplicateEmailWarning(RedirectResponse $redirect, Customer $customer): RedirectResponse
     {
+        if (blank($customer->email)) {
+            return $redirect;
+        }
+
         $dupes = Customer::where('email', $customer->email)
             ->where('id', '!=', $customer->id)
             ->pluck('name');

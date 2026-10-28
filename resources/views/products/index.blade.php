@@ -124,7 +124,7 @@
                                                                 <div class="flex items-center gap-1.5 flex-wrap">
                                                                     <span>{{ $variant->name }}</span>
                                                                     @if($variant->is_variable_weight)
-                                                                        <span class="mf-tag mf-tag-warn" title="Weighed at fulfillment">Var. wt</span>
+                                                                        <span class="mf-tag mf-tag-warn" title="Weighed when picked">Var. wt</span>
                                                                     @endif
                                                                     @if($variant->is_priced_by_weight)
                                                                         <span class="mf-tag mf-tag-info" title="Priced per kilogram">€/kg</span>

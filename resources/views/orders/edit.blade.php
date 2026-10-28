@@ -98,8 +98,9 @@
                 </div>
 
                 <div class="mb-5">
-                    <x-input-label for="delivery_address" :value="__('Delivery address')" />
-                    <textarea id="delivery_address" name="delivery_address" rows="3" class="mf-textarea">{{ old('delivery_address', $order->delivery_address) }}</textarea>
+                    <x-input-label for="delivery_address" :value="__('Delivery address (if different)')" />
+                    <textarea id="delivery_address" name="delivery_address" rows="2" class="mf-textarea">{{ old('delivery_address', $order->delivery_address) }}</textarea>
+                    <p class="text-[12px] mt-1" style="color: var(--muted);">Leave blank to deliver to the customer's address.</p>
                     <x-input-error :messages="$errors->get('delivery_address')" class="mt-1" />
                 </div>
 

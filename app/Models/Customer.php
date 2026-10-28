@@ -146,7 +146,10 @@ class Customer extends Model
 
     public function getFullAddressAttribute(): string
     {
-        return "{$this->address}, {$this->city}, {$this->postal_code}, {$this->country}";
+        // City and postal code are optional — skip blanks rather than print ", ,".
+        return collect([$this->address, $this->city, $this->postal_code, $this->country])
+            ->filter(fn ($part) => filled($part))
+            ->implode(', ');
     }
 
     public function invoices(): HasMany

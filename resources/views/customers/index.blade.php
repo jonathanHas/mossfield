@@ -18,11 +18,14 @@
                 <div class="flex-1 min-w-[200px]">
                     <label for="search" class="mf-label">Search</label>
                     <input type="text" name="search" id="search" value="{{ request('search') }}"
-                           placeholder="Search by name or email…" class="mf-input">
+                           placeholder="Search by name or email…" class="mf-input"
+                           x-data
+                           x-init="if ($el.value) { $el.focus(); $el.setSelectionRange($el.value.length, $el.value.length) }"
+                           x-on:input.debounce.500ms="$el.form.requestSubmit()">
                 </div>
                 <div>
                     <label for="is_active" class="mf-label">Status</label>
-                    <select name="is_active" id="is_active" class="mf-select">
+                    <select name="is_active" id="is_active" class="mf-select" onchange="this.form.requestSubmit()">
                         <option value="">All customers</option>
                         <option value="1" {{ request('is_active') === '1' ? 'selected' : '' }}>Active only</option>
                         <option value="0" {{ request('is_active') === '0' ? 'selected' : '' }}>Inactive only</option>
@@ -31,14 +34,14 @@
                 @if (config('services.mossorders.ui_enabled'))
                     <div>
                         <label for="has_online_account" class="mf-label">Online account</label>
-                        <select name="has_online_account" id="has_online_account" class="mf-select">
+                        <select name="has_online_account" id="has_online_account" class="mf-select" onchange="this.form.requestSubmit()">
                             <option value="">All</option>
                             <option value="1" {{ request('has_online_account') === '1' ? 'selected' : '' }}>Linked</option>
                             <option value="0" {{ request('has_online_account') === '0' ? 'selected' : '' }}>Not linked</option>
                         </select>
                     </div>
                 @endif
-                <button type="submit" class="mf-btn-secondary">Filter</button>
+                <button type="submit" class="mf-btn-secondary">Search</button>
                 @if(request()->hasAny(['search', 'is_active', 'has_online_account']))
                     <a href="{{ route('customers.index') }}" class="mf-btn-ghost">Clear</a>
                 @endif
@@ -69,7 +72,7 @@
                                     @endif
                                 </td>
                                 <td class="mf-td">
-                                    <div>{{ $customer->email }}</div>
+                                    <div>{{ $customer->email ?: '—' }}</div>
                                     @if($customer->phone)
                                         <div class="text-[11.5px] mt-0.5 font-mono" style="color: var(--muted);">{{ $customer->phone }}</div>
                                     @endif

@@ -1,16 +1,8 @@
 {{-- Sub-navigation shared by every finance screen, so the queues stay one
      click apart no matter where you are. --}}
 @php
-    $tabs = [
-        ['label' => 'Invoices', 'route' => 'invoicing.invoices.index', 'match' => 'invoicing.invoices.*'],
-        ['label' => 'To invoice', 'route' => 'invoicing.uninvoiced.index', 'match' => 'invoicing.uninvoiced.*'],
-        ['label' => 'Consolidated', 'route' => 'invoicing.consolidated.create', 'match' => 'invoicing.consolidated.*'],
-        ['label' => 'Payments', 'route' => 'invoicing.payments.index', 'match' => 'invoicing.payments.*'],
-        ['label' => 'Overdue', 'route' => 'invoicing.overdue.index', 'match' => 'invoicing.overdue.*'],
-        ['label' => 'Statements', 'route' => 'invoicing.statements.index', 'match' => 'invoicing.statements.*'],
-        ['label' => 'Sent', 'route' => 'invoicing.emails.index', 'match' => 'invoicing.emails.*'],
-        ['label' => 'Export', 'route' => 'invoicing.export.index', 'match' => 'invoicing.export.*'],
-    ];
+    // The same list the sidebar's Finance group renders (E29).
+    $tabs = \App\View\FinanceNav::items();
 @endphp
 <div class="flex flex-wrap gap-1.5 mb-4">
     @foreach($tabs as $tab)

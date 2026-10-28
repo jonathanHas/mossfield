@@ -64,10 +64,10 @@
                 @else
                     <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--warn-ink);">
                         <span class="inline-block rounded-full" style="width: 7px; height: 7px; background: var(--warn);"></span>
-                        Needs fulfilment
+                        To pick
                     </span>
                     <span style="color: var(--line);">·</span>
-                    <span class="font-mono">{{ $orderItem->quantity_allocated }} allocated · {{ $orderItem->quantity_fulfilled }} fulfilled</span>
+                    <span class="font-mono">{{ $orderItem->quantity_allocated }} allocated · {{ $orderItem->quantity_fulfilled }} picked</span>
                 @endif
             </div>
         </x-slot:summary>
@@ -90,7 +90,7 @@
                                     <th class="mf-th">Batch</th>
                                     <th class="mf-th">Production</th>
                                     <th class="mf-th text-right">Allocated</th>
-                                    <th class="mf-th text-right">Fulfilled</th>
+                                    <th class="mf-th text-right">Picked</th>
                                     @if($orderItem->isVariableWeight())
                                         <th class="mf-th text-right">Weight</th>
                                     @endif
@@ -149,7 +149,7 @@
                                                                         <button type="submit" class="mf-link" style="color: var(--accent-ink);"
                                                                         data-confirm-template="{{ $pickConfirm }}"
                                                                         data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
-                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
+                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Pick</button>
                                                                     </div>
                                                                     <input type="hidden" name="actual_weight_kg" id="actual_weight_{{ $allocation->id }}" value="0">
                                                                 </div>
@@ -178,7 +178,7 @@
                                                                     <button type="submit" class="mf-link" style="color: var(--accent-ink);"
                                                                         data-confirm-template="{{ $pickConfirm }}"
                                                                         data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
-                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
+                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Pick</button>
                                                                 </div>
                                                             </form>
                                                         @else
@@ -194,7 +194,7 @@
                                                                     <button type="submit" class="mf-link" style="color: var(--accent-ink);"
                                                                         data-confirm-template="{{ $pickConfirm }}"
                                                                         data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
-                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
+                                                                        data-confirm-title="Record pick" data-confirm-label="Record pick">Pick</button>
                                                                 </div>
                                                             </form>
                                                         @endif
