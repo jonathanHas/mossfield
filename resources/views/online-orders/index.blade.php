@@ -89,7 +89,7 @@
                                     </td>
                                     <td class="mf-td">{{ $order->customer->name ?? 'Unknown' }}</td>
                                     <td class="mf-td font-mono text-right">€{{ number_format($order->total_amount, 2) }}</td>
-                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span></td>
+                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ $order->statusLabel() }}</span></td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->created_at->diffForHumans() }}</td>
                                     <td class="mf-td text-right">
                                         <a href="{{ route('orders.show', $order) }}" class="mf-link">View</a>

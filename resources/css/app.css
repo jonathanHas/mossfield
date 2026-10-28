@@ -57,6 +57,7 @@
         color: var(--bg);
         @apply inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-[13px] font-medium border-0 cursor-pointer;
     }
+    .mf-btn-primary[disabled] { opacity: .45; cursor: not-allowed; }
     .mf-btn-secondary {
         @apply inline-flex items-center gap-1.5 bg-white border border-[color:var(--line)] rounded-md px-[11px] py-1.5 text-[13px] font-medium text-[color:var(--ink)] cursor-pointer;
     }
@@ -142,6 +143,8 @@
         @apply px-4 py-3 text-[13px];
         color: var(--ink);
     }
+    /* Narrower cells for dense nested tables (the order page's allocations). */
+    .mf-table-tight .mf-th, .mf-table-tight .mf-td { padding-left: 10px; padding-right: 10px; }
     .mf-tr-divide > tr + tr {
         border-top: 1px solid var(--line-2);
     }

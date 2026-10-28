@@ -83,14 +83,21 @@ Route::get('/dashboard', function () {
     }
 
     if ($user->hasRole('admin', 'office')) {
-        // Order queue: confirmed/preparing orders still needing allocation.
-        // Mirrors OrderAllocationController@index's "partially/unallocated" filter.
+        // Order queue: pending orders to confirm, plus confirmed/preparing
+        // orders still needing allocation (OrderAllocationController@index's filter).
         $unallocatedQuery = \App\Models\Order::whereIn('status', ['pending', 'confirmed', 'preparing'])
             ->whereHas('orderItems', function ($q) {
                 $q->whereRaw('quantity_allocated < quantity_ordered');
             });
 
         $data['unallocatedCount'] = (clone $unallocatedQuery)->count();
+        // The two next actions the queue splits into: pending orders need
+        // confirming, confirmed/preparing ones need allocating.
+        $data['toConfirmCount'] = (clone $unallocatedQuery)->where('status', 'pending')->count();
+        $data['toAllocateCount'] = (clone $unallocatedQuery)->whereIn('status', ['confirmed', 'preparing'])->count();
+        $data['overdueDeliveryCount'] = \App\Models\Order::whereIn('status', \App\Models\Order::OPEN_STATUSES)
+            ->whereDate('delivery_date', '<', today())
+            ->count();
         $data['unallocatedOrders'] = $unallocatedQuery
             ->with(['customer', 'orderItems.productVariant.product'])
             ->orderBy('order_date', 'asc')

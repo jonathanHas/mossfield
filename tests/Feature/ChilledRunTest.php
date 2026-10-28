@@ -1506,4 +1506,50 @@ class ChilledRunTest extends TestCase
             ->assertOk()
             ->assertDontSee('€');
     }
+
+    // ── UX review part 1 (cycle 13): honest strip, real zeros, calm capacity ──
+
+    public function test_the_strip_names_stops_without_an_order_when_every_ordered_stop_is_done(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->orderFor($this->customerOnRun($run, 'Gone Shop', 1), [[$oneL, 5]], 'dispatched');
+        $this->customerOnRun($run, 'Quiet Shop', 2);
+
+        $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->assertSee('All ordered stops dispatched &mdash; 1 without an order', false)
+            ->assertDontSee('All stops dispatched');
+    }
+
+    public function test_the_stock_footer_shows_a_real_zero_only_where_the_column_has_orders(): void
+    {
+        $run = $this->makeRun();
+        $oneL = $this->variant($this->milk, '1L Bottle', '1L', 16);
+        $this->variant($this->milk, '2L Bottle', '2L', 8); // unordered, no stock
+        $this->orderFor($this->customerOnRun($run, 'Thirsty Shop'), [[$oneL, 5]], 'confirmed');
+
+        $html = $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertMatchesRegularExpression('#class="tot col-milk short"\s+title="0 free · 5 still to allocate">0</td>#u', $html);
+        $this->assertMatchesRegularExpression('#class="tot col-milk "\s+title="0 free · 0 still to allocate">—</td>#u', $html);
+    }
+
+    public function test_capacity_is_a_tag_in_the_run_header_not_a_warning(): void
+    {
+        $run = $this->makeRun(['capacity_note' => '40 crates max']);
+        $this->customerOnRun($run, 'Shop');
+
+        $html = $this->actingAs(User::factory()->create())
+            ->get(route('chilled-runs.index'))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString('<span class="mf-tag mf-tag-neutral">Capacity: 40 crates max</span>', $html);
+        $this->assertStringNotContainsString('mf-flash-warn', $html);
+    }
 }

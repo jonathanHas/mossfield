@@ -520,4 +520,44 @@ class OrderShortSupplyTest extends TestCase
 
         $this->assertNull($item->fresh()->short_closed_at);
     }
+
+    // ── Copy says what closeShort() actually does (cycle 13) ─────────
+
+    public function test_the_flash_mentions_no_stock_release_when_nothing_was_reserved(): void
+    {
+        $variant = $this->variant();
+        [$order, $item] = $this->orderWithItem($variant, 10);
+
+        $this->actingAs($this->office())->post(route('orders.items.short', [$order, $item]))
+            ->assertSessionHas('success', "Line closed short — 10 units won't be supplied or billed.");
+    }
+
+    public function test_the_flash_names_the_reserved_units_that_went_back(): void
+    {
+        $variant = $this->variant();
+        $batchItem = $this->batchItem($variant, 4);
+        [$order, $item] = $this->orderWithItem($variant, 10);
+        $item->allocateFromBatchItem($batchItem, 4);
+
+        $this->actingAs($this->office())->post(route('orders.items.short', [$order, $item]))
+            ->assertSessionHas('success', "Line closed short — 10 units won't be supplied or billed. 4 reserved units went back to free stock.");
+    }
+
+    public function test_the_stepper_total_leaves_out_short_closed_units(): void
+    {
+        $empty = $this->variant();
+        $stocked = $this->variant();
+        [$order, $shortLine] = $this->orderWithItem($empty, 10);
+        $order->orderItems()->create([
+            'product_variant_id' => $stocked->id, 'quantity_ordered' => 2, 'unit_price' => $stocked->base_price,
+        ]);
+
+        $office = $this->office();
+        $this->actingAs($office)->post(route('orders.items.short', [$order, $shortLine]));
+        $this->assertSame('preparing', $order->fresh()->status);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('0 of 2 picked');
+    }
 }

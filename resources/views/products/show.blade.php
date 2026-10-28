@@ -14,7 +14,7 @@
         $listLimit = $listLimit ?? 50;
     @endphp
 
-    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
+    <div class="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside class="hidden lg:flex lg:flex-col" style="border-right: 1px solid var(--line-2); max-height: calc(100vh - var(--header-height, 64px)); overflow-y: auto;">
             @include('products._sibling_list', ['mode' => 'show'])
         </aside>
@@ -190,7 +190,7 @@
                             <tr>
                                 <th class="mf-th">Batch code</th>
                                 <th class="mf-th">Production date</th>
-                                <th class="mf-th">Total qty</th>
+                                <th class="mf-th">Produced</th>
                                 <th class="mf-th">Ready date</th>
                                 <th class="mf-th">Remaining</th>
                                 <th class="mf-th">Status</th>
@@ -204,13 +204,16 @@
                                         'sold_out' => 'danger',
                                         default => 'neutral',
                                     };
+                                    $batchExpired = $batch->isExpired();
                                 @endphp
                                 <tr style="border-top: 1px solid var(--line-2);">
                                     <td class="mf-td font-mono">{{ $batch->batch_code }}</td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $batch->production_date->format('d/m/Y') }}</td>
-                                    <td class="mf-td font-mono">{{ $batch->total_quantity_kg }} kg</td>
+                                    <td class="mf-td font-mono">{{ $batch->batchItems->sum('quantity_produced') }}</td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">
-                                        @if($batch->ready_date)
+                                        @if($batchExpired)
+                                            <span style="color: var(--danger);">Expired</span>
+                                        @elseif($batch->ready_date)
                                             {{ $batch->ready_date->format('d/m/Y') }}
                                             @if(!$batch->isReadyToSell())
                                                 <span class="text-[11.5px]" style="color: var(--warn-ink);"> ({{ $batch->ready_date->diffForHumans() }})</span>
@@ -220,7 +223,13 @@
                                         @endif
                                     </td>
                                     <td class="mf-td font-mono">{{ $batch->remaining_stock }}</td>
-                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $batchTone }}">{{ ucfirst(str_replace('_', ' ', $batch->status)) }}</span></td>
+                                    <td class="mf-td">
+                                        @if($batchExpired && $batch->status === 'active')
+                                            <span class="mf-tag mf-tag-danger">Expired</span>
+                                        @else
+                                            <span class="mf-tag mf-tag-{{ $batchTone }}">{{ ucfirst(str_replace('_', ' ', $batch->status)) }}</span>
+                                        @endif
+                                    </td>
                                 </tr>
                             @endforeach
                         </tbody>

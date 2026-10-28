@@ -84,7 +84,7 @@
 
                 @if($orderItem->orderAllocations->count() > 0)
                     <div class="overflow-x-auto rounded-md mb-3" style="border: 1px solid var(--line);">
-                        <table class="w-full border-collapse text-[12.5px]">
+                        <table class="w-full border-collapse text-[12.5px] mf-table-tight">
                             <thead>
                                 <tr>
                                     <th class="mf-th">Batch</th>
@@ -132,7 +132,9 @@
                                                                 // weight_kg when positive, else no threshold.
                                                                 $nominalWeight = (float) $orderItem->productVariant->weight_kg > 0 ? (float) $orderItem->productVariant->weight_kg : null;
                                                             @endphp
-                                                            <form method="POST" action="{{ route('order-allocations.fulfill', $allocation) }}">
+                                                            {{-- The weigh-in sits in its own row under this allocation
+                                                                 (UX review B8); its inputs join this form via form=. --}}
+                                                            <form method="POST" action="{{ route('order-allocations.fulfill', $allocation) }}" id="fulfil-{{ $allocation->id }}">
                                                                 @csrf
                                                                 <div class="space-y-2">
                                                                     <div class="flex items-center gap-2">
@@ -148,26 +150,6 @@
                                                                         data-confirm-template="{{ $pickConfirm }}"
                                                                         data-confirm="{{ str_replace('{n}', $allocation->quantity_remaining, $pickConfirm) }}"
                                                                         data-confirm-title="Record pick" data-confirm-label="Record pick">Fulfil</button>
-                                                                    </div>
-                                                                    <div class="space-y-1" id="weights_{{ $allocation->id }}">
-                                                                        @for($i = 1; $i <= $remainingQty; $i++)
-                                                                            <div class="flex items-center gap-1 weight-row" data-index="{{ $i }}">
-                                                                                <span class="text-[11.5px] w-12" style="color: var(--muted);">#{{ $i }}:</span>
-                                                                                {{-- Comma → decimal point (F-29); amber when over 2× expected. --}}
-                                                                                <input type="number" name="weights[]"
-                                                                                    step="0.001" min="0.001"
-                                                                                    placeholder="{{ number_format($expWeight, 3) }}"
-                                                                                    @if ($nominalWeight) data-expected="{{ $nominalWeight }}" @endif
-                                                                                    class="mf-input w-24 px-2 py-0.5 text-[12px] weight-input"
-                                                                                    onkeydown="if (event.key === ',') { event.preventDefault(); document.execCommand('insertText', false, '.'); }"
-                                                                                    oninput="updateTotal({{ $allocation->id }})"
-                                                                                    required>
-                                                                                <span class="text-[11.5px]" style="color: var(--muted);">kg</span>
-                                                                            </div>
-                                                                        @endfor
-                                                                    </div>
-                                                                    <div class="text-[11.5px] font-mono" style="color: var(--ink-2);">
-                                                                        Total: <span id="total_{{ $allocation->id }}" class="font-medium">0.000</span> kg
                                                                     </div>
                                                                     <input type="hidden" name="actual_weight_kg" id="actual_weight_{{ $allocation->id }}" value="0">
                                                                 </div>
@@ -241,6 +223,36 @@
                                             </td>
                                         @endcan
                                     </tr>
+                                    @can('update', $order)
+                                        @if($allocation->quantity_remaining > 0 && $orderItem->isVariableWeight() && ! $orderItem->isBulkWeighed())
+                                            @php
+                                                // Batch, Production, Allocated, Fulfilled + Weight (variable) + Action (can update).
+                                                $weighInColspan = 4 + ($orderItem->isVariableWeight() ? 1 : 0) + 1;
+                                            @endphp
+                                            <tr class="weight-entry" style="border-top: 1px dashed var(--line-2);">
+                                                <td colspan="{{ $weighInColspan }}" class="mf-td">
+                                                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1.5" id="weights_{{ $allocation->id }}">
+                                                        @for($i = 1; $i <= $remainingQty; $i++)
+                                                            <div class="weight-row inline-flex items-center gap-1" data-index="{{ $i }}">
+                                                                <span class="text-[11.5px]" style="color: var(--muted);">#{{ $i }}</span>
+                                                                {{-- Comma → decimal point (F-29); amber when over 2× expected. --}}
+                                                                <input type="number" name="weights[]" form="fulfil-{{ $allocation->id }}"
+                                                                    step="0.001" min="0.001"
+                                                                    placeholder="{{ number_format($expWeight, 3) }}"
+                                                                    @if ($nominalWeight) data-expected="{{ $nominalWeight }}" @endif
+                                                                    class="mf-input w-24 px-2 py-0.5 text-[12px] weight-input"
+                                                                    onkeydown="if (event.key === ',') { event.preventDefault(); document.execCommand('insertText', false, '.'); }"
+                                                                    oninput="updateTotal({{ $allocation->id }})"
+                                                                    required>
+                                                                <span class="text-[11.5px]" style="color: var(--muted);">kg</span>
+                                                            </div>
+                                                        @endfor
+                                                        <span class="text-[11.5px] font-mono ml-auto" style="color: var(--ink-2);">Total: <span id="total_{{ $allocation->id }}" class="font-medium">0.000</span> kg</span>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        @endif
+                                    @endcan
                                 @endforeach
                             </tbody>
                         </table>
@@ -328,7 +340,7 @@
                                 <input type="text" name="short_reason" maxlength="255" placeholder="Reason (optional)"
                                     class="mf-input w-40 px-2 py-0.5 text-[12px]">
                                 <button type="submit" class="mf-link" style="color: var(--warn-ink);"
-                                    data-confirm-title="Close this line short?" data-confirm="{{ $orderItem->quantity_remaining }} units will be released back to stock, and won't be supplied or billed." data-confirm-label="Close short" data-confirm-danger>Close short</button>
+                                    data-confirm-title="Close this line short?" data-confirm="The {{ $orderItem->quantity_remaining }} unpicked {{ Str::plural('unit', $orderItem->quantity_remaining) }} won't be supplied or billed; any stock reserved for them goes back to free stock." data-confirm-label="Close short" data-confirm-danger>Close short</button>
                             </form>
                         @endunless
                     </div>

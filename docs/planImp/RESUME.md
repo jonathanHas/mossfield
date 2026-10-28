@@ -1,4 +1,4 @@
-# Resume point — 2026-10-04
+# Resume point — 2026-10-13
 
 Where things stand, so a fresh session (or a fresh machine after a reboot) can
 pick up exactly here. Update or replace this file whenever you stop at a point
@@ -123,6 +123,23 @@ worth returning to.
   on branch **`wip/cycle-12-delete-guards`** (off `095c250`). `main` is clean
   — deliberately, because `deploy/bin/ship` auto-commits *everything* in the
   working tree. Resume instructions are at the top of the parked plan.
+- **2026-10-13, UX review (Fable, Chrome as `office_test`):** 34 findings in
+  `UX_REVIEW_2026-10-13.md` (its Decisions block has Jon's calls: finding 1
+  expected, 4 deferred, 5 hidden behind a flag).
+- **Cycle 13 "UX review, part 1" — ACCEPTED 2026-10-13 (revision 2):**
+  Mossorders surface behind `MOSSORDERS_UI_ENABLED`; dashboard says confirm
+  / allocate / overdue; `Order::isDeliveryOverdue()` + `statusLabel()`;
+  order header and product page fit 1280 px; weigh-in row; honest
+  auto-allocate banner and short-close copy; "No limit"; batch-card tags;
+  bell and Profile delete gone; run-sheet strip/stock footer/capacity. Suite
+  **727 tests, 0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-13.
+  Jon archives `plan.md` + `implemented.md` to
+  `archive/2026-10-13-ux-review-part-1/`.
+- **Next: UX review part 2** — a new plan for D20–D26 (customer form
+  required fields and defaults, order-form hints, list filters/search), E29
+  (finance nav), F34 (run-sheet address line) and the fulfil/pick wording;
+  finding 4 (Email invoice from the order page) stays deferred until Jon
+  says so.
 - **Next after that:** the roadmap holds only `FULFILMENT_PLAN.md` Phase 4 (driver
   route for the day + proof of delivery with signature) — a new feature
   that would want a design pass before a plan. Otherwise: push and deploy
@@ -158,8 +175,19 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **all passing, 0 failing** (the 7 Breeze failures were retired 2026-10-04). Any failure is real.
+- `php artisan test` → **727 tests, 0 failing** as of 2026-10-13 (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
+
+## Dev database — state on 2026-10-13
+
+The section below describes the database **before** it was reset; on
+2026-10-13 it held 16 customers and 5 orders before the UX walk-through. The
+walk-through and cycle 13 added: ORD-20261013-001 (Barnhill, id 6)
+**dispatched → INV-000001** (€161.60, unpaid, not emailed — void from Finance
+if it should go), ORD-20261013-002 (id 7) and the Implementer's probe
+ORD-20261013-003 (id 8), both cancelled. G030426 wheels 31 → 29 on hand. The
+`office_test` password is back to the seeder default. `public/build` was
+rebuilt.
 
 ## Dev database (`mossfield_cl`) — repaired, not reset; E2E data added 2026-10-04
 

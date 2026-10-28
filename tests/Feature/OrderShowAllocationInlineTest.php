@@ -178,4 +178,40 @@ class OrderShowAllocationInlineTest extends TestCase
             ->get(route('order-allocations.show', $order))
             ->assertRedirect(route('orders.show', $order));
     }
+
+    public function test_the_banner_says_nothing_left_when_no_line_has_free_stock(): void
+    {
+        $office = User::factory()->create();
+        $yoghurt = ProductVariant::create([
+            'product_id' => $this->product->id, 'name' => '2L Bottle', 'size' => '2L', 'unit' => 'bottle',
+            'weight_kg' => 2.06, 'base_price' => 3.50, 'is_active' => true,
+        ]);
+        $order = Order::create([
+            'customer_id' => $this->customer->id, 'order_date' => now()->toDateString(),
+            'status' => 'confirmed', 'payment_status' => 'pending',
+            'subtotal' => 0, 'tax_amount' => 0, 'total_amount' => 0,
+        ]);
+        // 2L has no batch at all: nothing to allocate.
+        OrderItem::create([
+            'order_id' => $order->id, 'product_variant_id' => $yoghurt->id,
+            'quantity_ordered' => 4, 'unit_price' => 3.50,
+        ]);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertDontSee(route('order-allocations.auto-allocate', $order))
+            ->assertSee('Nothing left to allocate.')
+            ->assertSee('Milk · 2L Bottle has no free stock — close it short, or wait for a new batch.');
+
+        // A second line with stock brings the button back.
+        OrderItem::create([
+            'order_id' => $order->id, 'product_variant_id' => $this->variant->id,
+            'quantity_ordered' => 2, 'unit_price' => 2.00,
+        ]);
+
+        $this->actingAs($office)->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee(route('order-allocations.auto-allocate', $order))
+            ->assertDontSee('Nothing left to allocate.');
+    }
 }

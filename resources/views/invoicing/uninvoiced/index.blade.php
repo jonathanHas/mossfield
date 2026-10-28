@@ -15,7 +15,7 @@
                 <form method="POST" action="{{ route('invoicing.uninvoiced.issue-all') }}"
                       data-confirm-title="Issue these invoices?" data-confirm="Issue {{ $perOrder->count() }} invoices?" data-confirm-label="Issue">
                     @csrf
-                    <button type="submit" class="mf-btn-primary">Issue all {{ $perOrder->count() }}</button>
+                    <button type="submit" class="mf-btn-primary whitespace-nowrap">Issue all {{ $perOrder->count() }}</button>
                 </form>
             @endif
         </div>
@@ -56,7 +56,7 @@
                                 </td>
                                 <td class="mf-td">{{ $order->customer?->name }}</td>
                                 <td class="mf-td">{{ $order->billing_date?->format('d/m/Y') }}</td>
-                                <td class="mf-td"><span class="mf-tag mf-tag-accent">{{ ucfirst($order->status) }}</span></td>
+                                <td class="mf-td"><span class="mf-tag mf-tag-accent">{{ $order->statusLabel() }}</span></td>
                                 <td class="mf-td text-right font-mono">€{{ number_format((float) $order->total_amount, 2) }}</td>
                                 <td class="mf-td text-right">
                                     <form method="POST" action="{{ route('invoicing.invoices.issue-order', $order) }}">

@@ -714,6 +714,8 @@ class OrderController extends Controller
 
         $validated = $request->validate(['short_reason' => 'nullable|string|max:255']);
         $shortQty = $orderItem->quantity_remaining;
+        // closeShort() releases exactly the reservation — say so only when there was one.
+        $released = $orderItem->quantity_allocated - $orderItem->quantity_fulfilled;
 
         DB::transaction(function () use ($order, $orderItem, $validated) {
             $orderItem->closeShort(($validated['short_reason'] ?? null) ?: null);
@@ -722,7 +724,8 @@ class OrderController extends Controller
         });
 
         return redirect()->route('orders.show', $order)->withFragment('line-'.$orderItem->id)
-            ->with('success', "Line closed short — {$shortQty} units released back to stock, not supplied and not billed.");
+            ->with('success', "Line closed short — {$shortQty} units won't be supplied or billed."
+                .($released > 0 ? " {$released} reserved units went back to free stock." : ''));
     }
 
     /**

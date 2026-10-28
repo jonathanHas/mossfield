@@ -5,7 +5,7 @@
     $canSeeCustomers = $me->hasRole('admin', 'office');
     $canSeeOrders = $me->hasRole('admin', 'office', 'factory');
     $canSeeAllocation = $me->hasRole('admin', 'office');
-    $canSeeOnlineOrders = $me->hasRole('admin', 'office');
+    $canSeeOnlineOrders = $me->hasRole('admin', 'office') && config('services.mossorders.ui_enabled');
     $canSeeUsers = $me->hasRole('admin');
     // Finance is office/admin only — FinancialPolicy denies factory at the model
     // too, so the nav and the access rules agree.

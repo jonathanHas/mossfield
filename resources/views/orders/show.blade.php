@@ -24,9 +24,18 @@
             'notes' => $order->notes,
             'customer_reference' => $order->customer_reference,
         ];
+        // Auto allocate only helps when an unsettled, under-allocated line has
+        // free stock to take (UX review C19); otherwise name the stuck lines.
+        $needsStock = fn ($i) => ! $i->isSettled() && $i->quantity_allocated < $i->quantity_ordered;
+        $canAutoAllocate = $order->orderItems->contains(fn ($i) => $needsStock($i)
+            && ($availableBatchItems[$i->id] ?? collect())->isNotEmpty());
+        $noStockLabels = $order->orderItems
+            ->filter(fn ($i) => $needsStock($i) && ($availableBatchItems[$i->id] ?? collect())->isEmpty())
+            ->map(fn ($i) => $i->productVariant->picker_label)
+            ->values();
     @endphp
 
-    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
+    <div class="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside class="hidden lg:flex lg:flex-col" style="border-right: 1px solid var(--line-2); max-height: calc(100vh - var(--header-height, 64px)); overflow-y: auto;">
             <div class="px-4 py-3 sticky top-0 z-10" style="background: var(--bg); border-bottom: 1px solid var(--line-2);">
                 <div class="flex items-center justify-between gap-2">
@@ -74,7 +83,7 @@
                                 </div>
                             @endif
                             <div class="mt-1.5 flex items-center justify-between gap-2">
-                                <span class="mf-tag mf-tag-{{ $sibStatusTone }}">{{ ucfirst($sibling->status) }}</span>
+                                <span class="mf-tag mf-tag-{{ $sibStatusTone }}">{{ $sibling->statusLabel() }}</span>
                                 @can('see-financials')
                                     <span class="font-mono text-[12px] font-medium">€{{ number_format($sibling->total_amount, 2) }}</span>
                                 @endcan
@@ -102,23 +111,36 @@
                     <span style="color: var(--ink);">{{ $order->order_number }}</span>
                 </div>
 
-                {{-- Header --}}
-                <div class="flex items-start justify-between gap-6 mb-7">
-                    <div class="min-w-0">
-                        <h1 class="text-[24px] font-semibold font-mono" style="letter-spacing: -0.02em;">{{ $order->order_number }}</h1>
-                        <div class="mt-1.5 text-[13px]" style="color: var(--muted);">
-                            <span style="color: var(--ink-2); font-weight: 500;">{{ $order->customer->name }}</span>
-                            · ordered {{ $order->order_date->format('j M') }}
-                            @if($order->delivery_date)
-                                · deliver {{ $order->delivery_date->format('j M') }}
+                {{-- Header: title row, then the action bar on its own row so the
+                     order number never wraps at 1280 px (UX review B7). --}}
+                <div class="mb-7">
+                    <div class="flex items-start justify-between gap-6">
+                        <div class="min-w-0">
+                            <h1 class="text-[24px] font-semibold font-mono whitespace-nowrap" style="letter-spacing: -0.02em;">{{ $order->order_number }}</h1>
+                            <div class="mt-1.5 text-[13px]" style="color: var(--muted);">
+                                <span style="color: var(--ink-2); font-weight: 500;">{{ $order->customer->name }}</span>
+                                · ordered {{ $order->order_date->format('j M') }}
+                                @if($order->delivery_date)
+                                    · deliver {{ $order->delivery_date->format('j M') }}
+                                    @if($order->isDeliveryOverdue())
+                                        <span class="mf-tag mf-tag-danger" data-overdue>overdue</span>
+                                    @endif
+                                @endif
+                            </div>
+                            {{-- An invoiced order is frozen (blockedByInvoice); say so
+                                 rather than offer an Edit that refuses on save (F-34). --}}
+                            @if($order->invoice_id)
+                                @can('update', $order)
+                                    <div class="mt-0.5 text-[12px]" style="color: var(--muted);">On invoice {{ $order->invoice?->number }} — void it to edit.</div>
+                                @endcan
+                            @endif
+                            @if($order->status === 'cancelled')
+                                <span class="mf-tag mf-tag-danger mt-2">Cancelled</span>
                             @endif
                         </div>
-                        @if($order->status === 'cancelled')
-                            <span class="mf-tag mf-tag-danger mt-2">Cancelled</span>
-                        @endif
-                    </div>
-                    <div class="flex items-center gap-2 flex-shrink-0">
                         <a href="{{ route('orders.index', $listFilters) }}" class="mf-btn-ghost lg:hidden">← All</a>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-2 mt-3" data-order-actions>
                         @if($order->hasReachedReady())
                             {{-- The price-free packing slip for the van. Priced paperwork lives in Finance. --}}
                             <a href="{{ route('orders.docket', $order) }}" class="mf-btn-secondary" target="_blank" rel="noopener">
@@ -147,13 +169,9 @@
                             @endcan
                         @endif
                         @can('update', $order)
-                            {{-- An invoiced order is frozen (blockedByInvoice); say so
-                                 rather than offer an Edit that refuses on save (F-34). --}}
-                            @if($order->invoice_id)
-                                <span class="text-[12px]" style="color: var(--muted);">On invoice {{ $order->invoice?->number }} — void it to edit.</span>
-                            @else
+                            @unless($order->invoice_id)
                                 <a href="{{ route('orders.edit', $order) }}" class="mf-btn-secondary">Edit</a>
-                            @endif
+                            @endunless
                             @if($order->status === 'pending')
                                 <form method="POST" action="{{ route('orders.update', $order) }}" class="inline">
                                     @csrf @method('PATCH')
@@ -168,7 +186,10 @@
                                     </button>
                                 </form>
                             @elseif($order->status === 'ready' && ! $order->loaded_at)
-                                <span class="text-[12px]" style="color: var(--muted);" data-dispatch-needs-loaded>Tick loaded onto van first</span>
+                                <button type="button" class="mf-btn-primary" disabled aria-disabled="true" title="Tick loaded onto van first" data-dispatch-needs-loaded>
+                                    Mark dispatched
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 3h15v13H1z" /><path d="M16 8h4l3 3v5h-7" /><path d="M5.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5zM18.5 18.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z" /></svg>
+                                </button>
                             @elseif($order->status === 'ready')
                                 <form method="POST" action="{{ route('orders.dispatch', $order) }}" class="inline">
                                     @csrf
@@ -348,7 +369,16 @@
                 </div>
 
                 @can('update', $order)
-                    @if(in_array($order->status, ['confirmed', 'preparing'], true) && ! $order->isFullyAllocated())
+                    @if(in_array($order->status, ['confirmed', 'preparing'], true) && ! $order->isFullyAllocated() && ! $canAutoAllocate)
+                        <div class="mf-flash mb-4" style="background: var(--panel); border-color: var(--line); color: var(--ink-2);" data-nothing-to-allocate>
+                            <div>
+                                <b>Nothing left to allocate.</b>
+                                @if($noStockLabels->isNotEmpty())
+                                    {{ $noStockLabels->join(', ', ' and ') }} {{ $noStockLabels->count() === 1 ? 'has' : 'have' }} no free stock — close {{ $noStockLabels->count() === 1 ? 'it' : 'them' }} short, or wait for a new batch.
+                                @endif
+                            </div>
+                        </div>
+                    @elseif(in_array($order->status, ['confirmed', 'preparing'], true) && ! $order->isFullyAllocated())
                         <div class="mf-flash mf-flash-success mb-4 items-center justify-between gap-4">
                             <div class="flex items-start gap-2.5">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px;"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" /></svg>
@@ -482,7 +512,7 @@
                                     </div>
                                     @if($order->status === 'ready')
                                         <p class="text-[11.5px] mt-2" style="color: var(--muted);">
-                                            Adding to a ready order reopens picking — it returns to <b>Preparing</b> until the new line is fulfilled.
+                                            Adding to a ready order reopens picking — it returns to <b>Picking</b> until the new line is fulfilled.
                                         </p>
                                     @endif
                                 </form>

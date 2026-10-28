@@ -846,6 +846,8 @@ Recent invoices, and Documents sent.
 
 ## Online Orders Integration
 
+The Online Orders nav item, dashboard sync banner/button and the customer-page Mossorders fields render only when `MOSSORDERS_UI_ENABLED=true` (`services.mossorders.ui_enabled`); routes stay live.
+
 ### Web Interface
 - **URL**: `/online-orders`; nav link "Online Orders"
 - **Features**: preview orders from Mossorders before importing, import selected orders, view import status/history
@@ -860,3 +862,9 @@ Recent invoices, and Documents sent.
 MOSSORDERS_BASE_URL="https://mossorders.example.com"
 MOSSORDERS_API_TOKEN="your_api_token"
 ```
+
+
+## Project notes vault
+
+Local setup, gotchas and a dated history for this project live outside the repo, in Claude's Obsidian vault:
+`~/Documents/Obsidian/Claude/projects/mossfield.md`. Read it at the start of a session, and after substantive work add a dated Log entry there (see `~/Documents/Obsidian/Claude/Conventions.md`). Credentials are never stored in the vault.

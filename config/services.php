@@ -69,6 +69,9 @@ return [
     'mossorders' => [
         'base_url' => env('MOSSORDERS_BASE_URL', 'https://mossorders.example.com'),
         'api_token' => env('MOSSORDERS_API_TOKEN'),
+        // Shows the Online Orders screens, dashboard sync banner and customer
+        // link fields. Off until the integration is live; routes stay reachable.
+        'ui_enabled' => filter_var(env('MOSSORDERS_UI_ENABLED', false), FILTER_VALIDATE_BOOL),
     ],
 
     /*

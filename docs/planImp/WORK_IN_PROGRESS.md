@@ -2,9 +2,15 @@
 
 This file tracks the current development state and what needs attention when resuming work.
 
-**Last Updated**: 2026-10-06
+**Last Updated**: 2026-10-13
 
 > **Production install runbook lives in [`DEPLOYMENT.md`](../../DEPLOYMENT.md).** When anything in this file references "operator action required in prod", the detailed step-by-step is there.
+
+---
+
+## Recently Completed: UX review, part 1 (2026-10-13)
+
+Plan/Implement cycle 13, from the Planner's office-role walk-through (`UX_REVIEW_2026-10-13.md`, 34 findings). The Mossorders screens hide behind `MOSSORDERS_UI_ENABLED` (routes live); the dashboard says confirm / allocate / past its delivery date instead of "Allocate →" on everything; `Order::isDeliveryOverdue()` tags the order surfaces; the order header and product page fit a 1280 px laptop; the cheese weigh-in has its own row; the auto-allocate banner and short-close copy say what is true; "No limit"; batch cards don't contradict themselves; the bell and Profile → Delete account are gone; the run-sheet strip, stock footer and capacity read right. Suite 727, 0 failed. **Part 2** (forms, lists, finance nav, run-sheet address) is the next plan; finding 4 (Email invoice from the order page) is deferred.
 
 ---
 

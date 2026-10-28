@@ -1,4 +1,8 @@
 {{-- Crate / load summary strip --}}
+@php
+    // "All stops …" would overclaim while some stops have no order at all.
+    $noOrderStops = $sheet['rows']->count() - $sheet['loadableCount'];
+@endphp
 <div class="mf-panel mb-4">
     <div class="mf-crate-strip">
         <div class="mf-crate-cell">
@@ -32,6 +36,8 @@
             <div class="font-mono" style="font-size: 10.5px; color: var(--muted); margin-top: 6px;">
                 @if ($sheet['allocStopsTotal'] === 0)
                     No orders to allocate this day
+                @elseif ($sheet['allocatedPct'] === 100 && $noOrderStops > 0)
+                    All ordered stops covered &mdash; {{ $noOrderStops }} without an order
                 @elseif ($sheet['allocatedPct'] === 100)
                     All stops covered &mdash; ready to pick
                 @else
@@ -52,6 +58,8 @@
             <div class="font-mono" style="font-size: 10.5px; color: var(--muted); margin-top: 6px;">
                 @if ($sheet['loadableCount'] === 0)
                     No orders to load this day
+                @elseif ($sheet['loadedPct'] === 100 && $noOrderStops > 0)
+                    All ordered stops loaded &mdash; {{ $noOrderStops }} without an order
                 @elseif ($sheet['loadedPct'] === 100)
                     All stops loaded &mdash; ready to roll
                 @else
@@ -72,6 +80,8 @@
             <div class="font-mono" style="font-size: 10.5px; color: var(--muted); margin-top: 6px;">
                 @if ($sheet['loadableCount'] === 0)
                     No orders this day
+                @elseif ($sheet['dispatchedPct'] === 100 && $noOrderStops > 0)
+                    All ordered stops dispatched &mdash; {{ $noOrderStops }} without an order
                 @elseif ($sheet['dispatchedPct'] === 100)
                     All stops dispatched
                 @else

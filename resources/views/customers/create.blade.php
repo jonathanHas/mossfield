@@ -64,6 +64,7 @@
                         <label for="credit_limit" class="mf-label">Credit limit (€) <span style="color: var(--danger);">*</span></label>
                         <input type="number" name="credit_limit" id="credit_limit" value="{{ old('credit_limit', '0.00') }}"
                                step="0.01" min="0" required class="mf-input">
+                        <p class="text-[12px] mt-1" style="color: var(--muted);">0 = no limit — the app warns, never blocks, when an order would exceed it.</p>
                         @error('credit_limit') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                     <div>
@@ -128,6 +129,7 @@
                     </div>
                 </div>
 
+                @if (config('services.mossorders.ui_enabled'))
                 {{-- Tucked away: only shops that order online need it (F-17). Open
                      when it holds a value or was refused. --}}
                 @php $mossordersId = old('mossorders_user_id'); @endphp
@@ -142,6 +144,7 @@
                         @error('mossorders_user_id') <p class="mf-error">{{ $message }}</p> @enderror
                     </div>
                 </details>
+                @endif
 
                 <h3 class="text-[14px] font-semibold mb-3">Additional</h3>
                 <div class="mb-6">

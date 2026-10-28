@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+#
+# "ship it" from Jon's PC to the mossserv box.
+#
+# Same job as `ship` (commit → push → deploy-on-prod with maintenance mode),
+# tailored to this machine:
+#
+#   * targets the `mossserv` SSH alias from ~/.ssh/config (user jon,
+#     ~/.ssh/id_ed25519) — this PC has no `mossserv-deploy` alias or
+#     `id_mossserv_deploy` key, which is what `ship`/`deploy-mossserv` expect;
+#   * commits TRACKED files only (`git add -u`): untracked files are listed
+#     and left alone — `git add` them first if they belong in the deploy.
+#
+# It is a thin wrapper over deploy-mossserv → deploy2 (key auto-load,
+# pre-flight checks, summary, confirm, push, remote trigger). Nothing from
+# those is re-implemented here.
+#
+# Usage:
+#   deploy/bin/ship-jon [-m "<msg>"] [--no-maintenance] [--skip-npm] [--dry-run] [-y] ...
+#
+#   deploy/bin/ship-jon                  # prompt for a message (blank => timestamp)
+#   deploy/bin/ship-jon -m "Fix totals"  # use the given message, skip the prompt
+#   deploy/bin/ship-jon --dry-run        # pre-flight + summary only; no push, no SSH deploy
+#
+# Any flag not listed below passes straight through to deploy-mossserv /
+# deploy2 (--skip-npm, --dry-run, -y, --branch=<name>).
+#
+# NOTE (inherited from ship): deploy2 commits during its pre-flight, BEFORE
+# the "Proceed? [y/N]" prompt — and even on --dry-run. If you abort at that
+# prompt, the local commit already exists (just not pushed); undo it with
+# `git reset --soft HEAD~1`.
+
+set -euo pipefail
+
+# This PC → mossserv. Override by exporting the variables before running.
+export MOSSFIELD_PROD_HOST="${MOSSFIELD_PROD_HOST:-mossserv}"
+export MOSSFIELD_PROD_PATH="${MOSSFIELD_PROD_PATH:-/var/www/mossfield}"
+
+MAINTENANCE=1
+MSG=""
+PASSTHRU=()
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --no-maintenance) MAINTENANCE=0; shift ;;
+    -m|--message) MSG="$2"; shift 2 ;;
+    --message=*) MSG="${1#*=}"; shift ;;
+    -h|--help)
+      sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *) PASSTHRU+=("$1"); shift ;;
+  esac
+done
+
+cd "$(dirname "$0")/../.."
+
+# Untracked files are not committed by this script (tracked-only). Say so
+# before deploy2's pre-flight commits, so nothing is silently left behind.
+UNTRACKED=$(git ls-files --others --exclude-standard)
+if [ -n "$UNTRACKED" ]; then
+  echo "ⓘ untracked files — NOT included in the commit (git add them first if they should ship):"
+  echo "$UNTRACKED" | sed 's/^/    /'
+  echo
+fi
+
+# Prompt for a commit message if none was given; blank reply => timestamp.
+if [ -z "$MSG" ]; then
+  read -r -p "Commit message (blank = timestamp): " MSG || true
+  if [ -z "$MSG" ]; then
+    MSG="Deploy $(date '+%Y-%m-%d %H:%M')"
+    echo "  ⓘ using auto message: $MSG"
+  fi
+fi
+
+# deploy-on-prod runs as root on the box via `ssh -t … sudo`. With a
+# password-less sudo it runs straight through; otherwise sudo prompts on
+# the box during the remote step. Say which, don't fail.
+if ssh -o BatchMode=yes -o ConnectTimeout=5 "$MOSSFIELD_PROD_HOST" 'sudo -n true' >/dev/null 2>&1; then
+  echo "ⓘ sudo on $MOSSFIELD_PROD_HOST: password-less"
+else
+  echo "ⓘ sudo on $MOSSFIELD_PROD_HOST: not password-less (or host unreachable / key not loaded yet) —"
+  echo "  expect a password prompt on the box during the remote step."
+fi
+
+# Build the deploy-mossserv argument list: -m (tracked-only commit — no
+# --include-untracked), --maintenance only when on, then passthrough.
+ARGS=(-m "$MSG")
+[ "$MAINTENANCE" -eq 1 ] && ARGS+=(--maintenance)
+[ "${#PASSTHRU[@]}" -gt 0 ] && ARGS+=("${PASSTHRU[@]}")
+
+exec "$(dirname "$0")/deploy-mossserv" "${ARGS[@]}"

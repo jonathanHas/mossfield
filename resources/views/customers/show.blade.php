@@ -12,7 +12,7 @@
                     @else
                         <span class="mf-tag mf-tag-danger">Inactive</span>
                     @endif
-                    @if($customer->hasOnlineAccount())
+                    @if(config('services.mossorders.ui_enabled') && $customer->hasOnlineAccount())
                         <span class="mf-tag mf-tag-info">Online · {{ $customer->mossorders_user_id }}</span>
                     @endif
                     @if($customer->requires_reference)
@@ -76,7 +76,7 @@
                 </div>
                 <dl class="px-4 py-3 text-[13px] grid grid-cols-[110px_1fr] gap-y-2">
                     <dt style="color: var(--muted);">Credit limit</dt>
-                    <dd class="font-mono">€{{ number_format($customer->credit_limit, 2) }}</dd>
+                    <dd class="font-mono">{{ (float) $customer->credit_limit > 0 ? '€'.number_format($customer->credit_limit, 2) : 'No limit' }}</dd>
                     <dt style="color: var(--muted);">Payment terms</dt>
                     <dd>
                         {{ match($customer->payment_terms) {
@@ -91,13 +91,6 @@
                         <dt style="color: var(--muted);">Delivery charge</dt>
                         <dd class="font-mono">{{ rtrim(rtrim(number_format($customer->delivery_charge_percent, 2), '0'), '.') }}% of order</dd>
                     @endif
-                    <dt style="color: var(--muted);">Outstanding</dt>
-                    {{-- In credit reads as such, never as a minus sign (F-38). --}}
-                    @if($customer->outstanding_balance < 0)
-                        <dd class="font-mono" style="color: var(--accent-ink);">€{{ number_format(abs($customer->outstanding_balance), 2) }} in credit</dd>
-                    @else
-                        <dd class="font-mono">€{{ number_format($customer->outstanding_balance, 2) }}</dd>
-                    @endif
                     <dt style="color: var(--muted);">Invoicing</dt>
                     <dd>{{ $customer->invoicing_mode?->label() ?? 'Per order' }}</dd>
                     <dt style="color: var(--muted);">Invoices</dt>
@@ -111,14 +104,16 @@
                         <dt style="color: var(--muted);">VAT number</dt>
                         <dd class="font-mono">{{ $customer->vat_number }}</dd>
                     @endif
-                    <dt style="color: var(--muted);">Online</dt>
-                    <dd>
-                        @if($customer->hasOnlineAccount())
-                            <span class="mf-tag mf-tag-info">Linked · ID {{ $customer->mossorders_user_id }}</span>
-                        @else
-                            <span class="mf-tag mf-tag-neutral">Not linked</span>
-                        @endif
-                    </dd>
+                    @if (config('services.mossorders.ui_enabled'))
+                        <dt style="color: var(--muted);">Online</dt>
+                        <dd>
+                            @if($customer->hasOnlineAccount())
+                                <span class="mf-tag mf-tag-info">Linked · ID {{ $customer->mossorders_user_id }}</span>
+                            @else
+                                <span class="mf-tag mf-tag-neutral">Not linked</span>
+                            @endif
+                        </dd>
+                    @endif
                 </dl>
             </div>
         </div>
@@ -168,7 +163,7 @@
                     </div>
                     <div>
                         <div class="text-[11.5px] uppercase" style="color: var(--muted); letter-spacing: 0.2px;">Credit limit</div>
-                        <div class="font-mono text-[18px] mt-0.5">€{{ number_format($customer->credit_limit, 2) }}</div>
+                        <div class="font-mono text-[18px] mt-0.5">{{ (float) $customer->credit_limit > 0 ? '€'.number_format($customer->credit_limit, 2) : 'No limit' }}</div>
                     </div>
                 </div>
                 <table class="w-full">
@@ -305,7 +300,7 @@
                                     </td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d M Y') }}</td>
                                     <td class="mf-td font-mono">€{{ number_format($order->total_amount, 2) }}</td>
-                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span></td>
+                                    <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ $order->statusLabel() }}</span></td>
                                     @can('see-financials')
                                         <td class="mf-td">
                                             <span class="mf-tag mf-tag-{{ $payTone }}">{{ ucfirst(str_replace('_', ' ', $order->payment_status)) }}</span>

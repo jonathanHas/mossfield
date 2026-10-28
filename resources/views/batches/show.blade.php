@@ -378,8 +378,6 @@
                             </div>
                         @endforeach
                     </div>
-                @else
-                    <p class="text-[12px] mt-3" style="color: var(--muted);">More actions coming soon.</p>
                 @endif
             </div>
         </div>

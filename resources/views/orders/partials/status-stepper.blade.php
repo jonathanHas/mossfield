@@ -31,10 +31,11 @@
                 <div class="mf-pstep-label">{{ $step['name'] }}</div>
                 {{-- "Picking" alone reads as under way the moment stock is
                      allocated; say how much has actually been picked. Sums
-                     the loaded lines — no query. --}}
+                     the loaded lines — no query. A short-closed line counts
+                     only what will actually be supplied. --}}
                 @if($step['id'] === 'preparing' && $order->status === 'preparing')
                     <div style="font-size: 11px; color: var(--muted);" data-picked-count>
-                        {{ $order->orderItems->sum('quantity_fulfilled') }} of {{ $order->orderItems->sum('quantity_ordered') }} picked
+                        {{ $order->orderItems->sum('quantity_fulfilled') }} of {{ $order->orderItems->sum(fn ($i) => $i->quantity_ordered - ($i->isShortClosed() ? $i->quantity_short : 0)) }} picked
                     </div>
                 @endif
             </div>

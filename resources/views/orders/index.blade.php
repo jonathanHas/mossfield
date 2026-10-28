@@ -25,7 +25,7 @@
                         <option value="">All statuses</option>
                         <option value="pending" {{ request('status') == 'pending' ? 'selected' : '' }}>Pending</option>
                         <option value="confirmed" {{ request('status') == 'confirmed' ? 'selected' : '' }}>Confirmed</option>
-                        <option value="preparing" {{ request('status') == 'preparing' ? 'selected' : '' }}>Preparing</option>
+                        <option value="preparing" {{ request('status') == 'preparing' ? 'selected' : '' }}>Picking</option>
                         <option value="ready" {{ request('status') == 'ready' ? 'selected' : '' }}>Ready</option>
                         <option value="dispatched" {{ request('status') == 'dispatched' ? 'selected' : '' }}>Dispatched</option>
                         <option value="delivered" {{ request('status') == 'delivered' ? 'selected' : '' }}>Delivered</option>
@@ -104,9 +104,14 @@
                                 </td>
                                 <td class="mf-td">{{ $order->customer->name }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d/m/Y') }}</td>
-                                <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->delivery_date ? $order->delivery_date->format('d/m/Y') : '—' }}</td>
+                                <td class="mf-td font-mono whitespace-nowrap" style="color: var(--muted);">
+                                    {{ $order->delivery_date ? $order->delivery_date->format('d/m/Y') : '—' }}
+                                    @if($order->isDeliveryOverdue())
+                                        <span class="mf-tag mf-tag-danger" data-overdue>overdue</span>
+                                    @endif
+                                </td>
                                 <td class="mf-td whitespace-nowrap">
-                                    <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span>
+                                    <span class="mf-tag mf-tag-{{ $statusTone }}">{{ $order->statusLabel() }}</span>
                                     @if($order->hasReachedReady())
                                         <a href="{{ route('orders.docket', $order) }}" class="mf-link ml-2" target="_blank" rel="noopener" title="View dispatch docket in a new window">Docket</a>
                                     @endif

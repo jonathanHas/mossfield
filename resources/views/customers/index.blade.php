@@ -28,14 +28,16 @@
                         <option value="0" {{ request('is_active') === '0' ? 'selected' : '' }}>Inactive only</option>
                     </select>
                 </div>
-                <div>
-                    <label for="has_online_account" class="mf-label">Online account</label>
-                    <select name="has_online_account" id="has_online_account" class="mf-select">
-                        <option value="">All</option>
-                        <option value="1" {{ request('has_online_account') === '1' ? 'selected' : '' }}>Linked</option>
-                        <option value="0" {{ request('has_online_account') === '0' ? 'selected' : '' }}>Not linked</option>
-                    </select>
-                </div>
+                @if (config('services.mossorders.ui_enabled'))
+                    <div>
+                        <label for="has_online_account" class="mf-label">Online account</label>
+                        <select name="has_online_account" id="has_online_account" class="mf-select">
+                            <option value="">All</option>
+                            <option value="1" {{ request('has_online_account') === '1' ? 'selected' : '' }}>Linked</option>
+                            <option value="0" {{ request('has_online_account') === '0' ? 'selected' : '' }}>Not linked</option>
+                        </select>
+                    </div>
+                @endif
                 <button type="submit" class="mf-btn-secondary">Filter</button>
                 @if(request()->hasAny(['search', 'is_active', 'has_online_account']))
                     <a href="{{ route('customers.index') }}" class="mf-btn-ghost">Clear</a>
@@ -62,7 +64,7 @@
                             <tr style="border-top: 1px solid var(--line-2);">
                                 <td class="mf-td">
                                     <div class="font-medium">{{ $customer->name }}</div>
-                                    @if($customer->hasOnlineAccount())
+                                    @if(config('services.mossorders.ui_enabled') && $customer->hasOnlineAccount())
                                         <span class="mf-tag mf-tag-info mt-0.5">Online · {{ $customer->mossorders_user_id }}</span>
                                     @endif
                                 </td>
@@ -76,7 +78,7 @@
                                     <div>{{ $customer->city }}</div>
                                     <div class="text-[11.5px] mt-0.5" style="color: var(--muted);">{{ $customer->country }}</div>
                                 </td>
-                                <td class="mf-td font-mono">€{{ number_format($customer->credit_limit, 2) }}</td>
+                                <td class="mf-td font-mono">{{ (float) $customer->credit_limit > 0 ? '€'.number_format($customer->credit_limit, 2) : 'No limit' }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">
                                     {{ $customer->orders_count }}
                                 </td>

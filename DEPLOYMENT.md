@@ -132,6 +132,7 @@ Additional vars on mossfield:
 ```env
 MOSSORDERS_BASE_URL=https://mossorders.example.com       # must be https:// in prod
 MOSSORDERS_API_TOKEN=<shared-secret-from-openssl-rand>
+MOSSORDERS_UI_ENABLED=false                              # default false; true shows the Online Orders nav/screens, dashboard sync banner and customer link fields
 OFFICE_API_TOKEN=<same-shared-secret>
 OFFICE_API_TOKEN_PREVIOUS=                               # leave blank outside rotation windows
 OFFICE_API_ALLOWED_IPS=<mossorders-public-ip>            # see §5
@@ -310,6 +311,7 @@ The deploy-script family (all in `deploy/bin/`):
 |---|---|
 | **`ship`** | **Everyday deploys to mossserv** — auto-commit-all + push + deploy w/ maintenance. The default. |
 | `deploy-mossserv` | mossserv target without the auto-commit defaults (pins host/path, hands off to `deploy2`). |
+| `ship-jon` | Jon's PC: same as `ship` but through the `mossserv` SSH alias (user jon, `id_ed25519` — this PC has no `mossserv-deploy` alias) and commits **tracked files only**; untracked files are listed and left alone. |
 | `deploy2` | Original prod box (`mossfield-prod`); auto-loads the passphrase-protected SSH key (prompts once per session). |
 | `deploy` | Same as `deploy2` but does **not** auto-load the key — run `ssh-add` first. |
 | `deploy-on-prod` | Runs **on the server** (pull/build/migrate/cache/reload); invoked over SSH by the above, or directly for rollback. |

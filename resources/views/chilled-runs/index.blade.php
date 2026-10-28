@@ -75,12 +75,6 @@
         @else
             @include('chilled-runs.partials._day-tabs')
 
-            @if ($activeRun->capacity_note)
-                <div class="mf-flash mf-flash-warn mb-4">
-                    <div><b>Capacity:</b> {{ $activeRun->capacity_note }}</div>
-                </div>
-            @endif
-
             @include('chilled-runs.partials._summary-strip')
             @include('chilled-runs.partials._run-table')
         @endif

@@ -44,7 +44,10 @@
                 <div class="flex items-center gap-2 flex-wrap">
                     <h4 class="text-[15px] font-mono font-semibold">{{ $batch->batch_code }}</h4>
                     <span class="text-[13px]" style="color: var(--muted);">{{ $batch->product->name }}</span>
-                    <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst(str_replace('_', ' ', $batch->status)) }}</span>
+                    {{-- An expired active batch shows only "Expired", not "Active" beside it. --}}
+                    @unless($isExpired && $batch->status === 'active')
+                        <span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst(str_replace('_', ' ', $batch->status)) }}</span>
+                    @endunless
                     @if($isExpired)
                         <span class="mf-tag mf-tag-danger">Expired</span>
                         {{-- Still holding stock nobody can sell: straight to the write-off panel. --}}
@@ -71,7 +74,9 @@
                     </div>
                     <div>
                         <span style="color: var(--muted);">Ready:</span>
-                        @if($batch->ready_date)
+                        @if($isExpired)
+                            <span style="color: var(--danger);">Expired</span>
+                        @elseif($batch->ready_date)
                             <span class="font-mono">{{ $batch->ready_date->format('d/m/Y') }}</span>
                             @if(!$isReady)
                                 <span style="color: var(--warn-ink);">({{ $batch->readyIn() }})</span>
@@ -176,9 +181,8 @@
                     {{-- Batch::deletionBlocker() is the rule; the counts ride the index's eager-load. --}}
                     @if($deletionBlocker = $batch->deletionBlocker())
                         @php $dependents = $batch->dependentRecordCount(); @endphp
-                        <span class="text-[12px]" style="color: var(--muted);" title="{{ $deletionBlocker }}" data-delete-blocked>
-                            Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it
-                        </span>
+                        <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
+                              title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
                     @else
                         <form action="{{ route('batches.destroy', $batch) }}" method="POST" class="inline">
                             @csrf @method('DELETE')

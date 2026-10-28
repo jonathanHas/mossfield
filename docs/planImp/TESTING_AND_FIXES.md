@@ -90,6 +90,120 @@ baseline.
 
 ---
 
+## 2026-10-13 — UX review, part 1 (Plan/Implement cycle 13, revision 2)
+
+**Scope:** the Planner walked the app in Chrome as the office role and wrote
+34 findings to `UX_REVIEW_2026-10-13.md`. Jon decided three (finding 1 is
+expected — orders precede stock; finding 4 is deferred; finding 5 becomes
+"hide the Mossorders surface behind a flag"). This cycle took the flow,
+layout and copy findings (A2, A3, A5, B6–B10, C11–C17, C19, E27, E28,
+F31–F33) plus the two open `SMALL_FIXES.md` items. Blade, copy, one config
+flag and one model predicate; no stock, allocation or weight arithmetic.
+Suite afterwards: **727 tests, 0 failed** (+28; `OnlineOrdersVisibilityTest`,
+`DeliveryOverdueTest`, `UxCopyTest` are new).
+
+- **Mossorders surface behind `MOSSORDERS_UI_ENABLED`**
+  (`services.mossorders.ui_enabled`, default false): nav item, dashboard
+  button and sync strip, the "Online sync is behind" greeting clause, the
+  customers index filter/tag, the customer page row/tag and the form's
+  link `<details>`. Routes stay live. `OnlineOrdersVisibilityTest` pins both
+  states and that saving a customer with the field hidden keeps
+  `mossorders_user_id` (absent keys aren't in `validated()`).
+- **Dashboard says what to do** — "To do: 1 order to confirm · 1 order to
+  allocate · 2 past their delivery date." A `pending` queue row reads
+  "Pending / Confirm →" (allocation refuses pending orders, so the old
+  "Allocate →" was a dead end); tiles **Orders to action** (`1 to confirm ·
+  1 to allocate`) and **Ready / to dispatch**; the Age column ("3mos
+  before", measured from midnight of `order_date`) is a **Delivery** date
+  with an `overdue` tag; the Low stock tile and the Low stock / Recent
+  activity placeholder panels are gone; the side rail sits under the queue
+  below `2xl` and the Items column went, so the action button is visible at
+  1280 px (revision 2). `DashboardTest` (four new cases).
+- **`Order::isDeliveryOverdue()`** (`OPEN_STATUSES` + `delivery_date <
+  today`) tags the orders index, the order page subtitle and a new Delivery
+  column on the allocation worklist. `DeliveryOverdueTest`.
+- **Order header fits**: title row, then the action bar on its own row;
+  `h1` `whitespace-nowrap`; "Tick loaded onto van first" is the tooltip of a
+  disabled Mark dispatched button (`.mf-btn-primary[disabled]`); the
+  invoiced-order sentence sits under the subtitle (`OrderTransitionsTest`
+  pins its exact wording). Measured: `h1` 36 px (one line) at 1280.
+- **Product page fits**: `lg:grid-cols-[320px_minmax(0,1fr)]` on the five
+  master-detail views (a `1fr` track's minimum is its content's min-content
+  width, so two `w-full` tables pushed the pane to 1323 px in a 1280 window
+  — the dashboard already used `minmax(0,1fr)`). Recent batches: "Total
+  qty" printed `" kg"` (no such accessor) → **Produced** units; expired
+  batches say Expired in Ready date and Status. `UxCopyTest`.
+- **Weigh-in row**: the per-unit weight inputs moved out of the ACTION cell
+  into a full-width `<tr class="weight-entry">` under the allocation,
+  joined to the Fulfil form by `form="fulfil-{allocation}"`; JS and the
+  server-side recompute untouched (`OrderFulfillmentWeightTest`,
+  `FulfilmentUnitWeightsTest`). `.mf-table-tight` (10 px cell padding)
+  on the allocations table clears a pre-existing 8 px overflow.
+- **Auto-allocate banner** renders only when an unsettled, under-allocated
+  line has free stock; otherwise "Nothing left to allocate. {lines} have no
+  free stock — close them short, or wait for a new batch."
+  (`OrderShowAllocationInlineTest`).
+- **Short-close copy** matches `closeShort()` (reservation only): the three
+  dialogs say "The N unpicked units won't be supplied or billed; any stock
+  reserved for them goes back to free stock."; the office flash adds "N
+  reserved units went back to free stock" only when N > 0; the stepper's
+  "N of M picked" nets `quantity_short` out of M. `OrderShortSupplyTest`
+  (three new cases). Both `SMALL_FIXES.md` items ticked.
+- **One word per status**: `Order::statusLabel()` (`preparing` → "Picking")
+  on every view that printed `ucfirst($order->status)` — nine views
+  including the docket and the edit page — and the two prose mentions.
+- **Customer page**: a zero credit limit reads **No limit** (three places;
+  the forms say "0 = no limit — the app warns, never blocks"); the Business
+  terms "Outstanding" row went (it duplicated the Account panel's Net owed).
+- **Batch cards**: an expired active batch no longer wears "Active" beside
+  "Expired", nor "Ready: Now"; the per-card "Can't delete — N records depend
+  on it" sentence is now the `title` of a faint Delete (`BatchCreateTest`
+  still asserts the sentence and one `data-delete-blocked`); "More actions
+  coming soon." removed.
+- **Dead controls**: the inert topbar bell (and its divider) removed; the
+  Profile page's Delete account panel removed and its partial deleted —
+  admins remove users at `/users`; `profile.destroy` and `ProfileTest`
+  stay.
+- **Run sheet**: "All ordered stops covered — 14 without an order" when
+  stops have no order (one-stop runs still read "All stops dispatched",
+  `DispatchRunTest`); the stock footer prints a real `0` where a column has
+  orders and "—" only where it has none; Capacity is a tag in the run
+  header, not an amber flash; "+ Ref" and "Issue all N" no longer wrap.
+  `ChilledRunTest` (three new cases).
+
+**Dev DB:** the walk-through left ORD-20261013-001 (Barnhill, id 6)
+dispatched with **INV-000001** (€161.60, unpaid, not emailed; void it from
+Finance if it should go) and ORD-20261013-002 (id 7) cancelled; the
+Implementer's probe ORD-20261013-003 (id 8) is cancelled. The `office_test`
+password was reset to the seeder default. The DB had been reset since
+`RESUME.md`'s dev-DB section was written (7 orders, not 27).
+
+**Not done, on purpose:** finding 1 (stock hints on the order form — Jon:
+orders are taken before stock exists); finding 4 (Email invoice from the
+order page) — deferred; **part 2** (D20–D26 forms and lists, E29 finance
+nav, F34 run-sheet address, the fulfil/pick wording) is the next plan.
+
+### Invariants worth keeping
+
+- **A dashboard action must be possible from where it lands.** "Allocate →"
+  on a pending order led to a page whose only action was Confirm; the row
+  now says what the next step is. `DashboardTest` pins Confirm vs Allocate.
+- **Short-close copy follows `closeShort()`**: it releases `allocated −
+  fulfilled` (the reservation) and nothing else. Say "won't be supplied or
+  billed"; mention stock only when a reservation existed.
+- **Master-detail grids use `minmax(0,1fr)`**, never bare `1fr`, or a
+  `w-full` table in the detail pane widens the page past the viewport.
+- **Hidden ≠ removed.** The Mossorders screens are gated in the views only;
+  controllers, routes, commands and `AuthorizationBoundaryTest` are
+  unchanged, so flipping `MOSSORDERS_UI_ENABLED` restores everything.
+- **Browser width checks compare `scrollWidth` with
+  `documentElement.clientWidth`**, not `innerWidth` — a classic scrollbar
+  makes the latter unreachable. And `form.requestSubmit()` from a script
+  bypasses `confirm.js` (it hooks the click); a scripted check that wants
+  the dialog must click the button.
+
+---
+
 ## 2026-10-06 — Order-flow polish (Plan/Implement cycle 11, revision 2)
 
 **Scope:** the Planner's Chrome walk of order-taking found five copy/UX items;

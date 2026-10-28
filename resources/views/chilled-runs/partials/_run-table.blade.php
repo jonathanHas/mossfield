@@ -50,6 +50,7 @@
     <div class="mf-panel-header">
         <span class="text-[13px] font-semibold">{{ $activeRun->day_label }} &middot; {{ $activeRun->name }} run</span>
         <span class="mf-eyebrow">{{ $activeRun->driver ? 'Driver: '.$activeRun->driver : '' }}</span>
+        @if ($activeRun->capacity_note)<span class="mf-tag mf-tag-neutral">Capacity: {{ $activeRun->capacity_note }}</span>@endif
         <div class="ml-auto font-mono text-[12px]" style="color: var(--muted);">{{ $sheet['runDate']->format('D d/m/Y') }}</div>
     </div>
 
@@ -148,7 +149,7 @@
                                     <div class="mt-2 flex items-center gap-1.5">
                                         <button type="submit" form="stop-form-{{ $customer->id }}" class="mf-btn-primary" style="padding: 4px 12px;">Save</button>
                                         <a href="{{ route('chilled-runs.index', $sheetParams) }}#stop-{{ $customer->id }}" class="mf-btn-ghost" style="padding: 4px 8px;" @click="window.__stopDirty = false">Cancel</a>
-                                        <button type="button" class="mf-btn-ghost" style="padding: 4px 8px;" @click="showExtras = !showExtras" x-show="!showExtras" x-cloak title="Add a customer reference">+ Ref</button>
+                                        <button type="button" class="mf-btn-ghost whitespace-nowrap" style="padding: 4px 8px;" @click="showExtras = !showExtras" x-show="!showExtras" x-cloak title="Add a customer reference">+ Ref</button>
                                     </div>
                                 </td>
                                 @foreach ($milkCols->concat($yogCols)->concat($cheeseCols) as $variant)
@@ -384,7 +385,8 @@
                             <td></td>
                         </tr>
                         {{-- Free stock per column: what's genuinely left after every
-                             reservation. Red where this run still can't be covered. --}}
+                             reservation. Red where this run still can't be covered.
+                             A real 0 where the column has orders; — only where it has none. --}}
                         @php $shortCols = collect($sheet['stock'])->filter(fn ($s) => $s['short'])->count(); @endphp
                         <tr class="sub-tot">
                             <td class="lbl" colspan="2">Stock available</td>
@@ -394,7 +396,7 @@
                                     $s = $sheet['stock'][$variant->id] ?? ['free' => 0, 'outstanding' => 0, 'short' => false];
                                 @endphp
                                 <td class="tot {{ $tint }} {{ $s['short'] ? 'short' : '' }}"
-                                    title="{{ $s['free'] }} free · {{ $s['outstanding'] }} still to allocate">{{ $s['free'] ?: '—' }}</td>
+                                    title="{{ $s['free'] }} free · {{ $s['outstanding'] }} still to allocate">{{ $s['free'] > 0 || ($sheet['totals'][$variant->id]['units'] ?? 0) > 0 ? $s['free'] : '—' }}</td>
                             @endforeach
                             <td class="lbl" style="padding-left: 12px;">
                                 @if ($shortCols > 0)

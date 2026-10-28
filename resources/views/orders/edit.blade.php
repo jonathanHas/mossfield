@@ -51,7 +51,7 @@
                                 'ready', 'dispatched', 'delivered' => 'accent',
                                 'cancelled' => 'danger',
                                 default => 'neutral',
-                            } }}">{{ ucfirst($order->status) }}</span>
+                            } }}">{{ $order->statusLabel() }}</span>
                             <span style="color: var(--muted);">Status changes from the order page.</span>
                         </div>
                     </div>

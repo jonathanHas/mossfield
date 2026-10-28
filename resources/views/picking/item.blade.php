@@ -79,7 +79,7 @@
 
         <div class="mob-section" style="margin-top: 14px;">
             <form method="POST" action="{{ route('picking.reopen', [$order, $orderItem]) }}"
-                  data-confirm-title="Reopen this line?" data-confirm="It needs picking again and the order goes back to Preparing." data-confirm-label="Reopen">
+                  data-confirm-title="Reopen this line?" data-confirm="It needs picking again and the order goes back to Picking." data-confirm-label="Reopen">
                 @csrf
                 @if ($pickable->isNotEmpty())
                     {{-- Stock has since arrived — make picking it again the obvious move. --}}
@@ -156,7 +156,7 @@
              reverse action isn't sitting under a thumb next to "Skip". --}}
         <div class="mob-section" style="margin-top: 14px;">
             <form method="POST" action="{{ route('picking.short', [$order, $orderItem]) }}"
-                  data-confirm-title="Mark this line short?" data-confirm="The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won't be supplied or billed." data-confirm-label="Mark short" data-confirm-danger>
+                  data-confirm-title="Mark this line short?" data-confirm="The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} won't be supplied or billed; any stock reserved for them goes back to free stock." data-confirm-label="Mark short" data-confirm-danger>
                 @csrf
                 <button type="submit" class="mf-btn-secondary w-full justify-center" style="padding: 12px; border-radius: 10px; color: var(--warn-ink);">
                     Mark short — no stock
@@ -360,7 +360,7 @@
             <div class="mob-section" style="margin-top: 22px; margin-bottom: 24px;">
                 <button type="submit" class="mf-btn-secondary w-full justify-center"
                         style="padding: 11px; border-radius: 10px; color: var(--warn-ink); font-size: 13px;"
-                        form="short-line-form" data-confirm-title="Can't finish this line?" data-confirm="The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} will be released back to stock and won't be supplied or billed." data-confirm-label="Mark short" data-confirm-danger>
+                        form="short-line-form" data-confirm-title="Can't finish this line?" data-confirm="The {{ $needed }} unpicked {{ Str::plural('unit', $needed) }} won't be supplied or billed; any stock reserved for them goes back to free stock." data-confirm-label="Mark short" data-confirm-danger>
                     Can't finish this line — mark short
                 </button>
             </div>

@@ -49,6 +49,9 @@ class Order extends Model
     /** VAT rate applied to the delivery charge (products themselves are 0% VAT). */
     public const DELIVERY_CHARGE_VAT_RATE = 0.23;
 
+    /** Statuses of an order that hasn't left yet (still on the office's or the floor's list). */
+    public const OPEN_STATUSES = ['pending', 'confirmed', 'preparing', 'ready'];
+
     protected static function boot()
     {
         parent::boot();
@@ -250,6 +253,23 @@ class Order extends Model
     public function hasShortLines(): bool
     {
         return $this->orderItems->contains(fn ($item) => $item->isShortClosed());
+    }
+
+    /** Delivery date has passed and the order hasn't left. */
+    public function isDeliveryOverdue(): bool
+    {
+        return $this->delivery_date !== null
+            && $this->delivery_date->lt(today())
+            && in_array($this->status, self::OPEN_STATUSES, true);
+    }
+
+    /** One word per status on screen: `preparing` reads "Picking". */
+    public function statusLabel(): string
+    {
+        return match ($this->status) {
+            'preparing' => 'Picking',
+            default => ucfirst($this->status),
+        };
     }
 
     public function canBeCancelled(): bool

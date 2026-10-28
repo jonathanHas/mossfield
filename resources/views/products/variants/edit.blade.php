@@ -8,7 +8,7 @@
         $listLimit = $listLimit ?? 50;
     @endphp
 
-    <div class="grid grid-cols-1 lg:grid-cols-[320px_1fr]">
+    <div class="grid grid-cols-1 lg:grid-cols-[320px_minmax(0,1fr)]">
         <aside class="hidden lg:flex lg:flex-col" style="border-right: 1px solid var(--line-2); max-height: calc(100vh - var(--header-height, 64px)); overflow-y: auto;">
             @include('products._sibling_list', ['mode' => 'show', 'showActiveVariants' => true, 'activeVariant' => $variant])
         </aside>

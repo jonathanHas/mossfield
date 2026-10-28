@@ -42,6 +42,7 @@
                             <th class="mf-th">Order</th>
                             <th class="mf-th">Customer</th>
                             <th class="mf-th">Order date</th>
+                            <th class="mf-th">Delivery</th>
                             <th class="mf-th">Status</th>
                             <th class="mf-th">Allocation</th>
                             <th class="mf-th">Items</th>
@@ -80,7 +81,13 @@
                                 </td>
                                 <td class="mf-td">{{ $order->customer->name }}</td>
                                 <td class="mf-td font-mono" style="color: var(--muted);">{{ $order->order_date->format('d/m/Y') }}</td>
-                                <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ ucfirst($order->status) }}</span></td>
+                                <td class="mf-td font-mono whitespace-nowrap" style="color: var(--muted);">
+                                    {{ $order->delivery_date?->format('d/m/Y') ?? '—' }}
+                                    @if($order->isDeliveryOverdue())
+                                        <span class="mf-tag mf-tag-danger" data-overdue>overdue</span>
+                                    @endif
+                                </td>
+                                <td class="mf-td"><span class="mf-tag mf-tag-{{ $statusTone }}">{{ $order->statusLabel() }}</span></td>
                                 <td class="mf-td">
                                     <span class="mf-tag mf-tag-{{ $allocationTone }}">{{ $allocationStatus }}</span>
                                     @if($allocationPercentage > 0 && $allocationPercentage < 100)
@@ -94,7 +101,7 @@
                             </tr>
                         @empty
                             <tr style="border-top: 1px solid var(--line-2);">
-                                <td colspan="7" class="mf-td text-center py-10" style="color: var(--muted);">No orders requiring allocation found.</td>
+                                <td colspan="8" class="mf-td text-center py-10" style="color: var(--muted);">No orders requiring allocation found.</td>
                             </tr>
                         @endforelse
                     </tbody>

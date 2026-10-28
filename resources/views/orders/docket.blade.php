@@ -110,7 +110,7 @@
                     @if(filled($order->customer_reference))
                         Customer ref: {{ $order->customer_reference }}<br>
                     @endif
-                    Status: {{ ucfirst($order->status) }}
+                    Status: {{ $order->statusLabel() }}
                 </div>
             </td>
         </tr>

@@ -37,7 +37,7 @@ Most of these need no test. Where one is worth having, it says so.
   *Source: browser pass, cosmetic list.*
   *Done 2026-09-13:* when some units are allocated the banner reads "N of M still unallocated — no stock left for the rest" and names the allocated count; the flat "No available stock" wording is kept only when nothing is allocated.
 
-- [ ] **Short-close dialogs over-promise a stock release.** *Close short*
+- [x] **Short-close dialogs over-promise a stock release.** *Close short*
   (`orders/partials/allocation-items`), *Mark short* and *Can't finish this
   line* (`picking/item`) say "N units will be released back to stock", with
   N = `OrderItem::quantity_remaining` (ordered − picked). But `closeShort()`
@@ -46,13 +46,15 @@ Most of these need no test. Where one is worth having, it says so.
   "The N unpicked units won't be supplied or billed; any stock reserved for
   them goes back to free stock." Pre-existing copy (cycle 8); found in the
   cycle-11 review. `ConfirmDialogTest` keeps it titled and echo-free.
+  *Done 2026-10-13 (cycle 13):* all three dialogs and the office flash now say exactly that.
 
-- [ ] **Stepper total counts short-closed units.** The "N of M picked" line
+- [x] **Stepper total counts short-closed units.** The "N of M picked" line
   under Picking (`orders/partials/status-stepper`) sums `quantity_ordered`,
   so a short-closed line's never-coming units sit in M. Net
   `quantity_short` out of the total for short-closed lines, as the chilled
   run sheet's stats do. Rare — a fully settled order is `ready`, where the
   count is hidden. Found in the cycle-11 review.
+  *Done 2026-10-13 (cycle 13):* the stepper nets `quantity_short` out of M.
 
 ## Display and consistency
 
