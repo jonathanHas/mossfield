@@ -424,7 +424,7 @@
                                         @if($item->isFullyFulfilled())
                                             <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--accent-ink);">
                                                 <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3 3 5-6"/></svg>
-                                                {{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} fulfilled
+                                                {{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} picked
                                             </span>
                                         @elseif($item->isShortClosed())
                                             <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--warn-ink);">
@@ -432,7 +432,7 @@
                                                 Short {{ $item->quantity_short }} — {{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} supplied
                                             </span>
                                         @else
-                                            <span class="font-mono">{{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} fulfilled</span>
+                                            <span class="font-mono">{{ $item->quantity_fulfilled }} of {{ $item->quantity_ordered }} picked</span>
                                         @endif
                                         @if($item->isVariableWeight() && $item->weight_fulfilled_kg > 0)
                                             <span style="color: var(--line);">·</span>

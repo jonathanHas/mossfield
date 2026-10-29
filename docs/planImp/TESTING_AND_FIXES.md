@@ -90,6 +90,76 @@ baseline.
 
 ---
 
+## 2026-10-29 — Copy and tidy before the user guide (Plan/Implement cycle 16)
+
+**Scope:** what was still open after cycles 14 and 15, cleared before the
+user guide is written — the post-acceptance finding from cycle 15's browser
+checks, one dashboard label, a pin on the `/backup` labels cycle 14 had
+already written, four ticks in `SMALL_FIXES.md` and one dev-DB row. Nine
+steps. No PHP logic, routes, migrations or stock/money/status rules
+touched. Parked cycle 12 (delete guards) was deliberately left for cycle
+17. Suite afterwards: **810 tests, 0 failed** (+2).
+
+- **The order page says "picked", like every other screen** — the four
+  "N of M fulfilled" strings (`orders/partials/allocation-items.blade.php`
+  32 and 81; `orders/show.blade.php` 427 and 435) now read "N of M picked",
+  matching the stepper, the line summary and `/picking`. "Short N — X of Y
+  supplied" is a different sentence and stays.
+  `OrderShowAllocationInlineTest::test_the_order_page_says_picked_never_fulfilled`
+  renders a confirmed, a pending, a ready and a dispatched order (the two
+  branches of the inline partial and the two of the read-only table) and
+  asserts `of 5 picked` present and ` fulfilled` absent page-wide.
+- **Why cycle 15's completeness check missed them, and the grep that
+  doesn't** — step 13 there ran `grep -i fulfil | grep -vi quantity_fulfilled …`,
+  which discards every *line* carrying the identifier; these four carried
+  the identifier and the copy on one line. The corrected grep matches the
+  copy token itself and is the one to reuse for any "is this word gone"
+  check:
+
+  ```bash
+  grep -rnP '(?<![\w$.-]|->)[Ff]ulfil(l|led|ment|ling|lment)?(?![\w(-])' resources/views --include='*.blade.php'
+  ```
+
+  Today it prints eight lines, none rendered: six comments (`{{-- --}}` or
+  `//` inside `@php`) and the `Fulfillment` sidebar group label
+  (`layouts/navigation.blade.php:36, 44`), which was kept on purpose and is
+  now an open item in `SMALL_FIXES.md`. Identifiers (`quantity_fulfilled`,
+  `isFullyFulfilled()`, `fulfilled_at`, the `order-allocations.fulfill`
+  route, the `fulfil-{id}` form id, `OrderPolicy::fulfill`) are unchanged.
+- **The factory dashboard names the queue, not a state** — the "Today on
+  the floor" card's button read "Continue picking →" whatever the queue
+  held. `/picking` chooses Start/Continue from the *selected day's* queue
+  (cycle 14); the dashboard has no day, and a dashboard-wide "any pick
+  recorded" query would disagree with the queue across days, so the label
+  is the neutral "Picking queue →".
+  `UxCopyTest::test_factory_dashboard_button_names_the_picking_queue`.
+- **Every backup table must have a friendly label** — cycle 14 labelled all
+  25 (`backup/index.blade.php` `$tableLabels`); the rule is now a test:
+  `BackupRestoreTest::test_admin_can_view_the_backup_page` loops
+  `BackupService::TABLES` and refuses a raw name as a cell
+  (`assertDontSee('>'.$table.'<', false)`). A table added to `TABLES`
+  without a label fails the suite instead of showing `stock_write_offs` to
+  the admin.
+- **Records** — the four data decisions of 2026-10-28 (Avoca rename; 16L
+  bucket €72 flat; Garlic & Basil wheel €16/kg; Mature wheel €20/kg by
+  weight) are ticked in `SMALL_FIXES.md` as done in dev (cycle 15) and in
+  production (Jon). Dev DB: user 9 `review_test` deleted by guarded tinker
+  (every FK onto `users` is `SET NULL` and none referenced it); the two
+  cancelled probe orders stay — the app never deletes orders.
+
+**Trap recorded for future plans (Implementer's note):** a copy assertion
+can pass for the wrong reason. The plan's `assertSee('Picking queue')`
+already held before the fix because the card's prose said "…from the
+Picking queue." — the Implementer tightened it to the label with its glyph
+(`'Picking queue →'`). Pin a button or label with its glyph or its tag
+(`'>Label<', false`) and always watch the test fail first.
+
+**Found while planning:** the parked cycle 12 branch
+`wip/cycle-12-delete-guards` (commit `a8f75d6`) is not on this clone — the
+working copy was cloned fresh from GitHub, the branch was never pushed and
+`git fsck` finds nothing dangling. Cycle 17 restarts from the parked plan
+unless the old machine still has it (`RESUME.md`).
+
 ## 2026-10-28 — The 2026-10-13 leftovers (Plan/Implement cycle 15, revision 2)
 
 **Scope:** the findings of the 2026-10-13 office walk-through that cycle 13

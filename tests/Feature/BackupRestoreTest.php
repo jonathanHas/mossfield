@@ -97,7 +97,14 @@ class BackupRestoreTest extends TestCase
 
     public function test_admin_can_view_the_backup_page(): void
     {
-        $this->actingAs($this->admin)->get(route('backup.index'))->assertOk()->assertSee('returns to where it stood');
+        $response = $this->actingAs($this->admin)->get(route('backup.index'))->assertOk()->assertSee('returns to where it stood');
+
+        // Every table the backup covers has a friendly label — a new entry in
+        // TABLES without one would fall back to its raw name in the cell.
+        foreach (BackupService::TABLES as $table) {
+            $response->assertDontSee('>'.$table.'<', false);
+        }
+        $response->assertSee('Stock write-offs')->assertSee('Documents sent');
     }
 
     public function test_office_and_factory_are_denied(): void

@@ -29,7 +29,7 @@
                 @if($fulfilled)
                     <span class="inline-flex items-center gap-1.5 font-medium" style="color: var(--accent-ink);">
                         <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3 3 5-6"/></svg>
-                        {{ $orderItem->quantity_fulfilled }} of {{ $orderItem->quantity_ordered }} fulfilled
+                        {{ $orderItem->quantity_fulfilled }} of {{ $orderItem->quantity_ordered }} picked
                     </span>
                     @if($firstAlloc)
                         <span style="color: var(--line);">·</span>
@@ -78,7 +78,7 @@
             <div class="rounded-lg p-4" style="background: var(--panel); border: 1px solid var(--line);">
                 <div class="flex items-center justify-between mb-2.5">
                     <span class="mf-eyebrow">Current allocations</span>
-                    <span class="text-[12px] font-mono" style="color: var(--ink-2);">{{ $orderItem->quantity_fulfilled }} of {{ $orderItem->quantity_ordered }} fulfilled</span>
+                    <span class="text-[12px] font-mono" style="color: var(--ink-2);">{{ $orderItem->quantity_fulfilled }} of {{ $orderItem->quantity_ordered }} picked</span>
                 </div>
                 <div class="mf-bar mb-3.5"><i style="width: {{ $fulfillPct }}%"></i></div>
 

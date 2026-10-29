@@ -14,6 +14,14 @@ Most of these need no test. Where one is worth having, it says so.
 
 ## Copy and empty states
 
+- [ ] **The sidebar group is still called "Fulfillment"** (`layouts/navigation.blade.php:44`)
+  over Picking and Stock Allocation, while every screen under it now says "pick".
+  After cycle 16 it is the only user-visible "fulfil…" in the views (the copy grep in
+  `TESTING_AND_FIXES.md` → 2026-10-29 finds nothing else). Rename when the user guide
+  settles the vocabulary — "Picking" is the obvious candidate. No test needed beyond
+  `FinanceNavTest`-style `assertSee`.
+  *Source: cycle 16 Implementer's note, 2026-10-29. Deliberately kept that cycle.*
+
 - [x] **`/cheese-cutting` empty state gives the wrong reason.** When every wheel in
   a ready batch is held or allocated, the list correctly shows nothing but says
   *"Cheese batches need to mature before they can be cut. Check back when batches
@@ -124,24 +132,27 @@ Display, Routing and Infrastructure). Both are real UX work, not polish.*
 
 These are not bugs until someone says they are.
 
-- [ ] **Customer name "Avoa Ballsbridge"** — almost certainly "Avoca". The record has
+- [x] **Customer name "Avoa Ballsbridge"** — almost certainly "Avoca". The record has
   an order against it, so renaming is a data edit rather than a delete-and-recreate.
   *Decision (Jon, 2026-10-28): rename to "Avoca Ballsbridge" — dev by tinker in
   cycle 15; production by Jon in the app.*
+  *Done 2026-10-28 (cycle 15): dev by tinker; production by Jon in the app.*
 
-- [ ] **Yoghurt 16L Bucket priced at €72.00/kg** against a 16.000 kg unit weight,
+- [x] **Yoghurt 16L Bucket priced at €72.00/kg** against a 16.000 kg unit weight,
   which implies €1,152 a bucket. Likely meant as €72.00 flat, or the
   `is_priced_by_weight` flag is set wrongly.
   *Decision (Jon, 2026-10-28): €72.00 flat — clear `is_priced_by_weight`. Dev
   by tinker in cycle 15; production by Jon in the app.*
+  *Done 2026-10-28 (cycle 15): dev by tinker; production by Jon in the app.*
 
-- [ ] **Garlic & Basil Whole Wheel is €40.00 flat** where every other whole wheel is
+- [x] **Garlic & Basil Whole Wheel is €40.00 flat** where every other whole wheel is
   €16.00/kg, and it carries the variable-weight flag without the €/kg flag. A 2 kg
   wheel at €16/kg would be €32, so this is either a deliberate premium or an error.
   *Decision (Jon, 2026-10-28): an error — €16.00/kg, priced by weight, like the
   other wheels. Dev by tinker in cycle 15; production by Jon in the app.*
+  *Done 2026-10-28 (cycle 15): dev by tinker; production by Jon in the app.*
 
-- [ ] **Mature Cheese Whole Wheel is €55.00 flat for a 2.300 kg wheel** — €23.91/kg
+- [x] **Mature Cheese Whole Wheel is €55.00 flat for a 2.300 kg wheel** — €23.91/kg
   against €16.00/kg for farmhouse. This came from `ProductSeeder` when the Mature
   product was seeded on 2026-09-12, so it is a seeder choice rather than a data
   entry slip, but it is the price the app will use. Confirm the premium is right
@@ -152,6 +163,7 @@ These are not bugs until someone says they are.
   *Decision (Jon, 2026-10-28): **€20.00/kg**, priced by weight. Dev by tinker in
   cycle 15; production by Jon in the app. Note the dev variant's nominal weight
   was set to 5.000 kg in cycle 14 (finding 6) and the seeder still says 2.300.*
+  *Done 2026-10-28 (cycle 15): dev by tinker; production by Jon in the app.*
 
 ## Not investigated
 

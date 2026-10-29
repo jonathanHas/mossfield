@@ -102,6 +102,25 @@ class OrderShowAllocationInlineTest extends TestCase
         return $order->fresh(['orderItems']);
     }
 
+    /** Mark the order's single line fully picked: allocated 5 / fulfilled 5, one 5/5 allocation. */
+    private function pickWholeLine(Order $order): void
+    {
+        $orderItem = $order->orderItems->first();
+        $orderItem->update([
+            'quantity_allocated' => 5,
+            'quantity_fulfilled' => 5,
+        ]);
+
+        OrderAllocation::create([
+            'order_item_id' => $orderItem->id,
+            'batch_item_id' => $this->batchItem->id,
+            'quantity_allocated' => 5,
+            'quantity_fulfilled' => 5,
+            'allocated_at' => now(),
+            'fulfilled_at' => now(),
+        ]);
+    }
+
     public function test_office_sees_inline_allocation_forms_on_confirmed_order(): void
     {
         $office = User::factory()->create(); // default role = office
@@ -213,5 +232,24 @@ class OrderShowAllocationInlineTest extends TestCase
             ->assertOk()
             ->assertSee(route('order-allocations.auto-allocate', $order))
             ->assertDontSee('Nothing left to allocate.');
+    }
+
+    public function test_the_order_page_says_picked_never_fulfilled(): void
+    {
+        $office = User::factory()->create();
+
+        $confirmed = $this->makeOrder('confirmed');   // partial "Current allocations": "0 of 5 picked"
+        $pending = $this->makeOrder('pending');       // read-only table: "0 of 5 picked"
+        $ready = $this->makeOrder('ready');           // partial settled tick: "5 of 5 picked"
+        $this->pickWholeLine($ready);
+        $dispatched = $this->makeOrder('dispatched'); // read-only table, picked line: "5 of 5 picked"
+        $this->pickWholeLine($dispatched);
+
+        foreach ([$confirmed, $pending, $ready, $dispatched] as $order) {
+            $this->actingAs($office)->get(route('orders.show', $order))
+                ->assertOk()
+                ->assertSee('of 5 picked')
+                ->assertDontSee(' fulfilled');
+        }
     }
 }

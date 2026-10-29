@@ -198,4 +198,23 @@ class UxCopyTest extends TestCase
             ->assertOk()
             ->assertDontSee('aria-label="Notifications"', false);
     }
+
+    // ── Cycle 16: the factory dashboard names the queue, not a state ─
+
+    public function test_factory_dashboard_button_names_the_picking_queue(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+
+        $this->actingAs($factory)->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Today on the floor')
+            ->assertSee('Picking queue →')
+            ->assertDontSee('Continue picking');
+
+        $office = User::factory()->create();
+
+        $this->actingAs($office)->get(route('dashboard'))
+            ->assertOk()
+            ->assertDontSee('Picking queue');
+    }
 }

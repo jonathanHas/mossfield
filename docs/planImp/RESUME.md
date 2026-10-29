@@ -163,26 +163,39 @@ worth returning to.
   Revision 2 fixed the Implementer's enum-vs-string fallback in
   `CustomerController::rules()`. Suite **808 tests, 0 failed**. Write-up in
   `TESTING_AND_FIXES.md` → 2026-10-28 (cycle 15). Jon archives `plan.md` +
-  `implemented.md` to `archive/2026-10-28-leftovers/`, runs the browser
-  checks in the plan's *Verification*, commits with explicit `git add`
-  paths (the tree holds the untracked migration, `FinanceNav.php` and four
-  new test files) and deploys with `deploy/bin/ship-jon` — **the migration
-  must run on `mossserv`**. The four data fixes (Avoca rename; 16L bucket
+  `implemented.md` to `archive/2026-10-28-leftovers/`; committed as
+  `4f0591a` (39 files) and **deployed to `mossserv` on 2026-10-28** with
+  `deploy/bin/ship-jon` — the migration shows `[10] Ran` there. The four data fixes (Avoca rename; 16L bucket
   €72 flat; Garlic & Basil wheel €16/kg; Mature wheel €20/kg by weight)
   were applied in production by Jon through the app on 2026-10-28.
-- **Next: cycle 16 resumes parked cycle 12 (delete guards)** — plan and the
-  IN PROGRESS report in `parked/2026-10-10-delete-guards/`, tree on branch
-  `wip/cycle-12-delete-guards` (commit `a8f75d6` off `095c250`); resume
-  instructions at the top of the parked plan. **Fold in the post-acceptance
-  finding** `findings/2026-10-28-cycle-15-browser-checks.md` (four "N of M
-  fulfilled" strings on the order page that step 13's grep was blind to;
-  option 1 there: change to "picked", add an `assertDontSee` to
-  `OrderShowAllocationInlineTest`, fix the grep) and move the file into
-  cycle 16's archive folder on acceptance. The other eight browser checks
-  passed. Still deferred: finding 4 of
-  2026-10-13 (Email invoice from the order page), the sync "never
-  completed" message, and the orders search box's autofocus on a phone (see
-  cycle 15's write-up) until Jon's browser check says it bites.
+- **Cycle 16 "Copy and tidy before the user guide" — ACCEPTED 2026-10-29
+  (revision 1):** the order page says "N of M picked" in all four places
+  (`OrderShowAllocationInlineTest` pins it page-wide on confirmed, pending,
+  ready and dispatched orders) and the completeness grep now matches the
+  copy token (`(?<![\w$.-]|->)[Ff]ulfil…`) instead of discarding lines —
+  the only user-visible "fulfil" left is the `Fulfillment` sidebar group
+  (kept on purpose, listed in `SMALL_FIXES.md`); the factory dashboard
+  button reads "Picking queue →" (`UxCopyTest`); every
+  `BackupService::TABLES` entry must have a label on `/backup`
+  (`BackupRestoreTest`); the four data items are ticked in
+  `SMALL_FIXES.md`; dev user 9 `review_test` is deleted. Suite **810 tests,
+  0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-29. The finding
+  file is already in `archive/2026-10-29-copy-and-tidy/`; Jon moves
+  `plan.md` + `implemented.md` there, runs the browser checks in the plan's
+  *Verification* (5), and commits with explicit `git add` paths. Still
+  deferred: finding 4 of 2026-10-13 (Email invoice from the order page),
+  the sync "never completed" message, the Mossorders flag decision, and
+  the orders search box's autofocus on a phone.
+- **Next: cycle 17 = parked cycle 12 (delete guards)** — plan and the
+  Implementer's IN PROGRESS report are in `parked/2026-10-10-delete-guards/`;
+  resume instructions at the top of the parked plan. **The branch
+  `wip/cycle-12-delete-guards` (commit `a8f75d6`) is not on this clone**:
+  this working copy was cloned fresh from GitHub (`git reflog` begins at
+  `c27f101 clone:`), the branch was never pushed, and `git fsck --lost-found`
+  finds no dangling commits. Unless the old machine still has it (vault open
+  item: "19 files of uncommitted work on the old machine"), cycle 17
+  restarts from the parked plan, using the report as the record of what
+  steps 1–4 had already done.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -214,8 +227,14 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **808 tests, 0 failing** as of 2026-10-28 (after cycle 15) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **810 tests, 0 failing** as of 2026-10-29 (after cycle 16) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
+
+## Dev database — cycle 16 change, 2026-10-29
+
+User id 9 `review_test` (factory, deactivated, left by the 2026-10-28
+review) deleted by tinker; seven users remain. The cancelled probe orders
+ORD-20261013-002 / -003 stay as history.
 
 ## Dev database — cycle 15 changes, 2026-10-28
 
