@@ -154,6 +154,28 @@
         color: var(--accent-ink);
     }
     .mf-link:hover { text-decoration: underline; }
+
+    /* Rendered Markdown — the user guide at /help (docs/guide/*.md). Preflight
+       strips heading sizes, bullets and table borders, so the prose gets its own. */
+    .mf-prose { color: var(--ink); }
+    .mf-prose h1 { @apply font-display font-medium; font-size: 22px; letter-spacing: -0.4px; margin-bottom: .5rem; }
+    .mf-prose h2 { font-size: 17px; font-weight: 600; margin: 1.75rem 0 .5rem; }
+    .mf-prose h3 { font-size: 14px; font-weight: 600; margin: 1.25rem 0 .4rem; }
+    .mf-prose p, .mf-prose ul, .mf-prose ol { font-size: 13.5px; line-height: 1.6; margin-bottom: .75rem; }
+    .mf-prose ul { list-style: disc; padding-left: 1.25rem; }
+    .mf-prose ol { list-style: decimal; padding-left: 1.25rem; }
+    .mf-prose li + li { margin-top: .25rem; }
+    .mf-prose li > ul, .mf-prose li > ol { margin: .25rem 0 0; }
+    .mf-prose a { color: var(--accent-ink); font-weight: 500; }
+    .mf-prose a:hover { text-decoration: underline; }
+    .mf-prose strong { font-weight: 600; }
+    .mf-prose table { width: 100%; border-collapse: collapse; font-size: 13px; margin: .5rem 0 1rem; }
+    .mf-prose th, .mf-prose td { border: 1px solid var(--line); padding: 6px 10px; text-align: left; vertical-align: top; }
+    .mf-prose th { background: var(--line-2); color: var(--ink-2); font-weight: 600; }
+    .mf-prose img { max-width: 100%; height: auto; border: 1px solid var(--line); border-radius: 10px; margin: .75rem 0; }
+    .mf-prose code { @apply font-mono; font-size: 12.5px; background: var(--sidebar); border-radius: 4px; padding: 1px 4px; }
+    .mf-prose pre { background: var(--sidebar); border-radius: 8px; padding: 10px 12px; overflow-x: auto; margin-bottom: .75rem; }
+    .mf-prose pre code { padding: 0; background: none; }
 }
 
 /* ─── Slim status stepper (orders/show) ─── */

@@ -8,15 +8,17 @@
 #   * targets the `mossserv` SSH alias from ~/.ssh/config (user jon,
 #     ~/.ssh/id_ed25519) — this PC has no `mossserv-deploy` alias or
 #     `id_mossserv_deploy` key, which is what `ship`/`deploy-mossserv` expect;
-#   * commits TRACKED files only (`git add -u`): untracked files are listed
-#     and left alone — `git add` them first if they belong in the deploy.
+#   * commits ALL local changes like `ship` does (`git add -A`): anything
+#     that must not ship belongs in .gitignore, not in a manual `git add`.
+#     `--tracked-only` restores the old behaviour for one run (untracked
+#     files are then listed and left alone).
 #
 # It is a thin wrapper over deploy-mossserv → deploy2 (key auto-load,
 # pre-flight checks, summary, confirm, push, remote trigger). Nothing from
 # those is re-implemented here.
 #
 # Usage:
-#   deploy/bin/ship-jon [-m "<msg>"] [--no-maintenance] [--skip-npm] [--dry-run] [-y] ...
+#   deploy/bin/ship-jon [-m "<msg>"] [--no-maintenance] [--tracked-only] [--skip-npm] [--dry-run] [-y] ...
 #
 #   deploy/bin/ship-jon                  # prompt for a message (blank => timestamp)
 #   deploy/bin/ship-jon -m "Fix totals"  # use the given message, skip the prompt
@@ -37,16 +39,18 @@ export MOSSFIELD_PROD_HOST="${MOSSFIELD_PROD_HOST:-mossserv}"
 export MOSSFIELD_PROD_PATH="${MOSSFIELD_PROD_PATH:-/var/www/mossfield}"
 
 MAINTENANCE=1
+TRACKED_ONLY=0
 MSG=""
 PASSTHRU=()
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --no-maintenance) MAINTENANCE=0; shift ;;
+    --tracked-only) TRACKED_ONLY=1; shift ;;
     -m|--message) MSG="$2"; shift 2 ;;
     --message=*) MSG="${1#*=}"; shift ;;
     -h|--help)
-      sed -n '2,32p' "$0" | sed 's/^# \{0,1\}//'
+      sed -n '2,34p' "$0" | sed 's/^# \{0,1\}//'
       exit 0
       ;;
     *) PASSTHRU+=("$1"); shift ;;
@@ -58,11 +62,15 @@ done
 BIN_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$BIN_DIR/../.."
 
-# Untracked files are not committed by this script (tracked-only). Say so
-# before deploy2's pre-flight commits, so nothing is silently left behind.
+# List the untracked files before deploy2's pre-flight commits, so what is
+# about to be added (or, with --tracked-only, left behind) is in plain sight.
 UNTRACKED=$(git ls-files --others --exclude-standard)
 if [ -n "$UNTRACKED" ]; then
-  echo "ⓘ untracked files — NOT included in the commit (git add them first if they should ship):"
+  if [ "$TRACKED_ONLY" -eq 1 ]; then
+    echo "ⓘ untracked files — NOT included in the commit (--tracked-only):"
+  else
+    echo "ⓘ untracked files — these will be added to the commit (ignore them in .gitignore if they shouldn't ship):"
+  fi
   echo "$UNTRACKED" | sed 's/^/    /'
   echo
 fi
@@ -94,9 +102,10 @@ else
   echo "  expect a password prompt on the box during the remote step."
 fi
 
-# Build the deploy-mossserv argument list: -m (tracked-only commit — no
-# --include-untracked), --maintenance only when on, then passthrough.
+# Build the deploy-mossserv argument list: -m, --include-untracked unless
+# --tracked-only, --maintenance only when on, then passthrough.
 ARGS=(-m "$MSG")
+[ "$TRACKED_ONLY" -eq 0 ] && ARGS+=(--include-untracked)
 [ "$MAINTENANCE" -eq 1 ] && ARGS+=(--maintenance)
 [ "${#PASSTHRU[@]}" -gt 0 ] && ARGS+=("${PASSTHRU[@]}")
 

@@ -90,6 +90,82 @@ baseline.
 
 ---
 
+## 2026-10-31 — User guide, part 1: help pages and the order flow (Plan/Implement cycle 16b)
+
+**Scope.** A user guide the office and the floor open from the sidebar, with
+pictures made by a script rather than pasted. Planned by Fable on 2026-10-29
+after a proof run of the screenshot tooling, implemented by Opus the same
+day, accepted 2026-10-31. Files in `archive/2026-10-31-user-guide-part-1/`.
+
+**What landed.**
+- **`/help`** (`HelpController`, three GET routes in the shared
+  admin/office/factory group): the index renders `docs/guide/README.md`,
+  `/help/{page}` renders `docs/guide/{page}.md` (a `.md` suffix is accepted
+  and stripped so the Markdown's GitHub-style links work on the site too),
+  `/help/images/{file}` serves `docs/guide/images/*.png` with an hour's
+  cache header. Rendering is `Str::markdown()` (the framework's bundled
+  GitHub-flavoured converter) with `html_input => strip` and
+  `allow_unsafe_links => false`. **Path safety is the route regexes
+  (`[a-z0-9-]+(?:\.md)?` and `[a-z0-9-]+\.png`) plus `is_file`** — nothing
+  else under `docs/` is reachable, and the index (served at `/help`, no
+  trailing slash) rewrites its relative links to the named routes because a
+  relative `orders.md` would otherwise resolve to `/orders.md`. Pages keep
+  relative links. **Help** is the last sidebar group for every role that
+  uses the app. `.mf-prose` in `app.css` styles the rendered Markdown
+  (preflight strips bullets, heading sizes and table borders).
+- **`tests/Feature/HelpPagesTest.php`** (6 tests) reads the real
+  `docs/guide/` folder: every page the index links to exists; every page
+  renders with its `# ` title as `<h1>`; every picture a page references is
+  on disk and served as `image/png`, and every shot in `screenshots.json`
+  has its PNG (the manifest and the folder cannot drift); `/help/planimp`,
+  `/help/..%2Fplanimp`, `/help/images/..%2F..%2Fplanimp.md` and a missing
+  PNG all 404; factory can read the guide; the office sidebar links to it.
+  `AuthorizationBoundaryTest::buildFixtures()` gained `page` and `file`
+  fixtures that exist (a GET that 404s a bad fixture would pass silently).
+- **`docs/guide/screenshot.mjs`** + **`screenshots.json`**: `puppeteer-core`
+  (dev dependency) drives the installed `/usr/bin/google-chrome` headless,
+  signs in as the seeded accounts, and takes one PNG per manifest entry at
+  a fixed viewport (office 1280, the run sheet 1440, phone 390 × 844 as
+  `factory_test`), default scale 1.5. Fifteen pictures, 2.7 MB, largest
+  353 KB. `node docs/guide/screenshot.mjs [name-filter]`.
+- **`docs/guide/demo-data.php`** (`php artisan tinker docs/guide/demo-data.php`):
+  dev-only (`APP_ENV=local` and database `mossfield_cl`), idempotent on
+  `customer_reference` `GUIDE-A…D`, never deletes. Makes Organic Store
+  confirmed-and-allocated (A, Wicklow Thu) and pending next week (B),
+  Cavistons half picked (C, Dublin Tue) and Roundwood pending (D), using
+  only model helpers (`allocateFromBatchItem`, `pickFromBatchItem`,
+  `reconcilePickingStatus`, `calculateTotals`). The Wicklow Thu run has only
+  Organic Store on it, so the run-sheet pictures use Dublin Tue.
+- **Four pages**: `getting-started.md`, `orders.md`, `chilled-runs.md`,
+  `picking.md`, plus the index. Every bold label was extracted (107) and
+  grepped verbatim in `resources/views` + `app/View` — zero missing. Two
+  corrections to the plan's word list came out of that: the run-sheet row
+  button is **Save** ("Save order" is the delivery-runs reorder button), and
+  an in-progress order in the picking queue shows "3/7 picked", not a
+  "Picking" tag.
+- `CLAUDE.md` → *Key Docs* names the guide and the rule that a cycle which
+  changes a screen remakes its picture and re-reads its page.
+
+**Things to know.**
+- The screenshot script only runs on the dev box (`mossfield.local`, seeded
+  passwords). The pictures are committed; production serves them from the
+  repo like any other file.
+- The manifest hard-codes order ids 11–14 and the dates 2026-10-29 /
+  2026-11-03. Resetting the dev database or waiting a few weeks makes the
+  pictures stale (orders "past their delivery date"); cycle 16c adds a
+  `--fresh` path to the demo script and takes the dates from its output.
+- Full-page office shots end the sticky sidebar after one screen height —
+  cosmetic, pictures only; a script-side style injection is the fix if
+  wanted.
+- Suite **816 tests, 0 failed**; pint clean.
+
+**Deferred to 16c** (finance, stock, admin pages): a Help link in the phone
+picking shell; the demo-data `--fresh` flag; a manifest `before` hook so the
+new-order form picture is not empty; writing off or resetting the dev box's
+expired stock before the stock pictures; two wording fixes in part 1 (orders:
+"the only status buttons before the order is picked"; getting started: the
+floor can tick Loaded on Chilled Runs, so not "read-only").
+
 ## 2026-10-29 — Copy and tidy before the user guide (Plan/Implement cycle 16)
 
 **Scope:** what was still open after cycles 14 and 15, cleared before the

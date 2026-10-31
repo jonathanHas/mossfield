@@ -6,6 +6,7 @@ use App\Http\Controllers\ChilledRunController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerSpecialPriceController;
 use App\Http\Controllers\DeliveryRunController;
+use App\Http\Controllers\HelpController;
 use App\Http\Controllers\Invoicing\ConsolidatedInvoiceController;
 use App\Http\Controllers\Invoicing\CreditNoteController;
 use App\Http\Controllers\Invoicing\DocumentEmailController;
@@ -153,6 +154,14 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     // person who knows. Same narrow fulfill ability as picking itself.
     Route::post('/picking/{order}/items/{orderItem}/short', [\App\Http\Controllers\PickingController::class, 'markShort'])->name('picking.short');
     Route::post('/picking/{order}/items/{orderItem}/reopen', [\App\Http\Controllers\PickingController::class, 'reopenShort'])->name('picking.reopen');
+
+    // The user guide (docs/guide/*.md). Read-only; the image route is registered
+    // first so the order is explicit (images/x.png wouldn't match {page} anyway).
+    Route::get('/help', [HelpController::class, 'index'])->name('help.index');
+    Route::get('/help/images/{file}', [HelpController::class, 'image'])
+        ->where('file', '[a-z0-9-]+\.png')->name('help.image');
+    Route::get('/help/{page}', [HelpController::class, 'show'])
+        ->where('page', '[a-z0-9-]+(?:\.md)?')->name('help.show');
 
     // Chilled run sheet — read view of a run's stops + quantities. The one
     // write is the "loaded onto van" tick, gated by the narrow

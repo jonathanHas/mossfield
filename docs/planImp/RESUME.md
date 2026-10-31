@@ -179,14 +179,32 @@ worth returning to.
   `BackupService::TABLES` entry must have a label on `/backup`
   (`BackupRestoreTest`); the four data items are ticked in
   `SMALL_FIXES.md`; dev user 9 `review_test` is deleted. Suite **810 tests,
-  0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-29. The finding
-  file is already in `archive/2026-10-29-copy-and-tidy/`; Jon moves
-  `plan.md` + `implemented.md` there, runs the browser checks in the plan's
-  *Verification* (5), and commits with explicit `git add` paths. Still
+  0 failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-29. Archived to
+  `archive/2026-10-29-copy-and-tidy/` (plan, report and the finding),
+  browser checks passed (no finding written), committed as `862e293`
+  (12 files) and **deployed to `mossserv` on 2026-10-29** with `ship-jon`
+  (no migration). Still
   deferred: finding 4 of 2026-10-13 (Email invoice from the order page),
   the sync "never completed" message, the Mossorders flag decision, and
   the orders search box's autofocus on a phone.
-- **Next: cycle 17 = parked cycle 12 (delete guards)** — plan and the
+- **Cycle 16b "User guide, part 1" — ACCEPTED 2026-10-31 (revision 1):**
+  `/help` (`HelpController`, shared role group) renders `docs/guide/*.md`
+  through `Str::markdown()` with regex + `is_file` path safety; **Help** is
+  the last sidebar group; `HelpPagesTest` (6) reads the real guide folder;
+  `docs/guide/screenshot.mjs` + `screenshots.json` (puppeteer-core over the
+  installed Chrome, 15 pictures, 2.7 MB) and the dev-only
+  `docs/guide/demo-data.php` (orders `GUIDE-A…D`, ids 11–14); four pages
+  (getting started, orders, chilled runs, picking). Suite **816 tests, 0
+  failed**. Write-up in `TESTING_AND_FIXES.md` → 2026-10-31. Jon archives
+  `plan.md` + `implemented.md` to `archive/2026-10-31-user-guide-part-1/`
+  and commits with `ship-jon` (since 2026-10-31 it adds untracked files
+  like `ship` does; `.gitignore` is the exclusion list).
+- **Next: cycle 16c = user guide, part 2** (finance, stock/production,
+  admin pages), opening with the small deferred items listed at the end of
+  the 2026-10-31 section of `TESTING_AND_FIXES.md` (Help link in the phone
+  shell, demo-data `--fresh`, two wording fixes, the empty new-order form
+  picture, the dev box's expired stock before the stock pictures).
+- **Then: cycle 17 = parked cycle 12 (delete guards)** — plan and the
   Implementer's IN PROGRESS report are in `parked/2026-10-10-delete-guards/`;
   resume instructions at the top of the parked plan. **The branch
   `wip/cycle-12-delete-guards` (commit `a8f75d6`) is not on this clone**:
@@ -227,8 +245,19 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **810 tests, 0 failing** as of 2026-10-29 (after cycle 16) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **816 tests, 0 failing** as of 2026-10-31 (after cycle 16b) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
+
+## Dev database — cycle 16b changes, 2026-10-29
+
+Four demo orders for the guide pictures, made by `php artisan tinker
+docs/guide/demo-data.php` (idempotent; re-running creates nothing):
+`GUIDE-A` id 11 Organic Store, confirmed and fully allocated, delivery
+2026-10-29; `GUIDE-B` id 12 Organic Store pending, 2026-11-05; `GUIDE-C` id
+13 Cavistons preparing (12 × 1L picked from `M281026`, other lines
+reserved), 2026-11-03; `GUIDE-D` id 14 Roundwood Stores pending, 2026-11-03.
+They hold reservations on `M281026`, `Y230726` and `G030426`. To clear them,
+cancel them in the app (stock returns); 16c adds a `--fresh` flag.
 
 ## Dev database — cycle 16 change, 2026-10-29
 

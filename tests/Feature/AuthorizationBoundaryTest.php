@@ -464,6 +464,9 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
             'user' => $otherUser->id,
             'writeOff' => $writeOff->id,
             'write_off_reason' => $writeOffReason->id,
+            // help.* — real files in docs/guide/, so a GET can't pass on a 404.
+            'page' => 'orders',
+            'file' => 'orders-list-organic-store.png',
         ];
     }
 

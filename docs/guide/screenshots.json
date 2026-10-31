@@ -1,0 +1,130 @@
+{
+  "base": "http://mossfield.local",
+  "out": "docs/guide/images",
+  "accounts": {
+    "office": "office_test",
+    "factory": "factory_test",
+    "admin": "admin"
+  },
+  "shots": [
+    {
+      "name": "dashboard-office",
+      "as": "office",
+      "url": "/dashboard",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "sidebar-help",
+      "as": "office",
+      "url": "/help",
+      "width": 1280,
+      "height": 1300,
+      "clip": "aside"
+    },
+    {
+      "name": "orders-list-organic-store",
+      "as": "office",
+      "url": "/orders?q=Organic+Store",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "order-new-form",
+      "as": "office",
+      "url": "/orders/create",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "order-page-pending",
+      "as": "office",
+      "url": "/orders/12",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "order-page-picking",
+      "as": "office",
+      "url": "/orders/11",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "scale": 1
+    },
+    {
+      "name": "order-page-ready",
+      "as": "office",
+      "url": "/orders/5",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "scale": 1.25
+    },
+    {
+      "name": "chilled-runs-dublin",
+      "as": "office",
+      "url": "/chilled-runs?run=1&date=2026-11-03",
+      "width": 1440,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "chilled-runs-enter-order",
+      "as": "office",
+      "url": "/chilled-runs?run=1&date=2026-11-03&edit=23",
+      "width": 1440,
+      "height": 1250
+    },
+    {
+      "name": "picking-queue",
+      "as": "factory",
+      "url": "/picking?date=2026-10-29",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    {
+      "name": "picking-order",
+      "as": "factory",
+      "url": "/picking/11",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    {
+      "name": "picking-item-fixed",
+      "as": "factory",
+      "url": "/picking/11/items/36",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    {
+      "name": "picking-item-wheel",
+      "as": "factory",
+      "url": "/picking/11/items/39",
+      "width": 390,
+      "height": 1320,
+      "mobile": true
+    },
+    {
+      "name": "picking-order-done",
+      "as": "factory",
+      "url": "/picking/5",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    },
+    {
+      "name": "picking-order-partly",
+      "as": "factory",
+      "url": "/picking/13",
+      "width": 390,
+      "height": 844,
+      "mobile": true
+    }
+  ]
+}

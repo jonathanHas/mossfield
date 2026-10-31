@@ -388,7 +388,7 @@ deploy/bin/ship -m "<msg>"   # use the given message, no prompt
 
 `ship` auto-commits **all** local changes (tracked *and* untracked), pushes the current branch to GitHub, then SSHes to the box and runs `deploy/bin/deploy-on-prod` (which handles git pull, composer, npm, migrate, cache rebuild, php-fpm reload) — with maintenance mode on by default (`--no-maintenance` to skip it). It's a thin wrapper over `deploy-mossserv` → `deploy2`; for the original prod box use `deploy/bin/deploy2`. See any script's `--help` for flags (`--maintenance`, `--skip-npm`, `--branch=`, `--dry-run`).
 
-From a dev box that has only a plain `Host mossserv` alias (user jon, `id_ed25519`) rather than `mossserv-deploy`, use `deploy/bin/ship-jon`: the same chain, pinned to that alias, and it commits tracked files only (untracked files are listed and left alone).
+From a dev box that has only a plain `Host mossserv` alias (user jon, `id_ed25519`) rather than `mossserv-deploy`, use `deploy/bin/ship-jon`: the same chain, pinned to that alias, with the same auto-commit-all (untracked files are listed, then added; `--tracked-only` leaves them alone for one run). Anything that must never ship belongs in `.gitignore`.
 
 One-time dev-box setup before the first run:
 
