@@ -90,6 +90,72 @@ baseline.
 
 ---
 
+## 2026-11-07 — User guide, part 3: Production, Stock, Admin pages; stable pictures (Plan/Implement cycle 16d)
+
+**Scope.** The last three guide pages and the four 16c carry-overs.
+Planned by Fable on 2026-11-07, implemented by Opus the same day, accepted
+the same day. Files in `archive/2026-11-07-user-guide-part-3/`.
+
+**What landed.**
+- **Three pages**: `production.md` (117 lines, seven pictures: what a
+  batch is, the browser and its wheel strip, the new-batch form, the batch
+  page, expired stock and write-offs, cutting, maturing), `stock.md` (57
+  lines, five pictures: the overview and its segments, products and the
+  variant fields in plain words, write-off reasons), `admin.md` (55 lines,
+  three pictures: the four roles, adding and deactivating users, the batch
+  ceilings, backup and restore with the page's own warnings). The README
+  has no *(to write)* rows. Every bold label grepped against the views; the
+  prose followed the screens over the plan in five places (**Delete** is on
+  the `/batches` card; "Release [n] of N" + **Release**; **Save maturing ·
+  N**; **Reset to defaults** appears only once a value is stored; role
+  labels from `UserRole::label()`).
+- **An `admin` audience.** `HelpController::AUDIENCE` now takes `all`,
+  `office` or `admin`; `canRead()` is a `match` — `all` → true, `admin` →
+  `User::hasRole('admin')`, anything else (a missing key included) →
+  `see-financials`, so it still fails closed. `production` and `stock` are
+  `all`; `admin` is `admin`. `HelpPagesTest` walks factory, office and
+  admin against a `readable()` map for every page and picture and asserts
+  that at least one picture is office-only and one admin-only, so the 403
+  branches are exercised; the render and picture-exists loops act as admin.
+  Still 9 tests, extended in place.
+- **Stable pictures.** The top-bar clock span carries `data-clock`;
+  `screenshot.mjs` injects `[data-clock] { visibility: hidden !important; }`
+  for every shot. `finance-export.png` came out byte-identical on three
+  runs across a minute boundary and hours apart. Pictures whose screen
+  prints today's date in a form field (`batch-new-form`, both batch pages'
+  write-off date, `cheese-cut-form`) and `backup.png` (row counts) still
+  change when re-shot; that is content, accepted.
+- **`demo-data.php` makes milk.** Before the orders, `$guideEnsureMilk()`
+  reads `BatchItem::freeStockByVariant()` for 1L and 2L; below 60 / 20 it
+  creates, in one transaction, a milk batch (today, expiry today +
+  `shelf_life_days`, 1,200 L raw, notes "Guide demo batch — made by
+  docs/guide/demo-data.php") with 600 × 1L and 200 × 2L, and prints `made
+  batch <code> …`. The plain run is a no-op once stock exists. Dev got
+  `M071126` (batch 26, expires 2026-11-17); the GUIDE orders are now ids
+  19–22 (ORD-20261107-001…004), 15–18 cancelled with stock returned.
+- Pictures served `Cache-Control: private, max-age=3600`; the two prose
+  links to Orders on everyone-pages say *(office)*.
+- **15 new pictures, 44 in all, 9.3 MB, largest 485 KB.** On the `all`
+  pages the stock total (`div.text-[32px].font-mono`) and the product price
+  cells (`td.mf-td.font-mono.font-medium`, the `price_label` cell only) are
+  blurred; `products-index` is shot at `scale: 1` to stay under 500 KB.
+  The only users picture is the empty Add user form.
+
+**Things to know.**
+- `/stock` shows not-yet-ready cheese wheels as *Available* (G281026's 40,
+  ready 27/12/2026) and values them, while `/products` and every allocation
+  site exclude them through `isReadyToSell()`. Noted in `SMALL_FIXES.md`
+  → *Display and consistency*; not a guide matter.
+- The floor sees the `/stock` valuation and `/products` base prices in the
+  app. The pictures blur them; whether the app should is Jon's decision
+  (vault open item), not a guide cycle's.
+- After 2026-11-17 the demo orders sit on expired milk again: run
+  `GUIDE_FRESH=1 php artisan tinker docs/guide/demo-data.php` — it makes
+  the next batch itself. The plain run does not.
+- Suite **820 tests, 0 failed** (5,696 assertions); pint clean.
+
+---
+
 ## 2026-11-07 — User guide, part 2: tooling leftovers, Finance, Customers, page audiences (Plan/Implement cycle 16c, revision 2)
 
 **Scope.** The second guide cycle: the 16b leftovers in the screenshot

@@ -59,6 +59,9 @@ Factory users see a shorter dashboard with a **Picking queue →** button.
 
 ## Next
 
-- [Orders](orders.md): entering, confirming, changing and sending out an order.
+- [Orders](orders.md) *(office)*: entering, confirming, changing and sending out an order.
 - [Chilled runs](chilled-runs.md): the run sheet the office works the day from.
 - [Picking](picking.md): picking orders on the phone.
+- [Production](production.md): batches, cutting and maturing.
+- [Stock](stock.md): the stock overview, products and write-off reasons.
+- [Admin](admin.md) *(admins)*: users, settings and backup.

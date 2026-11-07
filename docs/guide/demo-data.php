@@ -17,11 +17,18 @@
 // makes four new orders for the coming run dates. Use it when the delivery
 // dates have gone by.
 //
+// Before the orders it makes sure there is sellable milk: when free 1L or 2L
+// stock is below what the four orders need, it records a fresh milk batch the
+// way BatchController::store() does (tagged in its notes) and prints
+// "made batch <code> …". Milk expires in ten days; this keeps the fresh path
+// working after it does.
+//
 // Either way it ends by writing docs/guide/demo-data.json (gitignored — the
 // ids are this box's): each order's id, number, status, delivery date and
 // line ids by variant name. screenshot.mjs fills the manifest's
 // {GUIDE-A.id} / {GUIDE-A.date} / {GUIDE-A.item.1L Bottle} placeholders from it.
 
+use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Customer;
 use App\Models\DeliveryRun;
@@ -77,6 +84,43 @@ $guideRunDate = function (int $runId, int $weeksLater = 0): CarbonImmutable {
 $guideVariant = fn (string $product, string $variant): ProductVariant => ProductVariant::whereHas(
     'product', fn ($q) => $q->where('name', 'like', "%$product%")
 )->where('name', $variant)->firstOrFail();
+
+// Sellable milk for the orders below (they need 56 × 1L and 20 × 2L).
+$guideEnsureMilk = function () use ($guideVariant): void {
+    $oneLitre = $guideVariant('Milk', '1L Bottle');
+    $twoLitre = $guideVariant('Milk', '2L Bottle');
+    $free = BatchItem::freeStockByVariant([$oneLitre->id, $twoLitre->id]);
+
+    if (($free[$oneLitre->id] ?? 0) >= 60 && ($free[$twoLitre->id] ?? 0) >= 20) {
+        return;
+    }
+
+    $product = $oneLitre->product;
+    $batch = DB::transaction(function () use ($product, $oneLitre, $twoLitre) {
+        $batch = Batch::create([
+            'product_id' => $product->id,
+            'production_date' => today(),
+            'expiry_date' => today()->addDays($product->shelf_life_days ?: 10),
+            'raw_milk_litres' => 1200,
+            'wheels_produced' => null,
+            'notes' => 'Guide demo batch — made by docs/guide/demo-data.php',
+        ]);
+        foreach ([[$oneLitre, 600], [$twoLitre, 200]] as [$variant, $qty]) {
+            BatchItem::create([
+                'batch_id' => $batch->id,
+                'product_variant_id' => $variant->id,
+                'quantity_produced' => $qty,
+                'quantity_remaining' => $qty,
+                'unit_weight_kg' => $variant->weight_kg,
+            ]);
+        }
+
+        return $batch;
+    });
+
+    echo "made batch {$batch->batch_code} (1L 600, 2L 200)\n";
+};
+$guideEnsureMilk();
 
 $guideAllocate = function (Order $order): void {
     foreach ($order->orderItems as $item) {

@@ -13,7 +13,9 @@
       "url": "/dashboard",
       "width": 1280,
       "height": 800,
-      "blur": ["table tbody td:nth-child(3)"]
+      "blur": [
+        "table tbody td:nth-child(3)"
+      ]
     },
     {
       "name": "sidebar-help",
@@ -265,6 +267,148 @@
       "name": "delivery-runs",
       "as": "office",
       "url": "/delivery-runs",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "batches-index",
+      "as": "office",
+      "url": "/batches",
+      "width": 1280,
+      "height": 1000,
+      "before": [
+        {
+          "click": "details.batch-group[open] > summary"
+        },
+        {
+          "click": "details.batch-group[open] > summary"
+        }
+      ]
+    },
+    {
+      "name": "batch-new-form",
+      "as": "office",
+      "url": "/batches/create",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "before": [
+        {
+          "select": "#product_id",
+          "value": "1"
+        },
+        {
+          "waitFor": "#variants-container input[type=number]"
+        }
+      ]
+    },
+    {
+      "name": "batch-page-cheese",
+      "as": "office",
+      "url": "/batches/17",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "batch-page-expired",
+      "as": "office",
+      "url": "/batches/16",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "cheese-cutting",
+      "as": "office",
+      "url": "/cheese-cutting",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "cheese-cut-form",
+      "as": "office",
+      "url": "/cheese-cutting/cut/43",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "mature-conversion",
+      "as": "office",
+      "url": "/cheese-conversion",
+      "width": 1440,
+      "height": 900
+    },
+    {
+      "name": "stock-overview",
+      "as": "office",
+      "url": "/stock",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "blur": [
+        "div.text-\\[32px\\].font-mono"
+      ]
+    },
+    {
+      "name": "products-index",
+      "as": "office",
+      "url": "/products",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "blur": [
+        "td.mf-td.font-mono.font-medium"
+      ],
+      "scale": 1
+    },
+    {
+      "name": "product-page",
+      "as": "office",
+      "url": "/products/3",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "blur": [
+        "td.mf-td.font-mono.font-medium"
+      ]
+    },
+    {
+      "name": "variant-form",
+      "as": "office",
+      "url": "/products/3/variants/create",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "write-off-reasons",
+      "as": "office",
+      "url": "/write-off-reasons",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "users-new",
+      "as": "admin",
+      "url": "/users/create",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "settings",
+      "as": "admin",
+      "url": "/settings",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "backup",
+      "as": "admin",
+      "url": "/backup",
       "width": 1280,
       "height": 800,
       "fullPage": true

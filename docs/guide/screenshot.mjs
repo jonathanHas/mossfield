@@ -25,6 +25,8 @@
 //   to every role that can open Help).
 // - fullPage shots get the sticky sidebar un-stuck for the capture, so it runs
 //   the full height of the picture instead of ending after one viewport.
+// - every shot hides the top bar's clock ([data-clock], visibility only, so the
+//   layout is unchanged): an unchanged screen then gives an unchanged picture.
 
 import { readFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
@@ -40,6 +42,8 @@ const filter = process.argv[2] ?? '';
 // The layout's sidebar is the one <aside> with h-screen (product pages have a
 // second, inner aside). Un-stuck, it stretches with the flex row it sits in.
 const fullPageCss = 'aside.h-screen { position: static !important; height: auto !important; min-height: 100% !important; }';
+// The top-bar clock changes every minute; hidden, it no longer rewrites every picture.
+const clockCss = '[data-clock] { visibility: hidden !important; }';
 
 const demo = existsSync(demoPath) ? JSON.parse(await readFile(demoPath, 'utf8')) : null;
 
@@ -143,6 +147,7 @@ for (const shot of shots) {
             await page.waitForNetworkIdle({ idleTime: 300 }).catch(() => {});
             await page.evaluate(() => document.fonts.ready);
         }
+        await page.addStyleTag({ content: clockCss });
         if (shot.fullPage) await page.addStyleTag({ content: fullPageCss });
         if (shot.blur?.length) {
             for (const selector of shot.blur) {

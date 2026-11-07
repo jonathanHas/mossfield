@@ -214,14 +214,30 @@ worth returning to.
   `4fda1a7`.** Jon archives `plan.md` + `implemented.md` to
   `archive/2026-11-05-user-guide-part-2/` and ships with
   `ship-jon --no-maintenance` (no migration).
-- **16d** = production, stock and admin pages. Carried into it: make a
-  sellable milk batch first (dev milk `M281026` expired 2026-11-07, so
-  `GUIDE_FRESH=1` comes up short); hide the top-bar clock for the capture
-  (every re-shoot rewrites every office picture otherwise); picture
-  `Cache-Control` → `private`; the two prose links to `orders.md` on
-  everyone-pages marked *(office)*; a consolidated preview with content
-  (`GUIDE-E`); an `admin` audience for the admin page; the dev box's
-  expired stock is kept for its pictures.
+- **Cycle 16c shipped:** commit `43552f5` ("Deploy 2026-11-07 08:20"),
+  `mossserv` at the same commit. The cycle files were committed at the top
+  level by mistake; the Planner `git mv`'d them into
+  `archive/2026-11-05-user-guide-part-2/` (staged, rides with the 16d ship).
+- **Cycle 16d "User guide, part 3" — ACCEPTED 2026-11-07 (revision 1):**
+  `production.md`, `stock.md`, `admin.md` with 15 new pictures (44 in all,
+  9.3 MB, none over 500 KB; the README has no *(to write)* rows);
+  `demo-data.php` makes a milk batch when sellable milk is short (dev got
+  `M071126`, batch 26, expires 2026-11-17); the top-bar clock (`data-clock`)
+  hidden for the capture, so an unchanged screen gives a byte-identical
+  PNG; picture `Cache-Control` → `private`; *(office)* on the two prose
+  links to `orders.md`; an `admin` audience in `HelpController::AUDIENCE`
+  (`canRead()` is a `match`; the tests walk all three roles). Implemented
+  by Opus. Suite **820 tests, 0 failed**. Write-up in
+  `TESTING_AND_FIXES.md` → 2026-11-07 part 3. **Not yet shipped**: the
+  working tree holds the whole cycle (3 app files, 3 new pages, 44
+  pictures, the docs) plus the staged archive rename from 16c. Jon's step:
+  `mkdir -p docs/planImp/archive/2026-11-07-user-guide-part-3 && mv docs/planImp/plan.md docs/planImp/implemented.md docs/planImp/archive/2026-11-07-user-guide-part-3/`
+  then `deploy/bin/ship-jon` (no migrations; `--no-maintenance` is fine).
+  Open for Jon (not a step): the app shows the floor the `/stock` valuation
+  and `/products` base prices — a decision for `OPEN_QUESTIONS.md`.
+  Planner's observation → `SMALL_FIXES.md`: `/stock` counts not-yet-ready
+  cheese wheels as *Available* (G281026's 40) while `/products` and the
+  allocator exclude them.
 - **Then: cycle 17 = parked cycle 12 (delete guards)** — plan and the
   Implementer's IN PROGRESS report are in `parked/2026-10-10-delete-guards/`;
   resume instructions at the top of the parked plan. **The branch
@@ -263,10 +279,24 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **820 tests, 0 failing** as of 2026-11-07 (after cycle 16c) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **820 tests, 0 failing** as of 2026-11-07 (after cycle 16d; 5,696 assertions) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
 
-## Dev database — cycle 16c changes, 2026-11-05
+## Dev database — cycle 16d changes, 2026-11-07
+
+`GUIDE_FRESH=1 php artisan tinker docs/guide/demo-data.php` first made milk
+batch **`M071126`** (id 26: 600 × 1L, 200 × 2L, 1,200 L raw, expiry
+2026-11-17, notes "Guide demo batch — made by docs/guide/demo-data.php"),
+then cancelled the 16c orders (15–18, stock returned) and made `GUIDE-A`
+id 19 (Organic Store, confirmed and allocated, 2026-11-12), `GUIDE-B` id 20
+(Organic Store pending, 2026-11-19), `GUIDE-C` id 21 (Cavistons preparing,
+12 × 1L picked from `M071126`, 2026-11-10), `GUIDE-D` id 22 (Roundwood
+pending, 2026-11-10) — ORD-20261107-001…004. Nothing else changed: no
+write-off, cut, hold, release, email or payment. **After 2026-11-17** the
+milk is expired again — run the `GUIDE_FRESH=1` form, which makes the next
+batch itself (the plain run does not).
+
+## Dev database — cycle 16c changes, 2026-11-05 (superseded by 16d above)
 
 `GUIDE_FRESH=1 php artisan tinker docs/guide/demo-data.php` cancelled the
 16b demo orders (ids 11–14, stock returned) and made `GUIDE-A` id 15

@@ -69,4 +69,4 @@ Cheese columns count units only; they have no crates.
 
 Once a stop is dispatched its tick is fixed and the row shows **Dispatched**.
 
-See also: [Orders](orders.md) for one order at a time, [Picking](picking.md) for the floor's side.
+See also: [Orders](orders.md) *(office)* for one order at a time, [Picking](picking.md) for the floor's side.

@@ -39,7 +39,7 @@
 
     <!-- Right rail -->
     <div class="flex items-center gap-2" style="color: var(--muted);">
-        <span class="hidden sm:inline text-[12px] font-mono" style="color: var(--muted);">
+        <span data-clock class="hidden sm:inline text-[12px] font-mono" style="color: var(--muted);">
             {{ now()->format('D, j M · H:i') }}
         </span>
     </div>

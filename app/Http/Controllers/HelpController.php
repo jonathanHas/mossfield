@@ -18,14 +18,15 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  *
  * Who reads what: every page has an audience in AUDIENCE. `office` pages (and
  * the pictures only they use) show money, so they need the see-financials gate
- * the rest of the app hides prices behind; the floor gets a 403. A page
- * missing from the map is treated as `office` — fail closed.
+ * the rest of the app hides prices behind; the floor gets a 403. `admin` pages
+ * are for administrators only. A page missing from the map (or with an
+ * unknown audience) is treated as `office` — fail closed.
  */
 class HelpController extends Controller
 {
     private const DIR = 'docs/guide';
 
-    /** Every guide page and who may read it: `all`, or `office` (see-financials). */
+    /** Every guide page and who may read it: `all`, `office` (see-financials) or `admin`. */
     public const AUDIENCE = [
         'README' => 'all',
         'getting-started' => 'all',
@@ -34,6 +35,9 @@ class HelpController extends Controller
         'orders' => 'office',
         'finance' => 'office',
         'customers' => 'office',
+        'production' => 'all',
+        'stock' => 'all',
+        'admin' => 'admin',
     ];
 
     public function index(): View
@@ -61,12 +65,16 @@ class HelpController extends Controller
             ->contains(fn ($f) => str_contains(file_get_contents($f), "images/$file"));
         abort_unless($used, 403);
 
-        return response()->file($path, ['Cache-Control' => 'public, max-age=3600']);
+        return response()->file($path, ['Cache-Control' => 'private, max-age=3600']);
     }
 
     private function canRead(string $page): bool
     {
-        return (self::AUDIENCE[$page] ?? 'office') === 'all' || Gate::allows('see-financials');
+        return match (self::AUDIENCE[$page] ?? 'office') {
+            'all' => true,
+            'admin' => (bool) auth()->user()?->hasRole('admin'),
+            default => Gate::allows('see-financials'),
+        };
     }
 
     private function pagePath(string $page): string

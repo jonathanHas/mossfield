@@ -21,12 +21,16 @@ class HelpPagesTest extends TestCase
 
     private User $factory;
 
+    /** The one role that reads every page (HelpController::AUDIENCE). */
+    private User $admin;
+
     protected function setUp(): void
     {
         parent::setUp();
 
         $this->office = User::factory()->create();
         $this->factory = User::factory()->factoryWorker()->create();
+        $this->admin = User::factory()->admin()->create();
     }
 
     private function guide(string $path = ''): string
@@ -65,10 +69,10 @@ class HelpPagesTest extends TestCase
             preg_match('/^# (.+)$/m', file_get_contents($this->guide("$page.md")), $m);
             $this->assertNotEmpty($m, "$page.md has no '# ' title line");
 
-            $this->actingAs($this->office)->get("/help/$page")
+            $this->actingAs($this->admin)->get("/help/$page")
                 ->assertOk()
                 ->assertSee('<h1>'.e(trim($m[1])).'</h1>', false);
-            $this->actingAs($this->office)->get("/help/$page.md")->assertOk();
+            $this->actingAs($this->admin)->get("/help/$page.md")->assertOk();
         }
     }
 
@@ -83,7 +87,7 @@ class HelpPagesTest extends TestCase
 
         foreach (array_unique($used) as $png) {
             $this->assertFileExists($this->guide("images/$png"));
-            $response = $this->actingAs($this->office)->get("/help/images/$png");
+            $response = $this->actingAs($this->admin)->get("/help/images/$png");
             $response->assertOk();
             $this->assertSame('image/png', $response->headers->get('Content-Type'));
         }
@@ -140,59 +144,72 @@ class HelpPagesTest extends TestCase
 
         $this->assertSame($files, $keys, 'HelpController::AUDIENCE and docs/guide/*.md must list the same pages');
         foreach (HelpController::AUDIENCE as $page => $audience) {
-            $this->assertContains($audience, ['all', 'office'], "$page has audience '$audience'");
+            $this->assertContains($audience, ['all', 'office', 'admin'], "$page has audience '$audience'");
         }
+    }
+
+    /** Which audiences each test user may read. */
+    private function readable(User $user): array
+    {
+        return match (true) {
+            $user->is($this->admin) => ['all', 'office', 'admin'],
+            $user->is($this->office) => ['all', 'office'],
+            default => ['all'],
+        };
     }
 
     public function test_the_floor_cannot_open_office_pages_or_their_pictures(): void
     {
         $byPage = $this->picturesByPage();
-        $floorPictures = collect($byPage)
-            ->filter(fn ($_, $page) => HelpController::AUDIENCE[$page] === 'all')
-            ->flatten()->unique()->all();
 
-        foreach (HelpController::AUDIENCE as $page => $audience) {
-            if ($page === 'README') {
-                continue;
-            }
-            $expected = $audience === 'all' ? 200 : 403;
-            $this->actingAs($this->factory)->get("/help/$page")->assertStatus($expected);
-            $this->actingAs($this->factory)->get("/help/$page.md")->assertStatus($expected);
+        foreach ([$this->factory, $this->office, $this->admin] as $user) {
+            $audiences = $this->readable($user);
+            $allowedPictures = collect($byPage)
+                ->filter(fn ($_, $page) => in_array(HelpController::AUDIENCE[$page], $audiences, true))
+                ->flatten()->unique()->all();
 
-            foreach ($byPage[$page] as $png) {
-                $this->actingAs($this->factory)->get("/help/images/$png")
-                    ->assertStatus(in_array($png, $floorPictures, true) ? 200 : 403);
-            }
-        }
-        $this->assertNotEmpty(array_diff(collect($byPage)->flatten()->all(), $floorPictures), 'some picture is office-only');
-
-        $admin = User::factory()->admin()->create();
-        foreach ([$this->office, $admin] as $user) {
-            foreach (array_keys(HelpController::AUDIENCE) as $page) {
+            foreach (HelpController::AUDIENCE as $page => $audience) {
                 if ($page !== 'README') {
-                    $this->actingAs($user)->get("/help/$page")->assertOk();
+                    $expected = in_array($audience, $audiences, true) ? 200 : 403;
+                    $this->actingAs($user)->get("/help/$page")->assertStatus($expected);
+                    $this->actingAs($user)->get("/help/$page.md")->assertStatus($expected);
                 }
                 foreach ($byPage[$page] as $png) {
-                    $this->actingAs($user)->get("/help/images/$png")->assertOk();
+                    $this->actingAs($user)->get("/help/images/$png")
+                        ->assertStatus(in_array($png, $allowedPictures, true) ? 200 : 403, "{$user->role->value}: $png");
                 }
             }
         }
+
+        // Each narrower audience really has a picture of its own, so the 403s above are exercised.
+        $floor = collect($byPage)->filter(fn ($_, $p) => HelpController::AUDIENCE[$p] === 'all')->flatten()->all();
+        $office = collect($byPage)->filter(fn ($_, $p) => HelpController::AUDIENCE[$p] !== 'admin')->flatten()->all();
+        $this->assertNotEmpty(array_diff($office, $floor), 'some picture is office-only');
+        $this->assertNotEmpty(array_diff(collect($byPage)->flatten()->all(), $office), 'some picture is admin-only');
     }
 
     public function test_the_floor_index_lists_only_its_pages(): void
     {
-        $office = ['finance.md', 'customers.md', 'orders.md'];
-
-        $floor = $this->actingAs($this->factory)->get(route('help.index'))->assertOk()
-            ->assertSee(route('help.show', 'picking.md'), false);
-        foreach ($office as $page) {
-            $floor->assertDontSee(route('help.show', $page), false);
+        foreach ([$this->factory, $this->office, $this->admin] as $user) {
+            $index = $this->actingAs($user)->get(route('help.index'))->assertOk();
+            foreach (HelpController::AUDIENCE as $page => $audience) {
+                if ($page === 'README') {
+                    continue;
+                }
+                $link = route('help.show', "$page.md");
+                in_array($audience, $this->readable($user), true)
+                    ? $index->assertSee($link, false)
+                    : $index->assertDontSee($link, false);
+            }
         }
 
-        $seen = $this->actingAs($this->office)->get(route('help.index'))->assertOk()
-            ->assertSee(route('help.show', 'picking.md'), false);
-        foreach ($office as $page) {
-            $seen->assertSee(route('help.show', $page), false);
-        }
+        // Spelled out once: the floor sees picking, not finance; office does not see admin.
+        $this->actingAs($this->factory)->get(route('help.index'))
+            ->assertSee(route('help.show', 'picking.md'), false)
+            ->assertDontSee(route('help.show', 'finance.md'), false)
+            ->assertDontSee(route('help.show', 'admin.md'), false);
+        $this->actingAs($this->office)->get(route('help.index'))
+            ->assertSee(route('help.show', 'customers.md'), false)
+            ->assertDontSee(route('help.show', 'admin.md'), false);
     }
 }
