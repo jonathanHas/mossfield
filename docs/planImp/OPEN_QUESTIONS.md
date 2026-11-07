@@ -251,3 +251,24 @@ defaults (the Planner's guesses) for a fresh install.
   (b) A weekly-consolidated customer created with the default *Immediate*
   terms gets consolidated invoices due on the issue day; default terms from
   invoicing mode, warn, or leave.
+
+## 6. The floor sees the stock valuation and base prices
+
+**Raised:** 2026-11-07 (cycle 16d plan, from the guide's "no prices on
+everyone-pages" rule) · **Status:** **decided 2026-11-07, not yet built.**
+
+`see-financials` hides money on the order, picking and dashboard screens,
+but two shared-group screens never had the gate: `/stock` prints the total
+stock value at the top (`stock/overview.blade.php:16`) and `/products` and
+`/products/{product}` print every variant's `price_label`
+(`products/index.blade.php:137`, `products/show.blade.php:142`). The guide
+blurs them in its pictures; the app shows them to a factory login.
+
+### Decision (Jon, 2026-11-07)
+
+**No prices for the floor.** Gate the stock total (figure and its label)
+and the price column (cells and header) behind `@can('see-financials')`,
+as the order screens do; the `€/kg` tag carries no figure and may stay. The
+floor keeps the counts. A test per screen that a factory response contains
+no `€`. The guide pictures stay blurred (they are shot as office). To be
+built as a short cycle after 16d ships.
