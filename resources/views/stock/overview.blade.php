@@ -8,14 +8,16 @@
                 <h1 class="mt-1 text-[28px] font-display font-medium" style="letter-spacing: -0.4px;">Stock overview</h1>
                 <div class="mt-1 text-[13px]" style="color: var(--muted);">By product type · with visual fill state</div>
             </div>
-            <div class="lg:text-right">
-                <div class="text-[11px] font-medium uppercase" style="color: var(--muted); letter-spacing: 0.5px;">
-                    Total stock value
+            @can('see-financials')
+                <div class="lg:text-right">
+                    <div class="text-[11px] font-medium uppercase" style="color: var(--muted); letter-spacing: 0.5px;">
+                        Total stock value
+                    </div>
+                    <div class="mt-1 text-[32px] font-mono font-semibold" style="color: var(--ink); letter-spacing: -0.6px;">
+                        €{{ number_format($total_value, 0) }}
+                    </div>
                 </div>
-                <div class="mt-1 text-[32px] font-mono font-semibold" style="color: var(--ink); letter-spacing: -0.6px;">
-                    €{{ number_format($total_value, 0) }}
-                </div>
-            </div>
+            @endcan
         </div>
 
         {{-- Milk card --}}

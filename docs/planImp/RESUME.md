@@ -228,16 +228,25 @@ worth returning to.
   links to `orders.md`; an `admin` audience in `HelpController::AUDIENCE`
   (`canRead()` is a `match`; the tests walk all three roles). Implemented
   by Opus. Suite **820 tests, 0 failed**. Write-up in
-  `TESTING_AND_FIXES.md` → 2026-11-07 part 3. **Not yet shipped**: the
-  working tree holds the whole cycle (3 app files, 3 new pages, 44
-  pictures, the docs) plus the staged archive rename from 16c. Jon's step:
-  `mkdir -p docs/planImp/archive/2026-11-07-user-guide-part-3 && mv docs/planImp/plan.md docs/planImp/implemented.md docs/planImp/archive/2026-11-07-user-guide-part-3/`
-  then `deploy/bin/ship-jon` (no migrations; `--no-maintenance` is fine).
-  Open for Jon (not a step): the app shows the floor the `/stock` valuation
-  and `/products` base prices — a decision for `OPEN_QUESTIONS.md`.
-  Planner's observation → `SMALL_FIXES.md`: `/stock` counts not-yet-ready
-  cheese wheels as *Available* (G281026's 40) while `/products` and the
-  allocator exclude them.
+  `TESTING_AND_FIXES.md` → 2026-11-07 part 3. **Shipped 2026-11-07** as
+  `89688fd` ("Deploy 2026-11-07 10:44", the 62-file cycle) + `45da65f`
+  (`OPEN_QUESTIONS.md` #6); `mossserv` at `45da65f`; cycle files in
+  `archive/2026-11-07-user-guide-part-3/`.
+- **Cycle 16e "No prices for the floor; `/stock` not-ready cheese" —
+  ACCEPTED 2026-11-07 (revision 1):** the `/stock` total value and the
+  Price column on `/products` + `/products/{product}` are behind
+  `@can('see-financials')` (the `€/kg` tag stays); `StockOverviewService`
+  gives cheese before its `ready_date` a `not_ready` segment
+  (`--state-not-ready` = `--info`) and leaves it out of the valuation, as
+  `freeStockByVariant()` does; `FloorPricesTest` (3) + a `StockOverviewTest`
+  case; `CheeseConversionTest`'s maturing fixture aged 2 → 6 months;
+  `stock.md` and `stock-overview.png` redone; `CLAUDE.md` updated.
+  Implemented by Opus. Suite **824 tests, 0 failed** (5,736 assertions).
+  Write-up in `TESTING_AND_FIXES.md` → 2026-11-07 cycle 16e. **Not yet
+  shipped**: the working tree holds the cycle (1 service, 5 views/CSS, 3
+  test files, guide page + picture, docs). No migrations. Jon's step:
+  `mkdir -p docs/planImp/archive/2026-11-07-no-prices-for-the-floor && mv docs/planImp/plan.md docs/planImp/implemented.md docs/planImp/archive/2026-11-07-no-prices-for-the-floor/`
+  then `deploy/bin/ship-jon -m "No prices for the floor (cycle 16e): stock value and price column office-only, not-ready cheese its own segment" --no-maintenance`.
 - **Then: cycle 17 = parked cycle 12 (delete guards)** — plan and the
   Implementer's IN PROGRESS report are in `parked/2026-10-10-delete-guards/`;
   resume instructions at the top of the parked plan. **The branch
@@ -279,7 +288,7 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **820 tests, 0 failing** as of 2026-11-07 (after cycle 16d; 5,696 assertions) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **824 tests, 0 failing** as of 2026-11-07 (after cycle 16e; 5,736 assertions) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
 
 ## Dev database — cycle 16d changes, 2026-11-07

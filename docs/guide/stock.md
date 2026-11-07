@@ -15,9 +15,10 @@ Open **Stock** in the sidebar. There is one card per type: Milk, Yoghurt, Cheese
   - **Sold**: gone out on orders.
   - **Written off**: lost (see *Write-offs* below).
   - Cheese wheels add **Maturing** (held back to become Mature cheese) and **Cut** (made into vacuum packs).
+  - Cheese that has not reached its ready date shows as **Not ready**: counted, but not for sale yet and not in the value.
 - Milk and yoghurt rows also say how many full cases and loose units that is, and show the expiry date.
 - Only batches that are active and not expired are counted. When expired batches still hold stock, the card says so ("3 expired batches still hold 8,940 units — see Batches"). They are cleared by writing them off from the batch page; see [Production](production.md).
-- *Total stock value* at the top is office information: what the available stock is worth at list prices.
+- *Total stock value* at the top is shown to the office only, not the floor: what the available stock is worth at list prices.
 
 ## Products and variants
 
@@ -26,6 +27,7 @@ Open **Products**. Products are grouped by type; each product lists its variants
 ![The product list](images/products-index.png)
 
 - The *Stock* column is free stock: what can still be sold, after reservations and maturing holds, in batches that have not expired. It is the same figure the order screens, the run sheet and the online shop use.
+- The *Price* column is shown to the office only.
 - **View** opens a product with its variants and its recent batches, beside the list of the other products.
 
 ![A product page](images/product-page.png)

@@ -228,4 +228,49 @@ class StockOverviewTest extends TestCase
             ->assertSee('written off')
             ->assertSee('var(--state-written-off)', false);
     }
+
+    public function test_cheese_before_its_ready_date_is_not_ready_and_not_valued(): void
+    {
+        $cheese = Product::create([
+            'name' => 'Test Farmhouse Cheese', 'type' => 'cheese', 'maturation_days' => 60, 'is_active' => true,
+        ]);
+        $wheel = ProductVariant::create([
+            'product_id' => $cheese->id, 'name' => 'Whole Wheel', 'size' => '4kg', 'unit' => 'wheel',
+            'weight_kg' => 4.0, 'base_price' => 12.50, 'is_variable_weight' => true,
+            'is_priced_by_weight' => true, 'is_active' => true,
+        ]);
+        $young = Batch::create([
+            'product_id' => $cheese->id, 'production_date' => now()->subDays(10),
+            'raw_milk_litres' => 100, 'status' => 'active',
+        ]);
+        $ready = Batch::create([
+            'product_id' => $cheese->id, 'production_date' => now()->subDays(90),
+            'raw_milk_litres' => 100, 'status' => 'active',
+        ]);
+        $this->assertTrue($young->ready_date->isFuture(), 'sanity: ready_date set from maturation_days');
+        foreach ([[$young, 12], [$ready, 5]] as [$batch, $n]) {
+            BatchItem::create([
+                'batch_id' => $batch->id, 'product_variant_id' => $wheel->id,
+                'quantity_produced' => $n, 'quantity_remaining' => $n, 'unit_weight_kg' => 4.0,
+            ]);
+        }
+
+        $stock = app(StockOverviewService::class)->build();
+        $rows = collect($stock['cheese']['wheels'])->keyBy('batch_code');
+
+        $notReady = $rows[$young->batch_code];
+        $this->assertSame(0, $notReady['segments']['available']);
+        $this->assertSame(12, $notReady['segments']['not_ready']);
+        $this->assertSame($notReady['total'], array_sum($notReady['segments']), 'the dots still sum to the total');
+
+        $this->assertSame(5, $rows[$ready->batch_code]['segments']['available']);
+        $this->assertSame(0, $rows[$ready->batch_code]['segments']['not_ready']);
+
+        $this->assertEqualsWithDelta($wheel->calculatePrice(5), $stock['total_value'], 0.001, 'only ready stock is valued');
+
+        $this->actingAs(User::factory()->admin()->create())->get('/stock')
+            ->assertOk()
+            ->assertSee('not ready')
+            ->assertSee('var(--state-not-ready)', false);
+    }
 }

@@ -11,6 +11,7 @@
     --state-empty: var(--line-2);
     --state-cut: #9CA3AF;
     --state-maturing: oklch(0.55 0.11 56);
+    --state-not-ready: var(--info); /* cheese before its ready date — counted, not sellable yet */
     --state-converted: #8B5CF6;
     --state-sold: #1F1D17;
 

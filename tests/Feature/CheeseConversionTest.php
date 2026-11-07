@@ -512,7 +512,8 @@ class CheeseConversionTest extends TestCase
 
     public function test_stock_overview_shows_maturing_segment_and_excludes_from_available(): void
     {
-        $wheel = $this->farmhouseBatch(2, 5);
+        // Past its 90-day ready date, so the free wheels are available, not "not ready".
+        $wheel = $this->farmhouseBatch(6, 5);
         $this->hold($this->office(), $wheel, 2);
 
         $card = (new \App\Services\StockOverviewService)->build()['cheese'];

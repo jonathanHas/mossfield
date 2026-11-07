@@ -7,9 +7,10 @@
 
 @php
     // Render order matches batches/partials/batch-card.blade.php so colors line up:
-    // available (yellow→green), allocated (amber/warn), maturing (deep amber),
-    // cut (grey), converted-to-mature (purple), written off (red), sold (black).
-    $order = ['available', 'allocated', 'maturing', 'cut', 'converted', 'written_off', 'sold'];
+    // available (yellow→green), allocated (amber/warn), not ready (blue — cheese
+    // before its ready date), maturing (deep amber), cut (grey),
+    // converted-to-mature (purple), written off (red), sold (black).
+    $order = ['available', 'allocated', 'not_ready', 'maturing', 'cut', 'converted', 'written_off', 'sold'];
     // One mapping from a segment key to its CSS token and label:
     // written_off → --state-written-off / "written off".
     $token = fn ($s) => '--state-'.str_replace('_', '-', $s);

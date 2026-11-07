@@ -255,7 +255,7 @@ defaults (the Planner's guesses) for a fresh install.
 ## 6. The floor sees the stock valuation and base prices
 
 **Raised:** 2026-11-07 (cycle 16d plan, from the guide's "no prices on
-everyone-pages" rule) · **Status:** **decided 2026-11-07, not yet built.**
+everyone-pages" rule) · **Status:** **decided 2026-11-07, built 2026-11-07 (cycle 16e).**
 
 `see-financials` hides money on the order, picking and dashboard screens,
 but two shared-group screens never had the gate: `/stock` prints the total

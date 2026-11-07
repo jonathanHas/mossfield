@@ -66,7 +66,7 @@ Most of these need no test. Where one is worth having, it says so.
 
 ## Display and consistency
 
-- [ ] **`/stock` counts not-yet-ready cheese wheels as Available.** G281026
+- [x] **`/stock` counts not-yet-ready cheese wheels as Available.** G281026
   (ready 27/12/2026) shows "Available 40" on the stock overview and its 40 wheels
   go into the total value, while `/products` shows 18 for the same variant and the
   allocator, picker and run sheet would not hand them out: `StockOverviewService`
@@ -75,6 +75,13 @@ Most of these need no test. Where one is worth having, it says so.
   *maturing* / *not ready* segment for them, or leave them out of *available* and
   the valuation. Worth a `StockOverviewTest` case either way.
   *Source: Planner's review of cycle 16d, 2026-11-07, from the `stock-overview` picture.*
+  *Done 2026-11-07 (cycle 16e):* a `not_ready` segment, out of the valuation.
+
+- [ ] **Two statements of "ready to sell".** `Batch::isReadyToSell()`
+  (`ready_date->lte(now())`) and `BatchItem::isReadyToSell()`
+  (`ready_date <= today` as strings, cheese only) agree today for a
+  date-cast `ready_date`; make the item delegate to the batch so there is
+  one. *Source: Implementer's note, cycle 16e, 2026-11-07.*
 
 - [x] **Batch progress bar has five segments and a four-item legend.** Renders as
   `29 · 0 · 2 · 3 · 4 / 38` with one unexplained `0`. Either label it or drop it.

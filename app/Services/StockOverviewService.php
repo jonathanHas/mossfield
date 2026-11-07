@@ -10,10 +10,12 @@ class StockOverviewService
 {
     public function build(): array
     {
-        // Sellable stock = batch.status='active' AND not past expiry. Mirrors
-        // BatchItem::isAvailableForAllocation(). Stale-active rows whose
-        // expiry has passed are excluded so totals don't double-count
-        // unsellable inventory.
+        // Rows = batch.status='active' AND not past expiry; stale-active rows
+        // whose expiry has passed are excluded so totals don't double-count
+        // unsellable inventory. For the value and the "available" segment the
+        // unit must also be ready to sell (cheese past its ready_date) —
+        // together that mirrors BatchItem::isAvailableForAllocation() and
+        // freeStockByVariant(). Not-ready cheese is its own segment.
         $today = now()->startOfDay()->toDateString();
 
         $items = BatchItem::query()
@@ -82,7 +84,9 @@ class StockOverviewService
 
     private function totalValue($items): float
     {
-        return (float) $items->sum(fn ($i) => $i->productVariant->calculatePrice($i->available_quantity));
+        // Ready stock only — the same filter BatchItem::freeStockByVariant()
+        // applies, so cheese before its ready_date is counted but not valued.
+        return (float) $items->filter(fn ($i) => $i->isReadyToSell())->sum(fn ($i) => $i->productVariant->calculatePrice($i->available_quantity));
     }
 
     /**
@@ -206,12 +210,15 @@ class StockOverviewService
                 // aside — never available to sell or allocate.
                 $maturing = min($maturing, $remainingClamped);
                 $available = max(0, $remainingClamped - $allocated - $maturing);
+                // Cheese before its ready date: counted, not sellable yet.
+                [$available, $notReady] = $batch->isReadyToSell() ? [$available, 0] : [0, $available];
                 $wheels[] = [
                     'label' => $label,
                     'total' => $produced,
                     'segments' => [
                         'available' => $available,
                         'allocated' => $allocated,
+                        'not_ready' => $notReady,
                         'maturing' => $maturing,
                         'cut' => $cut,
                         'converted' => $converted,
@@ -227,12 +234,14 @@ class StockOverviewService
                 $writtenOff = (int) $group->sum(fn ($i) => (int) ($i->written_off_units ?? 0));
                 $sold = max(0, $produced - $remaining - $writtenOff);
                 $available = max(0, $remaining - $allocated);
+                [$available, $notReady] = $batch->isReadyToSell() ? [$available, 0] : [0, $available];
                 $packs[] = [
                     'label' => $label,
                     'total' => $produced,
                     'segments' => [
                         'available' => $available,
                         'allocated' => $allocated,
+                        'not_ready' => $notReady,
                         'written_off' => $writtenOff,
                         'sold' => $sold,
                     ],

@@ -90,6 +90,55 @@ baseline.
 
 ---
 
+## 2026-11-07 — No prices for the floor; `/stock` tells not-ready cheese apart (Plan/Implement cycle 16e)
+
+**Scope.** Jon's decision (`OPEN_QUESTIONS.md` #6): a factory login sees no
+money on the two shared screens that never had the gate. And the one `/stock`
+fault the 16d review found: cheese before its `ready_date` was shown as
+*Available* and valued, while `/products`, the allocator, the picker and the
+run sheet all exclude it. Planned by Fable 5.1, implemented by Opus,
+reviewed and accepted the same day.
+
+**What landed.**
+
+- `stock/overview.blade.php`: the "Total stock value" label and figure are
+  inside `@can('see-financials')`. `products/index.blade.php` and
+  `products/show.blade.php`: the **Price** header and the `price_label`
+  cell are gated together (header and cell, or the columns shift). The
+  `€/kg` tag stays — it carries no figure. The floor keeps every count.
+- `StockOverviewService::buildCheeseCard()`: in the wheel and the pack
+  branch, when `! $batch->isReadyToSell()` the units that would have been
+  `available` go into a new **`not_ready`** segment instead (placed after
+  `allocated`); `totalValue()` sums ready items only — the same filter
+  `BatchItem::freeStockByVariant()` applies, so `/stock` and `/products`
+  now agree. `cheese-row` renders the key from `$order`;
+  `--state-not-ready: var(--info)` (blue) in `stock.css`. Milk and yoghurt
+  are always ready; the `/batches` wheel strips still show such wheels as
+  free (out of scope — the card prints the ready-date countdown).
+- Tests: `FloorPricesTest` (new — the three screens, factory vs office; the
+  floor has no `€` followed by a digit, keeps `€/kg` and the Stock
+  figures) and `StockOverviewTest::test_cheese_before_its_ready_date_is_not_ready_and_not_valued`
+  (segments, dots sum to the total, value = the ready batch alone).
+  `CheeseConversionTest`'s maturing-segment test aged its fixture from 2
+  to 6 months so it still asserts `available 3` — the test is about the
+  hold, not the ready date.
+- Guide: `stock.md` gains a **Not ready** line, says the value and the
+  Price column are office-only, and `stock-overview.png` was re-shot
+  (G281026's 40 wheels are now the blue row). `CLAUDE.md` → Stock Overview
+  updated.
+
+**Things to know.**
+
+- Dev box: the office's Total stock value went from €11,089 to €7,889 — the
+  difference is exactly `calculatePrice(40)` for the Whole Wheel. Nothing
+  in the data changed.
+- `Batch::isReadyToSell()` (`lte(now())`) and `BatchItem::isReadyToSell()`
+  (`<= today`) are two statements of one rule; they agree for a date-cast
+  `ready_date`. Tidy-up listed in `SMALL_FIXES.md`.
+- When a future change touches the stock segments, `grep -rln
+  StockOverviewService tests` first — `CheeseConversionTest` reads them too.
+- Suite after the cycle: **824 tests, 0 failed (5,736 assertions)**.
+
 ## 2026-11-07 — User guide, part 3: Production, Stock, Admin pages; stable pictures (Plan/Implement cycle 16d)
 
 **Scope.** The last three guide pages and the four 16c carry-overs.

@@ -107,7 +107,9 @@
                                                     <th class="mf-th">Name</th>
                                                     <th class="mf-th">Size</th>
                                                     <th class="mf-th">Weight</th>
-                                                    <th class="mf-th">Price</th>
+                                                    @can('see-financials')
+                                                        <th class="mf-th">Price</th>
+                                                    @endcan
                                                     <th class="mf-th">Stock</th>
                                                     <th class="mf-th">Status</th>
                                                     <th class="mf-th text-right"></th>
@@ -134,7 +136,9 @@
                                                         </td>
                                                         <td class="mf-td font-mono" style="color: var(--muted);">{{ $variant->size }}</td>
                                                         <td class="mf-td font-mono" style="color: var(--muted);">{{ $variant->weight_kg ? $variant->weight_kg . ' kg' : '—' }}</td>
-                                                        <td class="mf-td font-mono font-medium">{{ $variant->price_label }}</td>
+                                                        @can('see-financials')
+                                                            <td class="mf-td font-mono font-medium">{{ $variant->price_label }}</td>
+                                                        @endcan
                                                         <td class="mf-td font-mono" style="color: var(--muted);">{{ $variant->total_stock }}</td>
                                                         <td class="mf-td">
                                                             @if($variant->is_active)
