@@ -8,6 +8,7 @@ use App\Enums\DocumentEmailKind;
 use App\Enums\InvoiceStatus;
 use App\Enums\InvoiceType;
 use App\Mail\DocumentMail;
+use App\Services\InvoiceService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -314,7 +315,7 @@ class Invoice extends Model implements EmailableDocument
 
     public function documentPdfData(): string
     {
-        return app(\App\Services\InvoiceService::class)->pdf($this)->output();
+        return app(InvoiceService::class)->pdf($this)->output();
     }
 
     public function documentMailable(): Mailable

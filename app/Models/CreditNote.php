@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Contracts\EmailableDocument;
 use App\Enums\DocumentEmailKind;
 use App\Mail\DocumentMail;
+use App\Services\CreditNoteService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -100,7 +101,7 @@ class CreditNote extends Model implements EmailableDocument
 
     public function documentPdfData(): string
     {
-        return app(\App\Services\CreditNoteService::class)->pdf($this)->output();
+        return app(CreditNoteService::class)->pdf($this)->output();
     }
 
     public function documentMailable(): Mailable

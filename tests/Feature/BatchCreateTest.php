@@ -4,10 +4,16 @@ namespace Tests\Feature;
 
 use App\Models\Batch;
 use App\Models\BatchItem;
+use App\Models\Customer;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Setting;
 use App\Models\User;
+use App\Models\WriteOffReason;
+use App\Services\StockWriteOffService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 class BatchCreateTest extends TestCase
@@ -322,11 +328,11 @@ class BatchCreateTest extends TestCase
         // cards there are — no per-card count query, no per-card stock SUM.
         // (Total counts: see test_the_batch_screens_cost_the_same_queries_at_any_size.)
         $queries = function () use ($admin) {
-            \Illuminate\Support\Facades\DB::flushQueryLog();
-            \Illuminate\Support\Facades\DB::enableQueryLog();
+            DB::flushQueryLog();
+            DB::enableQueryLog();
             $this->actingAs($admin)->get(route('batches.index'))->assertOk();
-            $log = array_column(\Illuminate\Support\Facades\DB::getQueryLog(), 'query');
-            \Illuminate\Support\Facades\DB::disableQueryLog();
+            $log = array_column(DB::getQueryLog(), 'query');
+            DB::disableQueryLog();
 
             return collect($log);
         };
@@ -356,17 +362,17 @@ class BatchCreateTest extends TestCase
         $plain = $this->cheeseBatch($cheese, [[$wheel, 5, 5], [$pack, 10, 10]], ['production_date' => today()->subDays(3)]);
         $this->allocateOne($this->cheeseBatch($cheese, [[$wheel, 5, 5]], ['production_date' => today()->subDays(4)]));
         // A write-off too (cycle 7): its sum rides the same eager-load.
-        app(\App\Services\StockWriteOffService::class)->record(
-            $plain->batchItems()->first(), \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(),
+        app(StockWriteOffService::class)->record(
+            $plain->batchItems()->first(), WriteOffReason::where('code', 'spoiled')->firstOrFail(),
             1, null, null, today(), $admin,
         );
 
         $count = function (string $url) use ($admin): int {
-            \Illuminate\Support\Facades\DB::flushQueryLog();
-            \Illuminate\Support\Facades\DB::enableQueryLog();
+            DB::flushQueryLog();
+            DB::enableQueryLog();
             $this->actingAs($admin)->get($url)->assertOk();
-            $n = count(\Illuminate\Support\Facades\DB::getQueryLog());
-            \Illuminate\Support\Facades\DB::disableQueryLog();
+            $n = count(DB::getQueryLog());
+            DB::disableQueryLog();
 
             return $n;
         };
@@ -382,11 +388,11 @@ class BatchCreateTest extends TestCase
 
     private function allocateOne(Batch $batch): void
     {
-        $customer = \App\Models\Customer::create([
+        $customer = Customer::create([
             'name' => 'Shop '.uniqid(), 'email' => uniqid().'@example.ie',
             'address' => 'Main St', 'city' => 'Bray', 'postal_code' => 'A98', 'is_active' => true,
         ]);
-        $order = \App\Models\Order::create([
+        $order = Order::create([
             'customer_id' => $customer->id, 'order_date' => today(), 'status' => 'confirmed',
             'payment_status' => 'pending', 'subtotal' => 0, 'tax_amount' => 0, 'total_amount' => 0,
         ]);
@@ -460,7 +466,7 @@ class BatchCreateTest extends TestCase
 
     public function test_an_admin_set_ceiling_replaces_the_default(): void
     {
-        \App\Models\Setting::set('batch_ceilings.cheese', 500);
+        Setting::set('batch_ceilings.cheese', 500);
         [$cheese, $wheel] = $this->cheese();
 
         $this->postBatch($cheese, [['variant_id' => $wheel->id, 'quantity_produced' => 300]], 3000)

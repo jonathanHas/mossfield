@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Enums\InvoiceDelivery;
 use App\Models\Customer;
+use App\Models\DocumentEmail;
 use App\Models\ProductVariant;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -96,7 +97,7 @@ class CustomerController extends Controller
                 'credit' => $customer->unallocatedCredit(),
                 'openTotal' => round((float) $customer->invoices()->open()->sum('balance'), 2),
                 'invoices' => $customer->invoices()->latest('issued_at')->latest('id')->limit(10)->get(),
-                'emails' => \App\Models\DocumentEmail::where('customer_id', $customer->id)
+                'emails' => DocumentEmail::where('customer_id', $customer->id)
                     ->latest('id')->limit(10)->get(),
             ];
         }

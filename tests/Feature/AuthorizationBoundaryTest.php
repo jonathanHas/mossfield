@@ -5,11 +5,14 @@ namespace Tests\Feature;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseConversionLog;
+use App\Models\Customer;
 use App\Models\CustomerSpecialPrice;
 use App\Models\DeliveryRun;
 use App\Models\Order;
 use App\Models\OrderAllocation;
+use App\Models\StockWriteOff;
 use App\Models\User;
+use App\Models\WriteOffReason;
 use App\Services\CreditNoteService;
 use App\Services\PaymentService;
 use App\Services\StatementService;
@@ -358,7 +361,7 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
     public function test_a_special_price_cannot_be_reached_through_another_customer(): void
     {
         $office = User::factory()->create();
-        $other = \App\Models\Customer::create([
+        $other = Customer::create([
             'name' => 'Other Shop', 'email' => 'o@example.ie',
             'address' => '2 High St', 'city' => 'Cork', 'postal_code' => 'T12 AB12',
             'is_active' => true,
@@ -437,8 +440,8 @@ class AuthorizationBoundaryTest extends InvoicingTestCase
         $otherUser = User::factory()->create();
 
         // Stock write-offs (cycle 7): a recorded write-off, and a reason.
-        $writeOffReason = \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail();
-        $writeOff = \App\Models\StockWriteOff::create([
+        $writeOffReason = WriteOffReason::where('code', 'spoiled')->firstOrFail();
+        $writeOff = StockWriteOff::create([
             'batch_item_id' => $batchItem->id, 'write_off_reason_id' => $writeOffReason->id,
             'quantity' => 1, 'written_off_on' => today(),
         ]);

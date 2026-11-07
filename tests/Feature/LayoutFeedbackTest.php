@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\CheeseConversionController;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Customer;
@@ -9,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 /**
@@ -172,7 +174,7 @@ class LayoutFeedbackTest extends TestCase
 
         $this->followRedirects($response)
             ->assertOk()
-            ->assertSee(\App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP);
+            ->assertSee(CheeseConversionController::MATURE_NOT_SET_UP);
 
         $this->assertSame(2, $wheel->fresh()->quantity_maturing, 'nothing was released');
     }
@@ -198,7 +200,7 @@ class LayoutFeedbackTest extends TestCase
         $this->assertStringNotContainsString('scroll-mt-20', $css);
 
         // No view still uses the fixed 80 px margin.
-        $stale = collect(\Illuminate\Support\Facades\File::allFiles(resource_path('views')))
+        $stale = collect(File::allFiles(resource_path('views')))
             ->filter(fn ($f) => str_contains($f->getContents(), 'scroll-mt-20'))
             ->map(fn ($f) => $f->getRelativePathname())->values()->all();
         $this->assertSame([], $stale);

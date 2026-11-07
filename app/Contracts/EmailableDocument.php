@@ -5,6 +5,7 @@ namespace App\Contracts;
 use App\Enums\DocumentEmailKind;
 use App\Models\Customer;
 use Illuminate\Mail\Mailable;
+use Illuminate\Support\Carbon;
 
 /**
  * A document that can be emailed to a customer as a PDF and logged in
@@ -30,7 +31,7 @@ interface EmailableDocument
     public function documentMailable(): Mailable;
 
     /** Record a successful send (e.g. stamp emailed_at). */
-    public function markEmailed(\Illuminate\Support\Carbon $at): void;
+    public function markEmailed(Carbon $at): void;
 
     /** Preferred recipient address, or null when none is on file. */
     public function documentRecipient(): ?string;

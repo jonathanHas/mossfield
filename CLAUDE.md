@@ -23,7 +23,7 @@ Work arrives as a brief in **`docs/planImp/handoff/NEXT.md`** (written by the br
 Laravel 12 app for Mossfield Organic Farm — a dairy producer (bottles milk, makes cheese and yoghurt) — providing batch traceability, order management, and invoicing.
 
 **Tech Stack:**
-- **Framework**: Laravel 12 with PHP 8.2+
+- **Framework**: Laravel 12 with PHP 8.4+ (8.5 on both boxes)
 - **Frontend**: Blade templates with Tailwind CSS and Alpine.js
 - **Build System**: Vite for asset compilation
 - **Database**: MySQL / MariaDB with Eloquent ORM (dev, test and production — see **Database** below)

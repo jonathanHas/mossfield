@@ -2,7 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Invoicing\InvoiceController;
+use App\Models\Customer;
 use App\Models\Invoice;
+use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\User;
 use App\Services\InvoicingException;
@@ -90,7 +93,7 @@ class InvoiceIssueTest extends InvoicingTestCase
         $shipped = $this->deliveredOrder(4, 'dispatched');
         $office = User::factory()->create();
 
-        $this->assertSame(1, \App\Http\Controllers\Invoicing\InvoiceController::headlineStats()['uninvoiced']);
+        $this->assertSame(1, InvoiceController::headlineStats()['uninvoiced']);
 
         $page = $this->actingAs($office)->get(route('invoicing.uninvoiced.index'))->assertOk()
             ->assertSee('Picked, awaiting dispatch')
@@ -253,7 +256,7 @@ class InvoiceIssueTest extends InvoicingTestCase
         $this->deliveredOrder(6);
 
         // A consolidated customer must not be swept up by the per-order run.
-        $weekly = \App\Models\Customer::create([
+        $weekly = Customer::create([
             'name' => 'Weekly Wholesaler', 'email' => 'w@example.ie',
             'address' => 'Quay', 'city' => 'Cork', 'postal_code' => 'T12 X',
             'payment_terms' => 'net_30', 'invoicing_mode' => 'weekly', 'is_active' => true,
@@ -280,7 +283,7 @@ class InvoiceIssueTest extends InvoicingTestCase
     }
 
     /** A pre-F-38a row: invoiced while still ready (issue now needs dispatched). */
-    private function invoicedReadyOrder(): \App\Models\Order
+    private function invoicedReadyOrder(): Order
     {
         $order = $this->deliveredOrder(10, 'dispatched');
         $this->issue($order);
@@ -324,7 +327,7 @@ class InvoiceIssueTest extends InvoicingTestCase
         $order->update(['customer_reference' => 'PO-123']);
         $invoice = $this->issue($order);
 
-        $this->actingAs(\App\Models\User::factory()->create())
+        $this->actingAs(User::factory()->create())
             ->get(route('invoicing.invoices.show', $invoice))
             ->assertOk()
             ->assertSee($order->order_number)

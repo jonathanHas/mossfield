@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
 use Tests\TestCase;
 
 /**
@@ -47,7 +48,7 @@ class ErrorPagesTest extends TestCase
 
     public function test_a_lost_session_gets_a_page_with_sign_in(): void
     {
-        \Illuminate\Support\Facades\Route::get('/_test-419', fn () => abort(419))->middleware('web');
+        Route::get('/_test-419', fn () => abort(419))->middleware('web');
 
         $this->get('/_test-419')
             ->assertStatus(419)
@@ -60,7 +61,7 @@ class ErrorPagesTest extends TestCase
 
     public function test_a_signed_in_419_links_to_the_dashboard(): void
     {
-        \Illuminate\Support\Facades\Route::get('/_test-419', fn () => abort(419))->middleware('web');
+        Route::get('/_test-419', fn () => abort(419))->middleware('web');
 
         $this->actingAs(User::factory()->create())->get('/_test-419')
             ->assertStatus(419)

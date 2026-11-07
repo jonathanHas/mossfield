@@ -4,16 +4,32 @@ namespace Tests\Feature;
 
 use App\Models\Batch;
 use App\Models\BatchItem;
+use App\Models\CreditNote;
 use App\Models\Customer;
+use App\Models\DocumentSequence;
+use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\PaymentAllocation;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\Setting;
+use App\Models\Statement;
+use App\Models\StockWriteOff;
 use App\Models\User;
+use App\Models\WriteOffReason;
 use App\Services\BackupArchive;
 use App\Services\BackupService;
+use App\Services\CreditNoteService;
+use App\Services\InvoiceService;
+use App\Services\PaymentService;
+use App\Services\StatementService;
+use App\Services\StockWriteOffService;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 use Tests\TestCase;
@@ -200,9 +216,9 @@ class BackupRestoreTest extends TestCase
     public function test_write_offs_and_a_custom_reason_round_trip(): void
     {
         $this->seedBusinessData();
-        $reason = \App\Models\WriteOffReason::create(['code' => 'broken_seal', 'label' => 'Broken seal', 'is_active' => true, 'sort_order' => 80]);
-        $writeOff = app(\App\Services\StockWriteOffService::class)->record(
-            BatchItem::first(), $reason, 4, null, 'Seal split', \Carbon\CarbonImmutable::parse('2026-07-03'), $this->admin,
+        $reason = WriteOffReason::create(['code' => 'broken_seal', 'label' => 'Broken seal', 'is_active' => true, 'sort_order' => 80]);
+        $writeOff = app(StockWriteOffService::class)->record(
+            BatchItem::first(), $reason, 4, null, 'Seal split', CarbonImmutable::parse('2026-07-03'), $this->admin,
         );
         $upload = $this->archiveUpload();
 
@@ -216,8 +232,8 @@ class BackupRestoreTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertSame(1, \App\Models\WriteOffReason::where('code', 'broken_seal')->count());
-        $restored = \App\Models\StockWriteOff::sole();
+        $this->assertSame(1, WriteOffReason::where('code', 'broken_seal')->count());
+        $restored = StockWriteOff::sole();
         $this->assertSame(4, $restored->quantity);
         $this->assertSame('Seal split', $restored->note);
         $this->assertSame('Broken seal', $restored->reason->label);
@@ -232,8 +248,8 @@ class BackupRestoreTest extends TestCase
         $upload = $this->archiveUpload($payload);
 
         // A write-off made since then goes; the reasons stay.
-        app(\App\Services\StockWriteOffService::class)->record(
-            BatchItem::first(), \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(), 1, null, null, today(), $this->admin,
+        app(StockWriteOffService::class)->record(
+            BatchItem::first(), WriteOffReason::where('code', 'spoiled')->firstOrFail(), 1, null, null, today(), $this->admin,
         );
 
         $this->actingAs($this->admin)
@@ -242,12 +258,12 @@ class BackupRestoreTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertSame(0, \App\Models\StockWriteOff::count());
-        $this->assertSame(7, \App\Models\WriteOffReason::count());
+        $this->assertSame(0, StockWriteOff::count());
+        $this->assertSame(7, WriteOffReason::count());
     }
 
     /** A delivered, fully-picked order for the seeded customer, invoiced. */
-    private function invoicedOrder(Customer $customer): \App\Models\Invoice
+    private function invoicedOrder(Customer $customer): Invoice
     {
         $order = Order::create([
             'order_number' => 'ORD-20260703-001',
@@ -262,23 +278,23 @@ class BackupRestoreTest extends TestCase
         ]);
         $order->calculateTotals();
 
-        return app(\App\Services\InvoiceService::class)->issueForOrder($order->fresh(), $this->admin);
+        return app(InvoiceService::class)->issueForOrder($order->fresh(), $this->admin);
     }
 
     public function test_finance_tables_round_trip(): void
     {
         $customer = $this->seedBusinessData();
         $invoice = $this->invoicedOrder($customer);
-        $payment = app(\App\Services\PaymentService::class)->record($customer, [
+        $payment = app(PaymentService::class)->record($customer, [
             'amount' => 10.00, 'received_at' => '2026-07-04', 'method' => 'cash',
         ], [$invoice->id => 10.00], $this->admin);
-        $creditNote = app(\App\Services\CreditNoteService::class)->issue($invoice, [
+        $creditNote = app(CreditNoteService::class)->issue($invoice, [
             ['description' => 'Returned', 'quantity' => 1, 'amount' => 4.00, 'vat_rate' => 0],
         ], 'Damaged', $this->admin);
-        $statement = app(\App\Services\StatementService::class)->generate(
-            $customer, \Illuminate\Support\Carbon::parse('2026-07-01'), \Illuminate\Support\Carbon::parse('2026-07-31')
+        $statement = app(StatementService::class)->generate(
+            $customer, Carbon::parse('2026-07-01'), Carbon::parse('2026-07-31')
         );
-        $sequences = \App\Models\DocumentSequence::orderBy('key')->pluck('next_value', 'key')->all();
+        $sequences = DocumentSequence::orderBy('key')->pluck('next_value', 'key')->all();
         $balance = (float) $invoice->fresh()->balance;
 
         $upload = $this->archiveUpload();
@@ -286,11 +302,11 @@ class BackupRestoreTest extends TestCase
         // Wipe the finance tables (children first).
         foreach (['document_emails', 'statements', 'payment_allocations', 'payments', 'credit_note_lines',
             'credit_notes', 'invoice_lines'] as $table) {
-            \Illuminate\Support\Facades\DB::table($table)->delete();
+            DB::table($table)->delete();
         }
         Order::query()->update(['invoice_id' => null]);
-        \Illuminate\Support\Facades\DB::table('invoices')->delete();
-        \Illuminate\Support\Facades\DB::table('document_sequences')->delete();
+        DB::table('invoices')->delete();
+        DB::table('document_sequences')->delete();
 
         $this->actingAs($this->admin)
             ->post(route('backup.restore'), [
@@ -298,27 +314,27 @@ class BackupRestoreTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $restored = \App\Models\Invoice::sole();
+        $restored = Invoice::sole();
         $this->assertSame($invoice->number, $restored->number);
         $this->assertSame($balance, (float) $restored->balance);
         $this->assertSame($restored->id, Order::where('order_number', 'ORD-20260703-001')->value('invoice_id'));
         $this->assertSame($restored->lines()->count(), $invoice->lines()->count());
 
-        $allocation = \App\Models\PaymentAllocation::sole();
+        $allocation = PaymentAllocation::sole();
         $this->assertSame($payment->id, $allocation->payment_id);
         $this->assertSame($restored->id, $allocation->invoice_id);
         $this->assertSame(10.0, (float) $allocation->amount);
 
-        $restoredNote = \App\Models\CreditNote::sole();
+        $restoredNote = CreditNote::sole();
         $this->assertSame($creditNote->number, $restoredNote->number);
         $this->assertSame((float) $creditNote->total, (float) $restoredNote->total);
         $this->assertSame(1, $restoredNote->lines()->count());
 
-        $restoredStatement = \App\Models\Statement::sole();
+        $restoredStatement = Statement::sole();
         $this->assertSame($statement->id, $restoredStatement->id);
         $this->assertSame((float) $statement->closing_balance, (float) $restoredStatement->closing_balance);
 
-        $this->assertSame($sequences, \App\Models\DocumentSequence::orderBy('key')->pluck('next_value', 'key')->all());
+        $this->assertSame($sequences, DocumentSequence::orderBy('key')->pluck('next_value', 'key')->all());
     }
 
     public function test_a_backup_from_before_invoicing_still_restores(): void
@@ -340,8 +356,8 @@ class BackupRestoreTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertSame(0, \App\Models\Invoice::count());
-        $this->assertSame(0, \App\Models\DocumentSequence::count());
+        $this->assertSame(0, Invoice::count());
+        $this->assertSame(0, DocumentSequence::count());
         $this->assertSame(1, Order::count());
         $this->assertSame(1, Customer::where('name', 'Dublin Market')->count());
         $this->assertSame(100, BatchItem::first()->quantity_remaining);
@@ -350,12 +366,12 @@ class BackupRestoreTest extends TestCase
     public function test_a_stored_setting_round_trips(): void
     {
         $this->seedBusinessData();
-        \App\Models\Setting::set('batch_ceilings.cheese', 450, $this->admin);
+        Setting::set('batch_ceilings.cheese', 450, $this->admin);
         $upload = $this->archiveUpload();
 
-        \App\Models\Setting::set('batch_ceilings.cheese', 999, $this->admin);
-        \App\Models\Setting::set('batch_ceilings.milk', 10, $this->admin);
-        $this->assertSame(999, \App\Models\Setting::batchCeiling('cheese')); // warm the per-request cache
+        Setting::set('batch_ceilings.cheese', 999, $this->admin);
+        Setting::set('batch_ceilings.milk', 10, $this->admin);
+        $this->assertSame(999, Setting::batchCeiling('cheese')); // warm the per-request cache
 
         $this->actingAs($this->admin)
             ->post(route('backup.restore'), [
@@ -363,9 +379,9 @@ class BackupRestoreTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertSame(450, \App\Models\Setting::batchCeiling('cheese'), 'the backed-up value, not the cached one');
-        $this->assertSame(5000, \App\Models\Setting::batchCeiling('milk'), 'a row added since the backup goes');
-        $this->assertSame($this->admin->id, \App\Models\Setting::find('batch_ceilings.cheese')->updated_by);
+        $this->assertSame(450, Setting::batchCeiling('cheese'), 'the backed-up value, not the cached one');
+        $this->assertSame(5000, Setting::batchCeiling('milk'), 'a row added since the backup goes');
+        $this->assertSame($this->admin->id, Setting::find('batch_ceilings.cheese')->updated_by);
     }
 
     public function test_a_backup_from_before_settings_keeps_the_current_ones(): void
@@ -375,7 +391,7 @@ class BackupRestoreTest extends TestCase
         unset($payload['tables']['settings']);
         $upload = $this->archiveUpload($payload);
 
-        \App\Models\Setting::set('batch_ceilings.cheese', 450, $this->admin);
+        Setting::set('batch_ceilings.cheese', 450, $this->admin);
 
         $this->actingAs($this->admin)
             ->post(route('backup.restore'), [
@@ -383,7 +399,7 @@ class BackupRestoreTest extends TestCase
             ])
             ->assertSessionHas('success');
 
-        $this->assertSame(450, \App\Models\Setting::batchCeiling('cheese'));
+        $this->assertSame(450, Setting::batchCeiling('cheese'));
     }
 
     public function test_restore_reencrypts_customer_pii_readable(): void

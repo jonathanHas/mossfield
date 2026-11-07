@@ -10,6 +10,7 @@ use App\Services\InvoicingException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -108,7 +109,7 @@ class UninvoicedOrderController extends Controller
                 ($failures ? ' Skipped: '.implode(', ', $failures).'.' : ''));
         }
 
-        $message = $issued.' '.\Illuminate\Support\Str::plural('invoice', $issued).' issued.';
+        $message = $issued.' '.Str::plural('invoice', $issued).' issued.';
 
         if ($failures) {
             $message .= ' Skipped '.implode(', ', $failures).'.';

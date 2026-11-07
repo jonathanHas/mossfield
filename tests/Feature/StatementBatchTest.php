@@ -4,10 +4,12 @@ namespace Tests\Feature;
 
 use App\Models\Customer;
 use App\Models\DocumentEmail;
+use App\Models\Invoice;
 use App\Models\Statement;
 use App\Models\User;
 use App\Services\PaymentService;
 use App\Services\StatementService;
+use Illuminate\Mail\MailManager;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -22,7 +24,7 @@ class StatementBatchTest extends InvoicingTestCase
         return [today()->subMonth()->startOfMonth(), today()->subMonth()->endOfMonth()];
     }
 
-    private function billLastMonth(?Customer $customer = null, int $qty = 10): \App\Models\Invoice
+    private function billLastMonth(?Customer $customer = null, int $qty = 10): Invoice
     {
         [$from] = $this->period();
         $invoice = $this->issue($this->deliveredOrder($qty, customer: $customer ?? $this->shop));
@@ -158,7 +160,10 @@ class StatementBatchTest extends InvoicingTestCase
         $this->assertStringContainsString('SMTP refused', $row->error);
         $this->assertNull(Statement::sole()->emailed_at, 'a failed send must not claim it went out');
 
-        // And the retry re-queues it.
+        // And the retry re-queues it. Put a real manager back first: since
+        // Laravel 12.x MailFake asks the facade root for its default driver,
+        // which the Mockery mock above has no expectation for.
+        Mail::swap(new MailManager($this->app));
         Mail::fake();
         $this->actingAs($office)
             ->post(route('invoicing.statements.batch.retry', $row->batch_id))

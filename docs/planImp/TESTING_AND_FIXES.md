@@ -90,6 +90,65 @@ baseline.
 
 ---
 
+## 2026-11-07 — Dependencies: Composer and npm audits cleared, no majors (Plan/Implement cycle 19)
+
+**Scope.** Nobody had run `composer update` since the project was
+scaffolded (framework 12.20, mid-2025); `composer audit` listed **61
+advisories across 16 packages** (commonmark 14, Guzzle 9 + psr7 4,
+http-foundation 6, dompdf 6, yaml 5, framework 5, …) and `npm audit` 18
+(3 critical). Everything moved to the newest version its **existing**
+range allows — Laravel 13, Vite 8, Tailwind 4 and PHPUnit 13 stay on the
+vault Todo as a separate job.
+
+**What landed.**
+
+- **Composer**: 82 updates, 3 installs, 2 removals. Direct: framework
+  12.20 → **12.71**, Breeze 2.4.2, Pint 1.32.1, PHPUnit 11.5.57, Tinker
+  2.11.1, Pail 1.2.7, Sail 1.69, Collision 8.9.5, Mockery 1.6.15.
+  Transitive that mattered: Guzzle 7.16.1, commonmark 2.10.7, dompdf
+  3.1.6, Symfony 7.4 (a few components 8.1), Carbon 3.15.1. **`composer
+  audit` → none.** `composer.json` `php` is now `^8.4` — the lock's
+  Symfony 8 components need 8.4.1; dev and mossserv both run 8.5.4
+  (`php8.5-fpm`). `CLAUDE.md`, `DEPLOYMENT.md`, `deploy/INSTALL.md` say so.
+- **npm**: dropped the unused `@tailwindcss/vite` (Tailwind 3 runs through
+  PostCSS); `npm update` within ranges — Vite 6.4.5, Alpine 3.17.5, axios
+  1.21.0, Tailwind 3.4.19, PostCSS 8.5.32, Autoprefixer 10.6.2.
+  **`npm audit` → 0.** Build: `app-*.css` 84.8 kB, `app-*.js` 117.8 kB.
+- **Pint 1.32 reformatted 62 files** (app 22, tests 35, routes/config/
+  bootstrap/database 5): `fully_qualified_strict_types` (inline
+  `\Foo\Bar` → `use` + short name, code and docblocks), import ordering,
+  operator spacing, brace placement. Formatting only — read, not reverted.
+- **One test changed by the framework**: `StatementBatchTest::
+  test_a_failed_send_is_recorded_and_can_be_retried` set
+  `Mail::shouldReceive('to->send')` (a Mockery mock as the facade root) and
+  later called `Mail::fake()`; `MailFake::__construct()` now asks the root
+  for `getDefaultDriver()` → `BadMethodCallException`. Fix:
+  `Mail::swap(new MailManager($this->app))` before `Mail::fake()`.
+  Assertions unchanged.
+
+**Things to know.**
+
+- **Route count is 171, app routes 168.** Laravel 12.x registers `PUT
+  storage/{path}` (`storage.local.upload`, `ReceiveFile`) beside `GET
+  storage/{path}` for a disk with `'serve' => true` (`config/filesystems.php`
+  `local`). It accepts only a signed `?upload=1` request: unsigned PUT is
+  403 on dev, 404 in production; nothing in the app issues temporary upload
+  URLs. `AuthorizationBoundaryTest` exempts `storage*`. Setting `'serve' =>
+  false` would remove both routes — `public/storage` is a symlink, so the
+  GET route is not what serves product images — but it was left alone.
+- **PHPUnit prints every test as "deprecated"** (the pre-existing
+  `PDO::MYSQL_ATTR_SSL_CA` notice) — unchanged at 11.5.57; only *failed*
+  matters.
+- npm 11.19 warns that `esbuild`'s postinstall is not in `allowScripts`;
+  the build works without it (the binary comes from `@esbuild/linux-x64`).
+- Production ships with maintenance mode even without a migration: the
+  remote step swaps `vendor/` and runs `npm ci && npm run build`.
+
+**Suite.** 865 tests, 0 failing (5,908 assertions); pint clean (whole
+project); routes 171 (168 app).
+
+---
+
 ## 2026-11-07 — Before go-live: RESTRICT foreign keys, invoice send actions, one vocabulary, small fixes (Plan/Implement cycle 18)
 
 **Scope.** Jon's decisions of 2026-11-07, taken while production was

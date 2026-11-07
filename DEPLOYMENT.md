@@ -8,7 +8,7 @@ The runbook assumes mossfield and mossorders are being deployed as a pair, since
 
 ## 1. Host prerequisites
 
-- **PHP 8.2+** with extensions: `mbstring`, `xml`, `curl`, `zip`, `bcmath`, `gd`, `mysql`/`pdo_mysql`, `intl`, `fileinfo`, `tokenizer`
+- **PHP 8.4+** (the lock's Symfony 8 components need 8.4.1; mossserv runs 8.5) with extensions: `mbstring`, `xml`, `curl`, `zip`, `bcmath`, `gd`, `mysql`/`pdo_mysql`, `intl`, `fileinfo`, `tokenizer`
 - **MySQL 8+** (or MariaDB 10.6+) — used in dev and test too, so there is no engine change between environments
 - **Composer 2.x**
 - **Node.js 20+** and **npm** (only needed at deploy time for `npm run build`; not at runtime)
@@ -331,7 +331,7 @@ sudo -u www-data php artisan config:cache
 sudo -u www-data php artisan route:cache
 sudo -u www-data php artisan view:cache
 # restart php-fpm or equivalent so opcache picks up new code
-sudo systemctl reload php8.3-fpm
+sudo systemctl reload php8.5-fpm
 ```
 
 If the upgrade introduces new env vars, diff `.env.example` against `.env` and add anything missing before restarting.

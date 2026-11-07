@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Mail\DocumentMail;
 use App\Models\Statement;
 use App\Models\User;
 use App\Services\CreditNoteService;
@@ -169,7 +170,7 @@ class StatementTest extends InvoicingTestCase
             'recipient' => 'k@example.ie',
             'status' => 'sent',
         ]);
-        Mail::assertSent(\App\Mail\DocumentMail::class);
+        Mail::assertSent(DocumentMail::class);
     }
 
     public function test_the_pdf_renders_from_the_stored_snapshot(): void

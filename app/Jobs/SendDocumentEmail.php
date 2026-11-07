@@ -13,6 +13,7 @@ use App\Models\Order;
 use App\Services\DocumentMailer;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Support\Str;
 
 /**
  * Sends one already-logged document email. Takes the log row's id rather than
@@ -76,7 +77,7 @@ class SendDocumentEmail implements ShouldQueue
             // Keep whatever deliver() already recorded: that is the real cause
             // ("SMTP refused"), where $e is only this job's wrapper around it.
             // Overwriting it would leave the operator reading "sending failed".
-            'error' => $row->error ?: \Illuminate\Support\Str::limit($e->getMessage(), 2000),
+            'error' => $row->error ?: Str::limit($e->getMessage(), 2000),
         ])->save();
     }
 

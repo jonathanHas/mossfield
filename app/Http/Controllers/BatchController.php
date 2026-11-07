@@ -7,6 +7,8 @@ use App\Models\BatchItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\Setting;
+use App\Models\StockWriteOff;
+use App\Models\WriteOffReason;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -234,8 +236,8 @@ class BatchController extends Controller
 
         // The write-off form's reasons (active only — a deactivated reason
         // can't be chosen) and the history, newest first.
-        $writeOffReasons = auth()->user()->can('create', \App\Models\StockWriteOff::class)
-            ? \App\Models\WriteOffReason::active()->ordered()->get()
+        $writeOffReasons = auth()->user()->can('create', StockWriteOff::class)
+            ? WriteOffReason::active()->ordered()->get()
             : collect();
         $writeOffs = $batch->batchItems
             ->flatMap(fn ($item) => $item->writeOffs->each(fn ($w) => $w->setRelation('batchItem', $item)))

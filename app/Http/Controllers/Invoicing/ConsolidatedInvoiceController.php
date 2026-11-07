@@ -10,6 +10,7 @@ use App\Services\InvoicingException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -79,7 +80,7 @@ class ConsolidatedInvoiceController extends Controller
         }
 
         $message = count($issued).' consolidated '.
-            \Illuminate\Support\Str::plural('invoice', count($issued)).' issued ('.implode(', ', $issued).').';
+            Str::plural('invoice', count($issued)).' issued ('.implode(', ', $issued).').';
 
         if ($skipped) {
             $message .= ' Skipped '.implode(', ', $skipped).'.';

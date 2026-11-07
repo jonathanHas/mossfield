@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Casts\EncryptedNullable;
 use App\Enums\InvoiceDelivery;
 use App\Enums\InvoicingMode;
+use App\Services\StatementService;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -287,7 +288,7 @@ class Customer extends Model
     /** Open invoice balances bucketed by how far past due they are. */
     public function agedBalances(): array
     {
-        return app(\App\Services\StatementService::class)->agedBalances($this);
+        return app(StatementService::class)->agedBalances($this);
     }
 
     /** Same arithmetic as creditWarning(): a credit limit of 0 means no limit. */

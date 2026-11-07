@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use Database\Seeders\ProductSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -210,7 +211,7 @@ class OrderFulfillmentWeightTest extends TestCase
 
     public function test_seeder_flags_cheese_variants_for_weighing(): void
     {
-        $this->seed(\Database\Seeders\ProductSeeder::class);
+        $this->seed(ProductSeeder::class);
 
         $wheel = ProductVariant::where('name', 'Whole Wheel')->firstOrFail();
         $pack = ProductVariant::where('name', 'Vacuum Pack')->firstOrFail();

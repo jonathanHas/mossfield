@@ -17,6 +17,8 @@ use App\Services\StockException;
 use App\Services\StockOverviewService;
 use App\Services\StockWriteOffService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -313,7 +315,7 @@ class StockWriteOffTest extends TestCase
     public function test_a_repeat_submission_of_the_same_form_is_refused(): void
     {
         $item = $this->item($this->bottle, 10);
-        $payload = $this->payload($item, ['form_token' => (string) \Illuminate\Support\Str::uuid()]);
+        $payload = $this->payload($item, ['form_token' => (string) Str::uuid()]);
 
         $this->actingAs($this->office)
             ->post(route('batches.write-offs.store', $item->batch), $payload)
@@ -330,7 +332,7 @@ class StockWriteOffTest extends TestCase
 
         // A fresh form (new token) is a new write-off; no token still works.
         $this->actingAs($this->office)
-            ->post(route('batches.write-offs.store', $item->batch), $this->payload($item, ['form_token' => (string) \Illuminate\Support\Str::uuid()]));
+            ->post(route('batches.write-offs.store', $item->batch), $this->payload($item, ['form_token' => (string) Str::uuid()]));
         $this->actingAs($this->office)
             ->post(route('batches.write-offs.store', $item->batch), $this->payload($item));
         $this->assertSame(3, StockWriteOff::count());
@@ -463,7 +465,7 @@ class StockWriteOffTest extends TestCase
         $this->actingAs($factory)->patch(route('write-off-reasons.update', $reason), ['is_active' => 0])->assertForbidden();
         $this->assertTrue($reason->fresh()->is_active);
 
-        $this->assertFalse(\Illuminate\Support\Facades\Route::has('write-off-reasons.destroy'));
+        $this->assertFalse(Route::has('write-off-reasons.destroy'));
     }
 
     // ---------------------------------------------------------------- the batch page

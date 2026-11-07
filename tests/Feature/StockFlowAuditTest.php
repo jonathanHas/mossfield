@@ -12,7 +12,9 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use App\Services\InvoiceService;
+use App\Services\InvoicingException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -147,7 +149,7 @@ class StockFlowAuditTest extends TestCase
             ->assertRedirect();
     }
 
-    private function pick(Order $order, OrderItem $item, BatchItem $batchItem, int $quantity, ?float $weight = null): \Illuminate\Testing\TestResponse
+    private function pick(Order $order, OrderItem $item, BatchItem $batchItem, int $quantity, ?float $weight = null): TestResponse
     {
         $payload = ['batch_item_id' => $batchItem->id, 'quantity' => $quantity];
         if ($weight !== null) {
@@ -631,7 +633,7 @@ class StockFlowAuditTest extends TestCase
         $this->assertEquals(20.00, (float) $invoice->fresh()->total);
 
         // A second invoice for the same order must be impossible.
-        $this->expectException(\App\Services\InvoicingException::class);
+        $this->expectException(InvoicingException::class);
         app(InvoiceService::class)->issueForOrder($order->fresh(), $this->office);
     }
 

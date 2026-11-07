@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Carbon;
 
 class Order extends Model
 {
@@ -123,7 +124,7 @@ class Order extends Model
      * imports arrive with a null delivery_date, so fall back to when it was
      * actually delivered and finally to the order date.
      */
-    public function getBillingDateAttribute(): \Illuminate\Support\Carbon
+    public function getBillingDateAttribute(): Carbon
     {
         return $this->delivery_date
             ?? ($this->delivered_at?->copy()->startOfDay())

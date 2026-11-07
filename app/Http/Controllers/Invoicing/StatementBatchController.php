@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Invoicing;
 
 use App\Enums\DocumentEmailKind;
+use App\Enums\DocumentEmailStatus;
 use App\Http\Controllers\Controller;
+use App\Jobs\SendDocumentEmail;
 use App\Models\Customer;
 use App\Models\DocumentEmail;
 use App\Models\Statement;
@@ -132,13 +134,13 @@ class StatementBatchController extends Controller
 
         foreach ($failed as $row) {
             $row->forceFill([
-                'status' => \App\Enums\DocumentEmailStatus::Queued,
+                'status' => DocumentEmailStatus::Queued,
                 'failed_at' => null,
                 'error' => null,
                 'queued_at' => now(),
             ])->save();
 
-            \App\Jobs\SendDocumentEmail::dispatch($row->id);
+            SendDocumentEmail::dispatch($row->id);
         }
 
         return back()->with('success', $failed->count().' '.Str::plural('send', $failed->count()).' re-queued.');

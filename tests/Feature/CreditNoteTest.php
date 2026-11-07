@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\CreditNote;
 use App\Models\User;
 use App\Services\CreditNoteService;
+use App\Services\InvoiceService;
 use App\Services\InvoicingException;
 use App\Services\PaymentService;
 
@@ -103,7 +104,7 @@ class CreditNoteTest extends InvoicingTestCase
     public function test_a_credit_note_cannot_be_raised_against_a_void_invoice(): void
     {
         $invoice = $this->issue($this->deliveredOrder());
-        app(\App\Services\InvoiceService::class)->void($invoice, 'Duplicate');
+        app(InvoiceService::class)->void($invoice, 'Duplicate');
 
         $this->expectException(InvoicingException::class);
         $this->credit($invoice->fresh(), 1.00);

@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\BackupController;
 use App\Http\Controllers\BatchController;
+use App\Http\Controllers\CheeseConversionController;
+use App\Http\Controllers\CheeseCuttingController;
 use App\Http\Controllers\ChilledRunController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\CustomerSpecialPriceController;
@@ -18,11 +20,22 @@ use App\Http\Controllers\Invoicing\StatementBatchController;
 use App\Http\Controllers\Invoicing\StatementController;
 use App\Http\Controllers\Invoicing\UninvoicedOrderController;
 use App\Http\Controllers\OnlineOrdersController;
+use App\Http\Controllers\OrderAllocationController;
+use App\Http\Controllers\OrderController;
+use App\Http\Controllers\PickingController;
 use App\Http\Controllers\ProductController;
 use App\Http\Controllers\ProductVariantController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\SettingsController;
+use App\Http\Controllers\StockController;
+use App\Http\Controllers\StockWriteOffController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WriteOffReasonController;
+use App\Models\Batch;
+use App\Models\BatchItem;
+use App\Models\Customer;
+use App\Models\Order;
+use App\Models\Product;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Route;
 
@@ -39,15 +52,15 @@ Route::get('/dashboard', function () {
     $data = ['user' => $user];
 
     if ($user->hasRole('admin', 'office', 'factory')) {
-        $data['totalProducts'] = \App\Models\Product::count();
-        $data['activeProducts'] = \App\Models\Product::where('is_active', true)->count();
+        $data['totalProducts'] = Product::count();
+        $data['activeProducts'] = Product::where('is_active', true)->count();
 
-        $data['maturingCount'] = \App\Models\Batch::where('status', 'active')
+        $data['maturingCount'] = Batch::where('status', 'active')
             ->where('ready_date', '>', now())
             ->count();
         // Ready now = sellable now: matured, not expired (strict, as
         // BatchItem::allocatable()) and still holding stock.
-        $data['readyNowCount'] = \App\Models\Batch::where('status', 'active')
+        $data['readyNowCount'] = Batch::where('status', 'active')
             ->where(function ($q) {
                 $q->whereNull('ready_date')->orWhere('ready_date', '<=', now());
             })
@@ -60,7 +73,7 @@ Route::get('/dashboard', function () {
         // Expired stock: still marked active, past expiry, units left on the
         // shelf. Nothing can sell it, so it must be seen. (A proper write-off
         // route is OPEN_QUESTIONS #1; until then the batch is closed by hand.)
-        $expired = \App\Models\BatchItem::query()
+        $expired = BatchItem::query()
             ->join('batches', 'batches.id', '=', 'batch_items.batch_id')
             ->where('batches.status', 'active')
             ->where('batches.expiry_date', '<=', today())
@@ -71,7 +84,7 @@ Route::get('/dashboard', function () {
         $data['expiredUnits'] = (int) $expired->units;
 
         // Side-rail: next few batches closest to maturation.
-        $data['maturingSoon'] = \App\Models\Batch::with('product')
+        $data['maturingSoon'] = Batch::with('product')
             ->where('status', 'active')
             ->whereNotNull('ready_date')
             ->where('ready_date', '>', now())
@@ -80,13 +93,13 @@ Route::get('/dashboard', function () {
             ->get();
 
         // Ready-to-ship orders (relevant to factory too for awareness).
-        $data['readyToShipCount'] = \App\Models\Order::where('status', 'ready')->count();
+        $data['readyToShipCount'] = Order::where('status', 'ready')->count();
     }
 
     if ($user->hasRole('admin', 'office')) {
         // Order queue: pending orders to confirm, plus confirmed/preparing
         // orders still needing allocation (OrderAllocationController@index's filter).
-        $unallocatedQuery = \App\Models\Order::whereIn('status', ['pending', 'confirmed', 'preparing'])
+        $unallocatedQuery = Order::whereIn('status', ['pending', 'confirmed', 'preparing'])
             ->whereHas('orderItems', function ($q) {
                 $q->whereRaw('quantity_allocated < quantity_ordered');
             });
@@ -96,7 +109,7 @@ Route::get('/dashboard', function () {
         // confirming, confirmed/preparing ones need allocating.
         $data['toConfirmCount'] = (clone $unallocatedQuery)->where('status', 'pending')->count();
         $data['toAllocateCount'] = (clone $unallocatedQuery)->whereIn('status', ['confirmed', 'preparing'])->count();
-        $data['overdueDeliveryCount'] = \App\Models\Order::whereIn('status', \App\Models\Order::OPEN_STATUSES)
+        $data['overdueDeliveryCount'] = Order::whereIn('status', Order::OPEN_STATUSES)
             ->whereDate('delivery_date', '<', today())
             ->count();
         $data['unallocatedOrders'] = $unallocatedQuery
@@ -106,10 +119,10 @@ Route::get('/dashboard', function () {
             ->get();
 
         // Finance queues — the three numbers that mean "act now".
-        $data['invoicing'] = \App\Http\Controllers\Invoicing\InvoiceController::headlineStats();
+        $data['invoicing'] = InvoiceController::headlineStats();
 
-        $data['totalCustomers'] = \App\Models\Customer::count();
-        $data['activeCustomers'] = \App\Models\Customer::where('is_active', true)->count();
+        $data['totalCustomers'] = Customer::count();
+        $data['activeCustomers'] = Customer::where('is_active', true)->count();
         $data['lastOnlineOrderImportAt'] = Cache::get('sync:import_orders:last_ok');
     }
 
@@ -128,32 +141,32 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
     Route::resource('products', ProductController::class);
     Route::resource('batches', BatchController::class);
     // Orders are cancelled (status), never deleted — there is no destroy().
-    Route::resource('orders', \App\Http\Controllers\OrderController::class)->except(['destroy']);
-    Route::get('/orders/{order}/docket', [\App\Http\Controllers\OrderController::class, 'docket'])->name('orders.docket');
-    Route::post('/orders/{order}/items', [\App\Http\Controllers\OrderController::class, 'storeItem'])->name('orders.items.store');
-    Route::patch('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'updateItem'])->name('orders.items.update');
-    Route::delete('/orders/{order}/items/{orderItem}', [\App\Http\Controllers\OrderController::class, 'destroyItem'])->name('orders.items.destroy');
+    Route::resource('orders', OrderController::class)->except(['destroy']);
+    Route::get('/orders/{order}/docket', [OrderController::class, 'docket'])->name('orders.docket');
+    Route::post('/orders/{order}/items', [OrderController::class, 'storeItem'])->name('orders.items.store');
+    Route::patch('/orders/{order}/items/{orderItem}', [OrderController::class, 'updateItem'])->name('orders.items.update');
+    Route::delete('/orders/{order}/items/{orderItem}', [OrderController::class, 'destroyItem'])->name('orders.items.destroy');
     // Short supply — close a line that can't be filled / reopen it. Office
     // ability (authorize('update')), so factory 403s in the controller.
-    Route::post('/orders/{order}/items/{orderItem}/short', [\App\Http\Controllers\OrderController::class, 'shortCloseItem'])->name('orders.items.short');
-    Route::post('/orders/{order}/items/{orderItem}/reopen', [\App\Http\Controllers\OrderController::class, 'reopenItem'])->name('orders.items.reopen');
+    Route::post('/orders/{order}/items/{orderItem}/short', [OrderController::class, 'shortCloseItem'])->name('orders.items.short');
+    Route::post('/orders/{order}/items/{orderItem}/reopen', [OrderController::class, 'reopenItem'])->name('orders.items.reopen');
 
-    Route::get('/cheese-cutting', [\App\Http\Controllers\CheeseCuttingController::class, 'index'])->name('cheese-cutting.index');
-    Route::get('/cheese-conversion', [\App\Http\Controllers\CheeseConversionController::class, 'index'])->name('cheese-conversion.index');
-    Route::get('/stock', [\App\Http\Controllers\StockController::class, 'index'])->name('stock.index');
+    Route::get('/cheese-cutting', [CheeseCuttingController::class, 'index'])->name('cheese-cutting.index');
+    Route::get('/cheese-conversion', [CheeseConversionController::class, 'index'])->name('cheese-conversion.index');
+    Route::get('/stock', [StockController::class, 'index'])->name('stock.index');
 
     // Mobile picking flow — the factory write carve-out. Every action checks
     // the narrow OrderPolicy::fulfill ability (allocate + fulfil + undo only);
     // general order editing stays office/admin.
-    Route::get('/picking', [\App\Http\Controllers\PickingController::class, 'index'])->name('picking.index');
-    Route::get('/picking/{order}', [\App\Http\Controllers\PickingController::class, 'show'])->name('picking.show');
-    Route::get('/picking/{order}/items/{orderItem}', [\App\Http\Controllers\PickingController::class, 'item'])->name('picking.item');
-    Route::post('/picking/{order}/items/{orderItem}/pick', [\App\Http\Controllers\PickingController::class, 'pick'])->name('picking.pick');
-    Route::post('/picking/{order}/items/{orderItem}/undo', [\App\Http\Controllers\PickingController::class, 'undo'])->name('picking.undo');
+    Route::get('/picking', [PickingController::class, 'index'])->name('picking.index');
+    Route::get('/picking/{order}', [PickingController::class, 'show'])->name('picking.show');
+    Route::get('/picking/{order}/items/{orderItem}', [PickingController::class, 'item'])->name('picking.item');
+    Route::post('/picking/{order}/items/{orderItem}/pick', [PickingController::class, 'pick'])->name('picking.pick');
+    Route::post('/picking/{order}/items/{orderItem}/undo', [PickingController::class, 'undo'])->name('picking.undo');
     // Short supply from the floor — the picker holding the empty crate is the
     // person who knows. Same narrow fulfill ability as picking itself.
-    Route::post('/picking/{order}/items/{orderItem}/short', [\App\Http\Controllers\PickingController::class, 'markShort'])->name('picking.short');
-    Route::post('/picking/{order}/items/{orderItem}/reopen', [\App\Http\Controllers\PickingController::class, 'reopenShort'])->name('picking.reopen');
+    Route::post('/picking/{order}/items/{orderItem}/short', [PickingController::class, 'markShort'])->name('picking.short');
+    Route::post('/picking/{order}/items/{orderItem}/reopen', [PickingController::class, 'reopenShort'])->name('picking.reopen');
 
     // The user guide (docs/guide/*.md). Read-only; the image route is registered
     // first so the order is explicit (images/x.png wouldn't match {page} anyway).
@@ -175,22 +188,22 @@ Route::middleware(['auth', 'role:admin,office,factory'])->group(function () {
 Route::middleware(['auth', 'role:admin,office'])->group(function () {
     // Dispatch and delivery are office work now: dispatching issues the invoice
     // and emails the dispatch confirmation (App\Services\DispatchService).
-    Route::post('/orders/{order}/dispatch', [\App\Http\Controllers\OrderController::class, 'markDispatched'])->name('orders.dispatch');
-    Route::post('/orders/{order}/deliver', [\App\Http\Controllers\OrderController::class, 'markDelivered'])->name('orders.deliver');
+    Route::post('/orders/{order}/dispatch', [OrderController::class, 'markDispatched'])->name('orders.dispatch');
+    Route::post('/orders/{order}/deliver', [OrderController::class, 'markDelivered'])->name('orders.deliver');
 
     // The priced dispatch confirmation — view/print (HTML, ?download=1 for PDF)
     // and a manual resend for when the automatic send at dispatch failed or
     // the customer had no address at the time.
-    Route::get('/orders/{order}/dispatch-confirmation', [\App\Http\Controllers\OrderController::class, 'dispatchConfirmation'])->name('orders.dispatch-confirmation');
-    Route::post('/orders/{order}/dispatch-confirmation/email', [\App\Http\Controllers\OrderController::class, 'emailDispatchConfirmation'])->name('orders.dispatch-confirmation.email');
+    Route::get('/orders/{order}/dispatch-confirmation', [OrderController::class, 'dispatchConfirmation'])->name('orders.dispatch-confirmation');
+    Route::post('/orders/{order}/dispatch-confirmation/email', [OrderController::class, 'emailDispatchConfirmation'])->name('orders.dispatch-confirmation.email');
 
     // Stock write-offs (lost units — spoiled, dropped, sampled, expired …),
     // recorded and reversed from the batch page.
-    Route::post('/batches/{batch}/write-offs', [\App\Http\Controllers\StockWriteOffController::class, 'store'])->name('batches.write-offs.store');
-    Route::post('/batches/{batch}/write-offs/expired', [\App\Http\Controllers\StockWriteOffController::class, 'storeExpired'])->name('batches.write-offs.expired');
-    Route::post('/write-offs/{writeOff}/reverse', [\App\Http\Controllers\StockWriteOffController::class, 'reverse'])->name('write-offs.reverse');
+    Route::post('/batches/{batch}/write-offs', [StockWriteOffController::class, 'store'])->name('batches.write-offs.store');
+    Route::post('/batches/{batch}/write-offs/expired', [StockWriteOffController::class, 'storeExpired'])->name('batches.write-offs.expired');
+    Route::post('/write-offs/{writeOff}/reverse', [StockWriteOffController::class, 'reverse'])->name('write-offs.reverse');
     // The extendable list of reasons. No destroy: a used reason is deactivated.
-    Route::resource('write-off-reasons', \App\Http\Controllers\WriteOffReasonController::class)
+    Route::resource('write-off-reasons', WriteOffReasonController::class)
         ->only(['index', 'store', 'update']);
 
     Route::resource('customers', CustomerController::class);
@@ -202,24 +215,24 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
         ->scoped();
 
     // Cheese cutting write actions — factory will get this later.
-    Route::get('/cheese-cutting/cut/{batchItem}', [\App\Http\Controllers\CheeseCuttingController::class, 'create'])->name('cheese-cutting.create');
-    Route::post('/cheese-cutting/cut/{batchItem}', [\App\Http\Controllers\CheeseCuttingController::class, 'store'])->name('cheese-cutting.store');
+    Route::get('/cheese-cutting/cut/{batchItem}', [CheeseCuttingController::class, 'create'])->name('cheese-cutting.create');
+    Route::post('/cheese-cutting/cut/{batchItem}', [CheeseCuttingController::class, 'store'])->name('cheese-cutting.store');
 
     // Mature conversion (factory views the index, can't write). "hold" sets the
     // reversible maturing reservation (any age); "release" turns aged held wheels
     // into the Mature product; "undo" returns released wheels to the hold.
-    Route::post('/cheese-conversion/hold/{batchItem}', [\App\Http\Controllers\CheeseConversionController::class, 'hold'])->name('cheese-conversion.hold');
-    Route::post('/cheese-conversion/release/{batchItem}', [\App\Http\Controllers\CheeseConversionController::class, 'release'])->name('cheese-conversion.release');
-    Route::post('/cheese-conversion/logs/{log}/undo', [\App\Http\Controllers\CheeseConversionController::class, 'undoRelease'])->name('cheese-conversion.undo');
+    Route::post('/cheese-conversion/hold/{batchItem}', [CheeseConversionController::class, 'hold'])->name('cheese-conversion.hold');
+    Route::post('/cheese-conversion/release/{batchItem}', [CheeseConversionController::class, 'release'])->name('cheese-conversion.release');
+    Route::post('/cheese-conversion/logs/{log}/undo', [CheeseConversionController::class, 'undoRelease'])->name('cheese-conversion.undo');
 
     // Order allocation
-    Route::get('/order-allocations', [\App\Http\Controllers\OrderAllocationController::class, 'index'])->name('order-allocations.index');
-    Route::get('/order-allocations/{order}', [\App\Http\Controllers\OrderAllocationController::class, 'show'])->name('order-allocations.show');
-    Route::post('/order-allocations/{orderItem}/allocate', [\App\Http\Controllers\OrderAllocationController::class, 'allocate'])->name('order-allocations.allocate');
-    Route::delete('/order-allocations/{allocation}', [\App\Http\Controllers\OrderAllocationController::class, 'deallocate'])->name('order-allocations.deallocate');
-    Route::post('/order-allocations/{allocation}/fulfill', [\App\Http\Controllers\OrderAllocationController::class, 'fulfill'])->name('order-allocations.fulfill');
-    Route::post('/order-allocations/{allocation}/unfulfill', [\App\Http\Controllers\OrderAllocationController::class, 'unfulfill'])->name('order-allocations.unfulfill');
-    Route::post('/order-allocations/{order}/auto-allocate', [\App\Http\Controllers\OrderAllocationController::class, 'autoAllocate'])->name('order-allocations.auto-allocate');
+    Route::get('/order-allocations', [OrderAllocationController::class, 'index'])->name('order-allocations.index');
+    Route::get('/order-allocations/{order}', [OrderAllocationController::class, 'show'])->name('order-allocations.show');
+    Route::post('/order-allocations/{orderItem}/allocate', [OrderAllocationController::class, 'allocate'])->name('order-allocations.allocate');
+    Route::delete('/order-allocations/{allocation}', [OrderAllocationController::class, 'deallocate'])->name('order-allocations.deallocate');
+    Route::post('/order-allocations/{allocation}/fulfill', [OrderAllocationController::class, 'fulfill'])->name('order-allocations.fulfill');
+    Route::post('/order-allocations/{allocation}/unfulfill', [OrderAllocationController::class, 'unfulfill'])->name('order-allocations.unfulfill');
+    Route::post('/order-allocations/{order}/auto-allocate', [OrderAllocationController::class, 'autoAllocate'])->name('order-allocations.auto-allocate');
 
     // Chilled run sheet order entry — per-stop save from the row editor.
     // Office/admin only (factory keeps the read view + loaded tick).

@@ -2,18 +2,26 @@
 
 namespace App\Http\Controllers;
 
+use App\Documents\DispatchConfirmation;
 use App\Http\Controllers\Concerns\BuildsAllocationData;
 use App\Http\Controllers\Concerns\MutatesOrderLines;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\ProductVariant;
+use App\Services\DispatchException;
+use App\Services\DispatchService;
+use App\Services\DocumentMailer;
+use App\Services\InvoicingException;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 
 class OrderController extends Controller
 {
@@ -149,7 +157,7 @@ class OrderController extends Controller
      * rather than being downloaded; `?download=1` returns the PDF as a file download.
      * No prices — carries quantities and picked weights only, so factory can view/print it.
      */
-    public function docket(Request $request, Order $order): \Symfony\Component\HttpFoundation\Response|View
+    public function docket(Request $request, Order $order): Response|View
     {
         $this->authorize('view', $order);
 
@@ -160,7 +168,7 @@ class OrderController extends Controller
         ]);
 
         if ($request->boolean('download')) {
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.docket', ['order' => $order, 'pdf' => true]);
+            $pdf = Pdf::loadView('orders.docket', ['order' => $order, 'pdf' => true]);
 
             return $pdf->download('docket-'.$order->order_number.'.pdf');
         }
@@ -174,7 +182,7 @@ class OrderController extends Controller
      * ?download=1 returns the PDF. Gated on hasReachedReady() rather than
      * dispatched so it can be previewed once the order is picked.
      */
-    public function dispatchConfirmation(Request $request, Order $order): \Symfony\Component\HttpFoundation\Response|View
+    public function dispatchConfirmation(Request $request, Order $order): Response|View
     {
         $this->authorize('view', $order);
         abort_unless($request->user()->can('see-financials'), 403);
@@ -191,7 +199,7 @@ class OrderController extends Controller
         ]);
 
         if ($request->boolean('download')) {
-            $pdf = \Barryvdh\DomPDF\Facade\Pdf::loadView('orders.dispatch-confirmation', ['order' => $order, 'pdf' => true]);
+            $pdf = Pdf::loadView('orders.dispatch-confirmation', ['order' => $order, 'pdf' => true]);
 
             return $pdf->download('dispatch-confirmation-'.$order->order_number.'.pdf');
         }
@@ -214,11 +222,11 @@ class OrderController extends Controller
         }
 
         try {
-            $row = app(\App\Services\DocumentMailer::class)->sendNow(
-                new \App\Documents\DispatchConfirmation($order),
+            $row = app(DocumentMailer::class)->sendNow(
+                new DispatchConfirmation($order),
                 $request->user(),
             );
-        } catch (\App\Services\InvoicingException $e) {
+        } catch (InvoicingException $e) {
             return back()->with('error', $e->getMessage());
         }
 
@@ -315,7 +323,7 @@ class OrderController extends Controller
      * Active variants of active products, grouped by product name — the option
      * source for the order item picker on both create and show (add-item).
      */
-    private function activeVariantsGrouped(): \Illuminate\Support\Collection
+    private function activeVariantsGrouped(): Collection
     {
         return ProductVariant::with('product')
             ->whereHas('product', function ($q) {
@@ -534,13 +542,13 @@ class OrderController extends Controller
      * side effects (invoice for per-order customers, dispatch confirmation
      * email) are the same as the run-level button on the chilled-run sheet.
      */
-    public function markDispatched(Request $request, Order $order, \App\Services\DispatchService $dispatcher): RedirectResponse
+    public function markDispatched(Request $request, Order $order, DispatchService $dispatcher): RedirectResponse
     {
         $this->authorize('update', $order);
 
         try {
             $result = $dispatcher->dispatch($order, $request->user());
-        } catch (\App\Services\DispatchException $e) {
+        } catch (DispatchException $e) {
             return back()->with('error', $e->getMessage());
         }
 

@@ -10,6 +10,7 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 /**
@@ -150,7 +151,7 @@ class OrderShortSupplyTest extends TestCase
         $variant = $this->variant();
         [$order, $item] = $this->orderWithItem($variant, 4);
 
-        \Illuminate\Support\Facades\Mail::fake();
+        Mail::fake();
         $office = $this->office();
         $this->actingAs($office)->post(route('orders.items.short', [$order, $item]));
         $order->update(['loaded_at' => now()]); // dispatch needs the loaded tick (OPEN_QUESTIONS #5)

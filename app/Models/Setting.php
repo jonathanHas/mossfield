@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Collection;
 
 /**
  * An admin-set value that overrides a config default (/settings).
@@ -32,7 +33,7 @@ class Setting extends Model
      * so a new application (each test, each request under a long-lived
      * worker) starts from the database again.
      *
-     * @var array{app: ?object, rows: ?\Illuminate\Support\Collection}
+     * @var array{app: ?object, rows: ?Collection}
      */
     private static array $cache = ['app' => null, 'rows' => null];
 
@@ -41,8 +42,8 @@ class Setting extends Model
         return $this->belongsTo(User::class, 'updated_by');
     }
 
-    /** @return \Illuminate\Support\Collection<string, self> */
-    public static function rows(): \Illuminate\Support\Collection
+    /** @return Collection<string, self> */
+    public static function rows(): Collection
     {
         if (self::$cache['app'] !== app() || self::$cache['rows'] === null) {
             self::$cache = ['app' => app(), 'rows' => static::query()->get()->keyBy('key')];

@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 class Batch extends Model
@@ -337,9 +338,9 @@ class Batch extends Model
      * One breakdown per item, with the parent batch handed down so the item's
      * cheese-or-not check doesn't lazy-load batch + product per row.
      *
-     * @return \Illuminate\Support\Collection<int, array>
+     * @return Collection<int, array>
      */
-    private function weightBreakdowns(): \Illuminate\Support\Collection
+    private function weightBreakdowns(): Collection
     {
         return $this->batchItems->map(function (BatchItem $item) {
             if (! $item->relationLoaded('batch')) {

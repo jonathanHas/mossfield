@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\CheeseConversionController;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Product;
@@ -65,7 +66,7 @@ class MatureProductSeedTest extends TestCase
             ->post(route('cheese-conversion.release', $held), ['quantity' => 2]);
 
         $response->assertRedirect(route('cheese-conversion.index'))->assertSessionHasNoErrors();
-        $this->followRedirects($response)->assertOk()->assertDontSee(\App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP);
+        $this->followRedirects($response)->assertOk()->assertDontSee(CheeseConversionController::MATURE_NOT_SET_UP);
 
         $held->refresh();
         $this->assertSame(3, $held->quantity_remaining);

@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Documents\DispatchConfirmation;
+use App\Documents\OrderDocket;
 use App\Mail\DispatchConfirmationMail;
 use App\Mail\DocumentMail;
 use App\Mail\OrderDocumentMail;
@@ -62,7 +63,7 @@ class DispatchConfirmationTest extends InvoicingTestCase
             ->assertDontSee('SECRET INTERNAL');
 
         // And the PDF that is actually emailed.
-        $pdf = (new \App\Documents\DispatchConfirmation($order->fresh()))->documentPdfData();
+        $pdf = (new DispatchConfirmation($order->fresh()))->documentPdfData();
         if (! is_executable('/usr/bin/pdftotext')) {
             $this->markTestSkipped('pdftotext not installed — HTML checked above.');
         }
@@ -266,7 +267,7 @@ class DispatchConfirmationTest extends InvoicingTestCase
         $mailer = app(DocumentMailer::class);
 
         $confirmation = $mailer->queue(new DispatchConfirmation($order));
-        $docket = $mailer->queue(new \App\Documents\OrderDocket($order));
+        $docket = $mailer->queue(new OrderDocket($order));
 
         // sync queue: both already ran inline.
         $this->assertSame('sent', $confirmation->fresh()->status->value);

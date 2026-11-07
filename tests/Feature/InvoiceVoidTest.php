@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Services\CreditNoteService;
+use App\Services\InvoiceService;
 use App\Services\InvoicingException;
 use App\Services\PaymentService;
 
@@ -18,7 +20,7 @@ class InvoiceVoidTest extends InvoicingTestCase
         $order = $this->deliveredOrder();
         $invoice = $this->issue($order);
 
-        app(\App\Services\InvoiceService::class)->void($invoice, 'Wrong customer');
+        app(InvoiceService::class)->void($invoice, 'Wrong customer');
 
         $invoice->refresh();
         $order->refresh();
@@ -36,7 +38,7 @@ class InvoiceVoidTest extends InvoicingTestCase
         $order = $this->deliveredOrder();
         $first = $this->issue($order);
 
-        app(\App\Services\InvoiceService::class)->void($first, 'Priced before the weights were corrected');
+        app(InvoiceService::class)->void($first, 'Priced before the weights were corrected');
 
         $second = $this->issue($order->fresh());
 
@@ -56,14 +58,14 @@ class InvoiceVoidTest extends InvoicingTestCase
         $this->assertFalse($invoice->fresh()->isVoidable());
 
         $this->expectException(InvoicingException::class);
-        app(\App\Services\InvoiceService::class)->void($invoice->fresh(), 'nope');
+        app(InvoiceService::class)->void($invoice->fresh(), 'nope');
     }
 
     public function test_an_invoice_with_a_credit_note_cannot_be_voided(): void
     {
         $invoice = $this->issue($this->deliveredOrder());
 
-        app(\App\Services\CreditNoteService::class)->issue($invoice, [
+        app(CreditNoteService::class)->issue($invoice, [
             ['description' => 'Returned', 'quantity' => 1, 'amount' => 1.50, 'vat_rate' => 0],
         ], 'Damaged');
 
@@ -90,7 +92,7 @@ class InvoiceVoidTest extends InvoicingTestCase
     public function test_voided_invoices_are_hidden_from_the_working_list(): void
     {
         $invoice = $this->issue($this->deliveredOrder());
-        app(\App\Services\InvoiceService::class)->void($invoice, 'Duplicate');
+        app(InvoiceService::class)->void($invoice, 'Duplicate');
 
         $office = User::factory()->create();
 
@@ -119,7 +121,7 @@ class InvoiceVoidTest extends InvoicingTestCase
             ->assertSee("Can't void — remove its payments (1) first.")
             ->assertSee('disabled style="opacity: .45; cursor: default;"', false);
 
-        $note = app(\App\Services\CreditNoteService::class)->issue($invoice->fresh(), [
+        $note = app(CreditNoteService::class)->issue($invoice->fresh(), [
             ['description' => 'Returned', 'quantity' => 1, 'amount' => 1.00, 'vat_rate' => 0],
         ], 'Damaged');
 

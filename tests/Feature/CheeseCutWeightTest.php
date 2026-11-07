@@ -9,6 +9,8 @@ use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -76,7 +78,7 @@ class CheeseCutWeightTest extends TestCase
         ], $overrides);
     }
 
-    private function cutPost(BatchItem $wheel, array $payload): \Illuminate\Testing\TestResponse
+    private function cutPost(BatchItem $wheel, array $payload): TestResponse
     {
         return $this->actingAs($this->office)
             ->from(route('cheese-cutting.create', $wheel))
@@ -277,7 +279,7 @@ class CheeseCutWeightTest extends TestCase
     public function test_a_repeat_submission_of_the_same_cut_is_refused(): void
     {
         $wheel = $this->wheels();
-        $payload = $this->cut(['form_token' => (string) \Illuminate\Support\Str::uuid()]);
+        $payload = $this->cut(['form_token' => (string) Str::uuid()]);
 
         $this->cutPost($wheel, $payload)->assertRedirect(route('cheese-cutting.index'));
         $this->cutPost($wheel, $payload)

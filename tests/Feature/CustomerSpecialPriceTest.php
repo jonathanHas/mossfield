@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Customer;
 use App\Models\CustomerSpecialPrice;
 use App\Models\DeliveryRun;
+use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -138,7 +139,7 @@ class CustomerSpecialPriceTest extends TestCase
         $office = User::factory()->create();
 
         // €1.20 special on the bottle (base is €1.50).
-        $order = \App\Models\Order::create([
+        $order = Order::create([
             'order_number' => 'ORD-20260724-001',
             'customer_id' => $this->customer->id,
             'order_date' => now()->toDateString(),
@@ -163,7 +164,7 @@ class CustomerSpecialPriceTest extends TestCase
         $office = User::factory()->create();
 
         // €10/kg special on the wheel (base is €12/kg).
-        $order = \App\Models\Order::create([
+        $order = Order::create([
             'order_number' => 'ORD-20260724-002',
             'customer_id' => $this->customer->id,
             'order_date' => now()->toDateString(),

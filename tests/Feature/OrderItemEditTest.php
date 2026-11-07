@@ -5,6 +5,8 @@ namespace Tests\Feature;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Customer;
+use App\Models\CustomerSpecialPrice;
+use App\Models\DeliveryRun;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -300,9 +302,9 @@ class OrderItemEditTest extends TestCase
 
     public function test_the_create_form_knows_each_customers_next_run_date_and_special_labels(): void
     {
-        $run = \App\Models\DeliveryRun::create(['name' => 'Tuesday run', 'day_of_week' => 2, 'is_active' => true]);
+        $run = DeliveryRun::create(['name' => 'Tuesday run', 'day_of_week' => 2, 'is_active' => true]);
         $this->customer->update(['delivery_run_id' => $run->id, 'run_position' => 1]);
-        \App\Models\CustomerSpecialPrice::create([
+        CustomerSpecialPrice::create([
             'customer_id' => $this->customer->id, 'product_variant_id' => $this->variantA->id, 'price' => 1.25,
         ]);
         $tuesday = today()->isTuesday() ? today() : today()->next('Tuesday');

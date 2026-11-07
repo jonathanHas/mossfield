@@ -84,6 +84,8 @@ sudo ufw --force enable
 
 ## 3. PHP 8.3 + extensions
 
+The app now needs PHP ≥ 8.4; substitute the version you install for `8.3` in the commands below (mossserv runs 8.5).
+
 Per `DEPLOYMENT.md` §1.
 
 ```bash

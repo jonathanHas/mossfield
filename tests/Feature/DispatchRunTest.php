@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Controllers\Invoicing\UninvoicedOrderController;
 use App\Mail\DispatchConfirmationMail;
+use App\Mail\DocumentMail;
 use App\Models\Customer;
 use App\Models\DeliveryRun;
 use App\Models\DocumentEmail;
@@ -12,6 +13,8 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Services\InvoiceService;
+use App\Services\InvoicingException;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -171,7 +174,7 @@ class DispatchRunTest extends TestCase
         $this->assertNotNull($invoice);
         $this->assertNull($invoice->emailed_at, 'office sends the invoice from Finance');
         $this->assertSame(1, Invoice::notEmailed()->count());
-        Mail::assertNotSent(\App\Mail\DocumentMail::class);
+        Mail::assertNotSent(DocumentMail::class);
     }
 
     public function test_an_invoice_failure_does_not_block_dispatch(): void
@@ -180,8 +183,8 @@ class DispatchRunTest extends TestCase
         $order = $this->orderFor($this->customerOnRun($run, 'Corner Shop'));
 
         // Make issuing blow up, then check dispatch still landed.
-        $this->partialMock(\App\Services\InvoiceService::class, function ($mock) {
-            $mock->shouldReceive('issueForOrder')->andThrow(new \App\Services\InvoicingException('Numbering broke'));
+        $this->partialMock(InvoiceService::class, function ($mock) {
+            $mock->shouldReceive('issueForOrder')->andThrow(new InvoicingException('Numbering broke'));
         });
 
         $this->dispatchRun($run)->assertSessionHas('success', fn ($m) => str_contains($m, '1 order dispatched') && str_contains($m, 'invoice failed'));

@@ -10,6 +10,7 @@ use App\Services\DocumentMailer;
 use App\Services\InvoicingException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -77,7 +78,7 @@ class OverdueController extends Controller
                 ($failed ? ' Could not send: '.implode(', ', $failed).'.' : ' Nothing qualifies right now.'));
         }
 
-        $message = $sent.' '.\Illuminate\Support\Str::plural('reminder', $sent).' sent.';
+        $message = $sent.' '.Str::plural('reminder', $sent).' sent.';
 
         if ($failed) {
             $message .= ' Failed: '.implode(', ', $failed).'.';

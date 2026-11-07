@@ -9,6 +9,7 @@ use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -139,7 +140,7 @@ class OrderAllocationConcurrencyTest extends TestCase
 
     public function test_the_allocate_refusal_says_which_limit_was_hit(): void
     {
-        $office = \App\Models\User::factory()->create();
+        $office = User::factory()->create();
 
         // The line is already covered.
         $full = $this->makeOrderItem(quantityOrdered: 2);
@@ -157,7 +158,7 @@ class OrderAllocationConcurrencyTest extends TestCase
 
     public function test_asking_for_more_than_the_line_needs_says_how_many_it_needs(): void
     {
-        $office = \App\Models\User::factory()->create();
+        $office = User::factory()->create();
         $this->batchItem->update(['quantity_produced' => 50, 'quantity_remaining' => 50]);
         $line = $this->makeOrderItem(quantityOrdered: 10);
         $line->allocateFromBatchItem($this->batchItem, 6);
@@ -196,7 +197,7 @@ class OrderAllocationConcurrencyTest extends TestCase
 
     public function test_a_top_up_beyond_the_batch_free_stock_is_refused_on_the_same_row(): void
     {
-        $office = \App\Models\User::factory()->create();
+        $office = User::factory()->create();
         $line = $this->makeOrderItem(quantityOrdered: 20);
         $line->allocateFromBatchItem($this->batchItem, 6); // batch holds 10 → 4 free
 

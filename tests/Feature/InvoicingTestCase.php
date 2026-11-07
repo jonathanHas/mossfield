@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\Product;
@@ -108,7 +109,7 @@ abstract class InvoicingTestCase extends TestCase
         ]);
     }
 
-    protected function issue(Order $order, $by = null): \App\Models\Invoice
+    protected function issue(Order $order, $by = null): Invoice
     {
         return app(InvoiceService::class)->issueForOrder($order, $by);
     }

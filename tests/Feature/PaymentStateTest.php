@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Models\Invoice;
 use App\Models\User;
+use App\Services\CreditNoteService;
+use App\Services\InvoiceService;
 use App\Services\PaymentService;
 
 /**
@@ -106,7 +108,7 @@ class PaymentStateTest extends InvoicingTestCase
     public function test_a_void_invoice_reports_no_balance(): void
     {
         $invoice = $this->issue($this->deliveredOrder());
-        app(\App\Services\InvoiceService::class)->void($invoice, 'Duplicate');
+        app(InvoiceService::class)->void($invoice, 'Duplicate');
 
         $this->assertSame('void', $invoice->fresh()->payment_state);
         $this->assertSame(0.0, $this->shop->fresh()->outstanding_balance);
@@ -117,7 +119,7 @@ class PaymentStateTest extends InvoicingTestCase
     {
         $invoice = $this->issue($this->deliveredOrder(10)); // €15
 
-        app(\App\Services\CreditNoteService::class)->issue($invoice, [
+        app(CreditNoteService::class)->issue($invoice, [
             ['description' => 'Returned', 'quantity' => 1, 'amount' => 1.50, 'vat_rate' => 0],
         ], 'Damaged');
         $invoice->refresh();

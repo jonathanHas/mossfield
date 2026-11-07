@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Batch;
+use App\Models\BatchItem;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
@@ -215,11 +217,11 @@ class OrderAddItemTest extends TestCase
     {
         $office = User::factory()->create();
         $order = $this->makeOrder('confirmed');
-        $batch = \App\Models\Batch::create([
+        $batch = Batch::create([
             'product_id' => $this->product->id, 'production_date' => now()->subDay(),
             'expiry_date' => now()->addDays(5), 'raw_milk_litres' => 10, 'status' => 'active',
         ]);
-        $batchItem = \App\Models\BatchItem::create([
+        $batchItem = BatchItem::create([
             'batch_id' => $batch->id, 'product_variant_id' => $this->variantA->id,
             'quantity_produced' => 10, 'quantity_remaining' => 10, 'unit_weight_kg' => 1.0,
         ]);

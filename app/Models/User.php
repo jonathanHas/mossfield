@@ -3,7 +3,9 @@
 namespace App\Models;
 
 use App\Enums\UserRole;
+use Database\Factories\UserFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\DB;
@@ -11,7 +13,7 @@ use Illuminate\Support\Str;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
+    /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable;
 
     /** @var list<string> */
@@ -42,7 +44,7 @@ class User extends Authenticatable
     }
 
     /** Write-offs this user recorded (the audit trail). */
-    public function stockWriteOffs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    public function stockWriteOffs(): HasMany
     {
         return $this->hasMany(StockWriteOff::class, 'written_off_by');
     }

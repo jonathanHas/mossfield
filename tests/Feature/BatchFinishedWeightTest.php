@@ -11,9 +11,13 @@ use App\Models\OrderAllocation;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
+use App\Models\StockWriteOff;
 use App\Models\User;
+use App\Models\WriteOffReason;
 use App\Services\StockOverviewService;
+use App\Services\StockWriteOffService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
 
 /**
@@ -185,10 +189,10 @@ class BatchFinishedWeightTest extends TestCase
     }
 
     /** Write off $qty units of $item (weighed when $kg is given). */
-    private function writeOff(BatchItem $item, int $qty, ?float $kg = null): \App\Models\StockWriteOff
+    private function writeOff(BatchItem $item, int $qty, ?float $kg = null): StockWriteOff
     {
-        return app(\App\Services\StockWriteOffService::class)->record(
-            $item->fresh(), \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(),
+        return app(StockWriteOffService::class)->record(
+            $item->fresh(), WriteOffReason::where('code', 'spoiled')->firstOrFail(),
             $qty, $kg, null, today(), $this->office,
         );
     }
@@ -203,7 +207,7 @@ class BatchFinishedWeightTest extends TestCase
         $this->writeOff($wheelItem, 1, 4.900);               // 1 written off, measured 4.900
         $this->writeOff($wheelItem, 1);                      // 1 written off, unweighed → nominal
         $reversed = $this->writeOff($wheelItem, 1);          // reversed: not a write-off
-        app(\App\Services\StockWriteOffService::class)->reverse($reversed, $this->office);
+        app(StockWriteOffService::class)->reverse($reversed, $this->office);
 
         $batch = $this->loaded($wheelItem->batch);
         $wheel = $batch->batchItems->firstWhere('id', $wheelItem->id)->weight_breakdown;
@@ -249,10 +253,10 @@ class BatchFinishedWeightTest extends TestCase
 
         $item = BatchItem::with(['batch.product', 'productVariant', 'orderAllocations', 'sourceCuttingLogs', 'sourceConversionLogs', 'targetCuttingLogs'])
             ->findOrFail($wheelItem->id);
-        \Illuminate\Support\Facades\DB::enableQueryLog();
+        DB::enableQueryLog();
         $breakdown = $item->weight_breakdown;
-        $queries = count(\Illuminate\Support\Facades\DB::getQueryLog());
-        \Illuminate\Support\Facades\DB::disableQueryLog();
+        $queries = count(DB::getQueryLog());
+        DB::disableQueryLog();
 
         $this->assertSame(0, $queries);
         $this->assertSame(0, $breakdown['written_off']);

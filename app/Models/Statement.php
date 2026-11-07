@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Contracts\EmailableDocument;
 use App\Enums\DocumentEmailKind;
 use App\Mail\DocumentMail;
+use App\Services\StatementService;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
@@ -80,7 +81,7 @@ class Statement extends Model implements EmailableDocument
 
     public function documentPdfData(): string
     {
-        return app(\App\Services\StatementService::class)->pdf($this)->output();
+        return app(StatementService::class)->pdf($this)->output();
     }
 
     public function documentMailable(): Mailable

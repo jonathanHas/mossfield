@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\DocumentEmail;
 use App\Models\Invoice;
 use App\Models\Payment;
 use App\Models\Statement;
@@ -143,9 +144,9 @@ class InvoicingAccessTest extends InvoicingTestCase
         // The read-only override bites for office. Admin still passes
         // everything via BasePolicy::before(), as it does across the app —
         // the point here is that no UI offers writing a log row.
-        $this->assertFalse($office->can('create', \App\Models\DocumentEmail::class));
-        $this->assertFalse($office->can('delete', new \App\Models\DocumentEmail));
-        $this->assertTrue($admin->can('viewAny', \App\Models\DocumentEmail::class));
-        $this->assertTrue($office->can('viewAny', \App\Models\DocumentEmail::class));
+        $this->assertFalse($office->can('create', DocumentEmail::class));
+        $this->assertFalse($office->can('delete', new DocumentEmail));
+        $this->assertTrue($admin->can('viewAny', DocumentEmail::class));
+        $this->assertTrue($office->can('viewAny', DocumentEmail::class));
     }
 }

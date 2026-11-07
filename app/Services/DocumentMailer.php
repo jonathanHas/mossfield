@@ -7,10 +7,13 @@ use App\Enums\DocumentEmailKind;
 use App\Enums\DocumentEmailStatus;
 use App\Jobs\SendDocumentEmail;
 use App\Models\DocumentEmail;
+use App\Models\Order;
 use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Mail\Mailable;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
 
 /**
  * The single door every outbound customer document goes through.
@@ -79,7 +82,7 @@ class DocumentMailer
             $row->forceFill([
                 'status' => DocumentEmailStatus::Failed,
                 'failed_at' => now(),
-                'error' => \Illuminate\Support\Str::limit($e->getMessage(), 2000),
+                'error' => Str::limit($e->getMessage(), 2000),
             ])->save();
 
             Log::channel('sync')->error('document email failed', [
@@ -122,10 +125,10 @@ class DocumentMailer
         $kind ??= $document->documentKind();
 
         return DocumentEmail::create([
-            'documentable_type' => $document instanceof \Illuminate\Database\Eloquent\Model
+            'documentable_type' => $document instanceof Model
                 ? $document->getMorphClass()
-                : \App\Models\Order::class,
-            'documentable_id' => $document instanceof \Illuminate\Database\Eloquent\Model
+                : Order::class,
+            'documentable_id' => $document instanceof Model
                 ? $document->getKey()
                 : $document->order->id,
             'kind' => $kind,

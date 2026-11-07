@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\InvoicingException;
@@ -83,7 +84,7 @@ class PaymentAllocationTest extends InvoicingTestCase
 
     public function test_another_customers_invoice_cannot_be_paid(): void
     {
-        $other = \App\Models\Customer::create([
+        $other = Customer::create([
             'name' => 'Other Shop', 'email' => 'o@example.ie',
             'address' => 'X', 'city' => 'Y', 'postal_code' => 'Z',
             'payment_terms' => 'net_30', 'is_active' => true,

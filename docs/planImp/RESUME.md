@@ -247,20 +247,31 @@ worth returning to.
   hover; `products.variants` `scoped()`; `authorize()` in every
   `CustomerController` action; `DeletionGuardTest` (24); three guide
   pictures re-shot; `OPEN_QUESTIONS.md` #7. No migrations. Suite 848.
-- **Cycle 18 "Before go-live" — ACCEPTED 2026-11-07, NOT yet archived
-  or shipped.** Jon's decisions of 2026-11-07, while production is
-  deployed but unused: ten history FKs CASCADE → RESTRICT (migration
-  `2026_11_07_120000_restrict_history_foreign_keys`, `ForeignKeyRestrictTest`;
-  OPEN_QUESTIONS #7 decided + built); invoice send actions — Email invoice
-  on the order page, PDF/Email on Invoices rows, Send all not yet emailed
-  (`invoices.send-all`, `InvoiceSendActionsTest`); "To invoice" everywhere
-  and the sidebar group "Picking"; six small fixes (`BatchItem::isReadyToSell()`
-  delegates; product page Unit column gone); Mossorders flag stays false by
-  decision; 39 guide pictures re-shot. Suite 865, routes 170. Two new
-  polish items in `SMALL_FIXES.md` (3 open). **Next:** Jon archives
-  `plan.md` + `implemented.md` to `archive/2026-11-07-before-go-live/`
-  (and fills the empty `archive/2026-11-07-delete-guards/` from `738a323`),
-  then ships **with maintenance mode** — the migration runs on mossserv.
+- **Cycle 18 "Before go-live" — ACCEPTED and shipped 2026-11-07**
+  (`462a38a`, mossserv at the same commit, migration
+  `2026_11_07_120000_restrict_history_foreign_keys` ran there; cycle files
+  in `archive/2026-11-07-before-go-live/`, and cycle 17's now really in
+  `archive/2026-11-07-delete-guards/`). Ten history FKs RESTRICT
+  (`ForeignKeyRestrictTest`; OPEN_QUESTIONS #7 decided + built); invoice
+  send actions — Email invoice on the order page, PDF/Email on Invoices
+  rows, Send all not yet emailed (`invoices.send-all`,
+  `InvoiceSendActionsTest`); "To invoice" everywhere, sidebar group
+  "Picking"; six small fixes; Mossorders flag stays false by decision; 39
+  guide pictures. Suite 865, routes 170. `SMALL_FIXES.md` has 3 open
+  (two polish, one design); `OPEN_QUESTIONS.md` #3 and #4 open.
+  **Next:** cycle 19.
+- **Cycle 19 "Dependencies" — ACCEPTED 2026-11-07, NOT yet archived
+  or shipped.** Composer 82 updates within ranges (framework 12.20 →
+  12.71, Guzzle 7.16, commonmark 2.10, dompdf 3.1.6, Symfony 7.4, Carbon
+  3.15, PHPUnit 11.5.57, Pint 1.32) → `composer audit` none; npm within
+  ranges minus the unused `@tailwindcss/vite` (Vite 6.4, Alpine 3.17,
+  axios 1.21) → `npm audit` 0; `php` range `^8.4` (both boxes 8.5.4);
+  Pint reformatted 62 files; one test fixed for `MailFake`
+  (`StatementBatchTest`). Suite 865, routes **171** (168 app — the extra
+  is Laravel's signed `PUT storage/{path}`). **Next:** Jon archives
+  `plan.md` + `implemented.md` to `archive/2026-11-07-dependencies/` and
+  ships **with maintenance mode** (vendor swap + `npm ci && npm run
+  build` on the box — slower than usual; watch the npm step).
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 

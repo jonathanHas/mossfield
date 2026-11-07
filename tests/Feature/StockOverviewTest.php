@@ -7,7 +7,9 @@ use App\Models\BatchItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Models\WriteOffReason;
 use App\Services\StockOverviewService;
+use App\Services\StockWriteOffService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -214,8 +216,8 @@ class StockOverviewTest extends TestCase
             'quantity_produced' => 32, 'quantity_remaining' => 28, 'unit_weight_kg' => 1.0, // 4 sold
         ]);
         $user = User::factory()->admin()->create();
-        app(\App\Services\StockWriteOffService::class)->record(
-            $item, \App\Models\WriteOffReason::where('code', 'damaged')->firstOrFail(), 3, null, null, today(), $user,
+        app(StockWriteOffService::class)->record(
+            $item, WriteOffReason::where('code', 'damaged')->firstOrFail(), 3, null, null, today(), $user,
         );
 
         $segments = app(StockOverviewService::class)->build()['milk']['variants'][0]['segments'];

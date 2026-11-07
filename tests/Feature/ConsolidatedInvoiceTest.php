@@ -183,7 +183,7 @@ class ConsolidatedInvoiceTest extends InvoicingTestCase
 
     public function test_this_week_is_a_shortcut_with_monday_to_sunday_bounds(): void
     {
-        $office = \App\Models\User::factory()->create();
+        $office = User::factory()->create();
 
         $this->actingAs($office)->get(route('invoicing.consolidated.create', ['period' => 'this_week']))
             ->assertOk()

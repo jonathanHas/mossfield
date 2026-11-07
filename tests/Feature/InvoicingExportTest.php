@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\CreditNoteService;
+use App\Services\InvoiceService;
 use App\Services\PaymentService;
 
 /**
@@ -75,7 +76,7 @@ class InvoicingExportTest extends InvoicingTestCase
         $this->actingAs(User::factory()->create());
         $live = $this->issue($this->deliveredOrder(10));
         $void = $this->issue($this->deliveredOrder(4));
-        app(\App\Services\InvoiceService::class)->void($void, 'Wrong customer');
+        app(InvoiceService::class)->void($void, 'Wrong customer');
 
         $rows = $this->csv([
             'type' => 'invoices',

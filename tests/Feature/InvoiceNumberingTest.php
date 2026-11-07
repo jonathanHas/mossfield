@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\DocumentSequence;
 use App\Models\Invoice;
+use App\Models\User;
 use App\Services\InvoicingException;
 use Illuminate\Support\Facades\DB;
 
@@ -49,7 +50,7 @@ class InvoiceNumberingTest extends InvoicingTestCase
             $this->deliveredOrder();
         }
 
-        $this->actingAs(\App\Models\User::factory()->create())
+        $this->actingAs(User::factory()->create())
             ->post(route('invoicing.uninvoiced.issue-all'))
             ->assertRedirect();
 

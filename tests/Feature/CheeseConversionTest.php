@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\CheeseConversionController;
 use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\CheeseConversionLog;
@@ -12,7 +13,11 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use App\Models\User;
+use App\Models\WriteOffReason;
+use App\Services\StockOverviewService;
+use App\Services\StockWriteOffService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Testing\TestResponse;
 use Tests\TestCase;
 
 /**
@@ -98,7 +103,7 @@ class CheeseConversionTest extends TestCase
     }
 
     /** Set the maturing hold on a wheel item via the controller. */
-    private function hold(User $user, BatchItem $wheel, int $qty): \Illuminate\Testing\TestResponse
+    private function hold(User $user, BatchItem $wheel, int $qty): TestResponse
     {
         return $this->actingAs($user)->post(route('cheese-conversion.hold', $wheel), ['quantity' => $qty]);
     }
@@ -266,13 +271,13 @@ class CheeseConversionTest extends TestCase
 
         $this->actingAs($office)->get(route('cheese-conversion.index'))
             ->assertOk()
-            ->assertSee(\App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP)
+            ->assertSee(CheeseConversionController::MATURE_NOT_SET_UP)
             ->assertSee(route('products.create'), false)
             ->assertDontSee('release-form-', false);
 
         $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 2])
             ->assertRedirect(route('cheese-conversion.index'))
-            ->assertSessionHasErrors(['error' => \App\Http\Controllers\CheeseConversionController::MATURE_NOT_SET_UP]);
+            ->assertSessionHasErrors(['error' => CheeseConversionController::MATURE_NOT_SET_UP]);
         $this->assertSame(2, $wheel->fresh()->quantity_maturing);
 
         // Factory can't release anyway: neither the strip nor the button.
@@ -433,9 +438,9 @@ class CheeseConversionTest extends TestCase
         $this->actingAs($office)->post(route('cheese-conversion.release', $wheel), ['quantity' => 3]);
 
         $matureItem = BatchItem::where('product_variant_id', $this->matureWheel->id)->sole();
-        $writeOffs = app(\App\Services\StockWriteOffService::class);
+        $writeOffs = app(StockWriteOffService::class);
         $writeOff = $writeOffs->record(
-            $matureItem, \App\Models\WriteOffReason::where('code', 'spoiled')->firstOrFail(), 1, null, null, today(), $office,
+            $matureItem, WriteOffReason::where('code', 'spoiled')->firstOrFail(), 1, null, null, today(), $office,
         );
         $writeOffs->reverse($writeOff, $office);
         $this->assertSame(3, $matureItem->fresh()->available_quantity);
@@ -516,7 +521,7 @@ class CheeseConversionTest extends TestCase
         $wheel = $this->farmhouseBatch(6, 5);
         $this->hold($this->office(), $wheel, 2);
 
-        $card = (new \App\Services\StockOverviewService)->build()['cheese'];
+        $card = (new StockOverviewService)->build()['cheese'];
         $row = collect($card['wheels'])->firstWhere('batch_code', $wheel->batch->batch_code);
 
         $this->assertNotNull($row);
@@ -547,7 +552,7 @@ class CheeseConversionTest extends TestCase
         // The pick stamped fulfilled_at, but 2 wheels are still owed.
         $wheel = $this->farmhouseBatch(6, 5);
         [, $orderItem] = $this->orderFor($this->farmhouseWheel, 3);
-        \App\Models\OrderAllocation::create([
+        OrderAllocation::create([
             'order_item_id' => $orderItem->id, 'batch_item_id' => $wheel->id,
             'quantity_allocated' => 3, 'quantity_fulfilled' => 1,
             'allocated_at' => now(), 'fulfilled_at' => now(),

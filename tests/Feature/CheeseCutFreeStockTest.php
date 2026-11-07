@@ -6,6 +6,7 @@ use App\Models\Batch;
 use App\Models\BatchItem;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderAllocation;
 use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
@@ -88,7 +89,7 @@ class CheeseCutFreeStockTest extends TestCase
     }
 
     /** Reserve $quantity wheels for an order and pick $picked of them. Returns the allocation. */
-    private function reserve(BatchItem $batchItem, int $quantity, int $picked = 0): \App\Models\OrderAllocation
+    private function reserve(BatchItem $batchItem, int $quantity, int $picked = 0): OrderAllocation
     {
         $shop = Customer::firstOrCreate(
             ['email' => 'cut@example.ie'],

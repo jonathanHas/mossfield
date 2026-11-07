@@ -7,6 +7,7 @@ use App\Models\BatchItem;
 use App\Models\Product;
 use App\Models\ProductVariant;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 
 class BatchSeeder extends Seeder
@@ -75,7 +76,7 @@ class BatchSeeder extends Seeder
      * is reached by ageing Farmhouse wheels (see CheeseConversionController) —
      * so no raw-milk batches are invented for it.
      */
-    public static function products(): \Illuminate\Database\Eloquent\Builder
+    public static function products(): Builder
     {
         return Product::query()->where('name', '!=', 'Mossfield Mature Cheese');
     }

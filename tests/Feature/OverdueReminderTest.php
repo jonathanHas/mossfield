@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Mail\OverdueReminderMail;
 use App\Models\DocumentEmail;
 use App\Models\User;
+use App\Services\PaymentService;
 use Illuminate\Support\Facades\Mail;
 
 class OverdueReminderTest extends InvoicingTestCase
@@ -54,7 +55,7 @@ class OverdueReminderTest extends InvoicingTestCase
     public function test_a_paid_invoice_cannot_be_reminded(): void
     {
         $invoice = $this->overdueInvoice();
-        app(\App\Services\PaymentService::class)->record($this->shop, [
+        app(PaymentService::class)->record($this->shop, [
             'amount' => 15.00, 'received_at' => today()->toDateString(), 'method' => 'cash',
         ], [$invoice->id => 15.00]);
 

@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use App\Models\Customer;
+use App\Models\Order;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\File;
@@ -61,10 +63,10 @@ class ConfirmDialogTest extends TestCase
 
     public function test_the_cancel_order_dialog_names_both_choices(): void
     {
-        $customer = \App\Models\Customer::create([
+        $customer = Customer::create([
             'name' => 'Shop', 'email' => 's@example.ie', 'address' => 'Main St', 'city' => 'Bray', 'postal_code' => 'A98', 'is_active' => true,
         ]);
-        $order = \App\Models\Order::create([
+        $order = Order::create([
             'customer_id' => $customer->id, 'order_date' => today(), 'status' => 'pending',
             'payment_status' => 'pending', 'subtotal' => 0, 'tax_amount' => 0, 'total_amount' => 0,
         ]);
@@ -126,10 +128,10 @@ class ConfirmDialogTest extends TestCase
 
     public function test_the_confirm_order_dialog_names_both_choices(): void
     {
-        $customer = \App\Models\Customer::create([
+        $customer = Customer::create([
             'name' => 'Shop', 'email' => 's@example.ie', 'address' => 'Main St', 'city' => 'Bray', 'postal_code' => 'A98', 'is_active' => true,
         ]);
-        $order = \App\Models\Order::create([
+        $order = Order::create([
             'customer_id' => $customer->id, 'order_date' => today(), 'status' => 'pending',
             'payment_status' => 'pending', 'subtotal' => 0, 'tax_amount' => 0, 'total_amount' => 0,
         ]);
