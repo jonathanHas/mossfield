@@ -275,7 +275,7 @@ built as a short cycle after 16d ships.
 
 ## 7. The delete-cascade foreign keys are still in the schema
 
-**Raised:** 2026-11-07 (cycle 17) · **Status:** open.
+**Raised:** 2026-11-07 (cycle 17) · **Status:** **decided 2026-11-07 (Jon: do it before go-live), built 2026-11-07 (cycle 18).**
 
 Cycle 17 made the app refuse to delete a product, variant or customer that
 history depends on (`deletionBlocker()` on each model). The schema still
@@ -288,4 +288,19 @@ forgets the blocker) would still take that history with it, silently.
 Switch those FKs to RESTRICT in a migration, so the database is the
 backstop the finance tables already have? It touches live tables, so it is
 a deploy-window decision, not a code one.
+
+### Decision
+
+Yes, before go-live (production deployed but not yet in use). Migration
+`2026_11_07_120000_restrict_history_foreign_keys` turns ten FKs from CASCADE
+to RESTRICT: `orders.customer_id`, `batches.product_id`,
+`batch_items.product_variant_id`, `order_items.product_variant_id`,
+`order_allocations.batch_item_id`, `stock_write_offs.batch_item_id`, and
+`source_batch_item_id` / `target_batch_item_id` on both `cheese_cutting_logs`
+and `cheese_conversion_logs`. A child that is part of its parent
+(`batch_items.batch_id`, `order_items.order_id`,
+`order_allocations.order_item_id`, `product_variants.product_id`, …) still
+cascades. Delete rules only, no data change. `ForeignKeyRestrictTest` pins
+the rules (information_schema) and the behaviour (a raw delete of a parent
+with history fails with SQLSTATE 23000).
 

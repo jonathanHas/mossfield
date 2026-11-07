@@ -243,9 +243,26 @@
                                     <dd>
                                         <a href="{{ route('invoicing.invoices.show', $order->invoice) }}" class="mf-link font-mono">{{ $order->invoice->number }}</a>
                                         <span class="mf-tag mf-tag-{{ $order->invoice->payment_state_tone }} ml-1">{{ $order->invoice->payment_state_label }}</span>
-                                        @unless($order->invoice->hasBeenEmailed())
-                                            <span class="text-[11.5px] ml-1" style="color: var(--muted);">not yet sent</span>
-                                        @endunless
+                                        @php $billInvoice = $order->invoice; @endphp
+                                        @if($billInvoice->hasBeenEmailed())
+                                            <span class="text-[11.5px] ml-1" style="color: var(--muted);">emailed {{ $billInvoice->emailed_at->format('d/m/Y') }}</span>
+                                        @elseif($billInvoice->customer && ! $billInvoice->customer->wantsEmailedInvoices())
+                                            <span class="text-[11.5px] ml-1" style="color: var(--muted);">{{ $billInvoice->customer->invoice_delivery->label() }}</span>
+                                        @elseif(! $billInvoice->documentRecipient())
+                                            <span class="text-[11.5px] ml-1" style="color: var(--muted);">not yet sent · no email address</span>
+                                        @else
+                                            @can('email', $billInvoice)
+                                                <form method="POST" action="{{ route('invoicing.invoices.email', $billInvoice) }}" class="inline ml-1"
+                                                      data-confirm-title="Email this invoice?"
+                                                      data-confirm="Invoice {{ $billInvoice->number }} goes to {{ $billInvoice->documentRecipient() }} now. The send is logged under Finance → Sent."
+                                                      data-confirm-label="Send">
+                                                    @csrf
+                                                    <button type="submit" class="mf-link">Email invoice</button>
+                                                </form>
+                                            @else
+                                                <span class="text-[11.5px] ml-1" style="color: var(--muted);">not yet sent</span>
+                                            @endcan
+                                        @endif
                                     </dd>
                                 @elseif($order->customer->isConsolidatedBilling())
                                     <dt style="color: var(--muted);">Invoice</dt>
@@ -257,7 +274,7 @@
                                 @elseif($order->hasReachedReady())
                                     <dt style="color: var(--muted);">Invoice</dt>
                                     <dd>
-                                        <span style="color: var(--muted);">Awaiting invoice</span>
+                                        <span style="color: var(--muted);">To invoice</span>
                                         · <a href="{{ route('invoicing.uninvoiced.index') }}" class="mf-link">Finance</a>
                                     </dd>
                                 @endif

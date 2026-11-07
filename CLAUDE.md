@@ -157,7 +157,7 @@ Line / stop / panel actions redirect `->withFragment(...)` to the element they e
 - **`Route::fallback(fn () => abort(404))`** is the **last** line of `routes/web.php` (after `require auth.php`), so an unmatched URL 404s inside the `web` group and the error page sees the signed-in user. Keep it last. `AuthorizationBoundaryTest` lists its `{fallbackPlaceholder}` URI as unguarded.
 - **`confirm.js`** also reads `data-confirm-cancel-label` (default "Cancel", reset on every open) beside `data-confirm-title` / `-label` / `-danger`. **Every `data-confirm` trigger carries `data-confirm-title`** naming the action (a short question — "Confirm this order?", "Delete this run?") — `ConfirmDialogTest::test_every_dialog_names_its_action` scans the views (and refuses a body starting "Are you sure"); the JS default "Are you sure?" is a fallback, never a design. **A body is the consequence, never the title again** ("The reserved units go back to free stock.", not "Remove this allocation?") — the same scan fails a body that starts with its title. Give a `data-confirm-cancel-label` (e.g. "Not yet") where "Cancel" beside the OK button could read as cancelling the thing itself (Confirm order, Dispatch, Dispatch run).
 - **PDFs subset their fonts**: `config/dompdf.php` (published) sets `'enable_font_subsetting' => true`. Whole DejaVu fonts made every one-page PDF 1.4–1.8 MB; subset, a dispatch confirmation is ~36 KB. `DispatchConfirmationTest` asserts < 300 KB.
-- **`deletionBlocker()` is the one place a delete rule lives** — `Batch`, `Product`, `ProductVariant`, `Customer`. The page greys Delete with "Can't delete — N records depend on it. <sentence>" as its title (`data-delete-blocked`; counts from the loader's `withCount`, read by `array_key_exists` — no per-row query), the controller refuses with the sentence as the `error` flash. Deactivate, don't delete. `products.variants` is `scoped()` (a variant under the wrong product 404s). `chaperone()` on the two `/products` variant loads keeps `picker_label` from lazy-loading. A product's count is batches + order lines + special prices (its variants' batch items live inside its batches); a customer's is orders, invoices, payments, credit notes, statements (special prices cascade with them). `DeletionGuardTest`.
+- **`deletionBlocker()` is the one place a delete rule lives** — `Batch`, `Product`, `ProductVariant`, `Customer`. The page greys Delete with "Can't delete — N records depend on this. <sentence>" as its title (`data-delete-blocked`; counts from the loader's `withCount`, read by `array_key_exists` — no per-row query), the controller refuses with the sentence as the `error` flash. Deactivate, don't delete. `products.variants` is `scoped()` (a variant under the wrong product 404s). `chaperone()` on the two `/products` variant loads keeps `picker_label` from lazy-loading. A product's count is batches + order lines + special prices (its variants' batch items live inside its batches); a customer's is orders, invoices, payments, credit notes, statements (special prices cascade with them). `DeletionGuardTest`. The schema agrees: the ten history FKs are RESTRICT (migration `2026_11_07_120000`, `ForeignKeyRestrictTest`); a child that is part of its parent still cascades.
 
 ### Fonts & the root URL
 - Fonts (Inter, JetBrains Mono, Fraunces, Figtree) are **self-hosted**: imported from `@fontsource/*` at the top of `resources/css/app.css` and bundled by Vite. No layout links to fonts.bunny.net — the app runs on a LAN. Add weights by importing another `@fontsource/<family>/<weight>.css`.
@@ -663,7 +663,7 @@ Desktop digital twin of the delivery-run spreadsheet, built from a Claude Design
 ### Dispatch from the sheet
 `POST /chilled-runs/dispatch-all` (`chilled-runs.dispatch-all`, **office/admin**) — the last step on the sheet and the point at which Finance is told what went out. `ChilledRunController::dispatchAll()` selects the run/date's open orders, keeps the ones that are `ready` **and** have `loaded_at`, and runs each through **`App\Services\DispatchService::dispatch()`** with one `Str::uuid()` batch id. Everything else is skipped and **named** in the flash ("skipped: Shop B (not loaded); Shop D (not ready)") — the office needs to know who to chase, not a count.
 
-- **`DispatchService` is the one place an order goes out**, used by both this button and `OrderController::markDispatched()`. Three steps, each insulated from the next: (1) status flip to `dispatched` in its own short transaction under `lockForUpdate` (the run button and a per-order click can't both do it — the loser gets a `DispatchException`); (2) `InvoiceService::issueForOrder()` for **per-order customers only** — consolidated customers are skipped and wait for the manual period run; a failure (`InvoicingException` or anything else, `report()`ed) is recorded on the `DispatchResult`, **never thrown**, so the order still ships and sits in Finance → Awaiting invoice; (3) the Dispatch Confirmation — `queue()`d on the run path (N PDF renders + SMTP don't belong in one request), `sendNow()` for a single order. **The invoice is deliberately not emailed here** — office sends it from Finance's not-yet-emailed list.
+- **`DispatchService` is the one place an order goes out**, used by both this button and `OrderController::markDispatched()`. Three steps, each insulated from the next: (1) status flip to `dispatched` in its own short transaction under `lockForUpdate` (the run button and a per-order click can't both do it — the loser gets a `DispatchException`); (2) `InvoiceService::issueForOrder()` for **per-order customers only** — consolidated customers are skipped and wait for the manual period run; a failure (`InvoicingException` or anything else, `report()`ed) is recorded on the `DispatchResult`, **never thrown**, so the order still ships and sits in Finance → To invoice; (3) the Dispatch Confirmation — `queue()`d on the run path (N PDF renders + SMTP don't belong in one request), `sendNow()` for a single order. **The invoice is deliberately not emailed here** — office sends it from Finance's not-yet-emailed list.
 - **Loaded is required at the service** (OPEN_QUESTIONS #5): `DispatchService::dispatch()` throws `DispatchException('Tick the order as loaded onto the van first.')` when `loaded_at` is null, so the order page and the run sheet share the rule. The order page carries its own "Loaded onto van" tick for ready orders (`@can('load')` — factory too) posting `chilled-runs.toggle-loaded` with `return=order`, which redirects back to `orders.show#dispatch`; Mark dispatched shows only once loaded ("Tick loaded onto van first" otherwise).
 - **Consolidated guard is server-side**: `issueForOrder()` throws for a weekly/monthly customer unless `$allowConsolidated` (nobody passes it yet), so no route can per-order-bill them by accident.
 - **`buildSheet()`**: `pickState` uses `hasReachedReady()` (a dispatched stop must not regress to "5/5 picked"); per-row `stats['dispatchState']` (`dispatched|partial|none`); run-level `dispatchableCount` (ready + loaded **orders** — the button's number), `dispatchedCount`/`dispatchedPct` (**stops**, same denominator as the loaded bar). `_run-table` shows a "Dispatched" tag instead of Ready and renders the loaded tick as a static span; `toggleLoaded()` refuses on a dispatched order (the tick is history, not a control).
@@ -724,11 +724,12 @@ a `now()` date on every view — two prints of one order disagreed.)
 - `orders.invoice_id` = the order's **live** invoice. Voiding nulls it, returning
   the order to the uninvoiced queue; `invoice_lines.order_id` keeps the history.
 - **Issued automatically at dispatch** by `App\Services\DispatchService` (see
-  "Dispatch from the sheet") for per-order customers. There are **no invoice
-  buttons on the order screens** any more: `orders/show` carries one `@can('see-financials')`
-  billing line — "Invoice INV-… · Unpaid" linking to Finance, or "Billed on the
+  "Dispatch from the sheet") for per-order customers. There are **no issue/void
+  buttons on the order screens**: `orders/show` carries one `@can('see-financials')`
+  billing line — "Invoice INV-… · Unpaid" linking to Finance (with **Email invoice**
+  while unsent, else "emailed d/m/Y", the paper delivery mode, or "no email address"), or "Billed on the
   weekly/monthly invoice", or (per-order, uninvoiced) "Awaiting dispatch —
-  invoiced when dispatched" on a `ready` order and "Awaiting invoice · Finance"
+  invoiced when dispatched" on a `ready` order and "To invoice · Finance"
   once dispatched/delivered — plus a Confirmation line.
   The old pro forma (`orders/invoice.blade.php`) became the Dispatch
   Confirmation; `orders.invoice`/`orders.email` are gone.
@@ -796,7 +797,12 @@ keeping:
   recorded (the real "SMTP refused") instead of overwriting it with its own
   wrapper message.
 
-The **Awaiting invoice** queue (`UninvoicedOrderController`, dashboard tile) is
+Per-invoice **Email** lives on the invoice page, the Invoices list rows and the
+order page's billing line (all post `invoicing.invoices.email`, `back()`);
+**Send all not yet emailed** (`invoices.send-all`) queues `Invoice::notEmailed()`
+under one batch id and lands on Sent. `InvoiceSendActionsTest`.
+
+The **To invoice** queue (`UninvoicedOrderController`, dashboard tile) is
 the exceptions list now that dispatch issues invoices itself: auto-issue
 failures and consolidated customers waiting for their period run. **An invoice
 is issued only for a dispatched or delivered order** (OPEN_QUESTIONS #5, F-38a):

@@ -41,7 +41,6 @@
                         </select>
                     </div>
                 @endif
-                <button type="submit" class="mf-btn-secondary">Search</button>
                 @if(request()->hasAny(['search', 'is_active', 'has_online_account']))
                     <a href="{{ route('customers.index') }}" class="mf-btn-ghost">Clear</a>
                 @endif
@@ -101,7 +100,7 @@
                                     @if($deletionBlocker = $customer->deletionBlocker())
                                         @php $dependents = $customer->dependentRecordCount(); @endphp
                                         <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
-                                              title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                              title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on this. {{ $deletionBlocker }}">Delete</span>
                                     @else
                                         <form action="{{ route('customers.destroy', array_merge(['customer' => $customer], request()->only('search', 'is_active'))) }}" method="POST" class="inline">
                                             @csrf

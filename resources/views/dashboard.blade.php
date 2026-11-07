@@ -124,7 +124,7 @@
                 && ($invoicing['uninvoiced'] || $invoicing['not_emailed'] || $invoicing['overdue_count']))
                 <div class="grid gap-3 mb-4 grid-cols-1 sm:grid-cols-3">
                     <a href="{{ route('invoicing.uninvoiced.index') }}">
-                        <x-dash-kpi label="Awaiting invoice" :value="$invoicing['uninvoiced']"
+                        <x-dash-kpi label="To invoice" :value="$invoicing['uninvoiced']"
                             :sub="$invoicing['uninvoiced'] ? 'to bill' : 'clear'"
                             :tone="$invoicing['uninvoiced'] ? 'warn' : null" />
                     </a>

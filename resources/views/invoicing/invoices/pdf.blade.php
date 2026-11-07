@@ -141,7 +141,7 @@
             </tr>
         @endif
         <tr>
-            <td class="label">{{ (float) $invoice->delivery_charge_net > 0 ? 'VAT (23%)' : 'Tax' }}</td>
+            <td class="label">VAT</td>
             <td class="val">€{{ number_format((float) $invoice->tax_amount, 2) }}</td>
         </tr>
         <tr class="grand">

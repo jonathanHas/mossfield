@@ -390,13 +390,10 @@ class BatchItem extends Model
 
     public function isReadyToSell(): bool
     {
-        // Check if this batch item is ready based on product type and ready date
-        if ($this->batch->product->type === 'cheese' && $this->batch->ready_date) {
-            return $this->batch->ready_date <= now()->toDateString();
-        }
-
-        // Milk and yoghurt are ready immediately
-        return true;
+        // The batch owns the rule (ready_date reached). Milk and yoghurt have no
+        // ready gate — no ready_date — so they are ready immediately. (Cycle 18:
+        // the old string comparison said "not ready" on the ready day itself.)
+        return $this->batch->isReadyToSell();
     }
 
     public function isAvailableForAllocation(): bool

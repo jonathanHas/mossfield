@@ -73,7 +73,7 @@ When every line is picked (or closed short) the order is **Ready**.
 3. Click **Mark dispatched**. This:
    - emails the customer a dispatch confirmation: what went on the van, with weights and prices, marked "invoice to follow";
    - issues the invoice for customers billed per order. Weekly and monthly customers are billed later on their combined invoice.
-4. The invoice is not emailed at this point. Send it from Finance.
+4. The invoice is not emailed at this point. **Email invoice** on the order's *Invoice* line sends it, or send it from Finance.
 
 For a whole run at once, use **Dispatch run** on the [run sheet](chilled-runs.md).
 

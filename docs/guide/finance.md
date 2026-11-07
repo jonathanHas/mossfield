@@ -16,9 +16,9 @@ The **Finance** group in the sidebar and the row of tabs across the top of every
 
 ![The invoice list](images/finance-invoices.png)
 
-The three tiles are the things to act on, and each is a link: *Not yet emailed*, *Awaiting invoice*, *Overdue*. Narrow the list with **Customer**, **Payment**, **Emailed** and **Status**, then **Filter**. Voided invoices are hidden until you choose Void under **Status**.
+The three tiles are the things to act on, and each is a link: *Not yet emailed*, *To invoice*, *Overdue*. Narrow the list with **Customer**, **Payment**, **Emailed** and **Status**, then **Filter**. Voided invoices are hidden until you choose Void under **Status**.
 
-Click an invoice number to open it.
+Click an invoice number to open it. Each row has **PDF**, and **Email** while the invoice is still to be sent. **Send all not yet emailed** at the top of the list sends every one of them in one go; they appear under **Sent** as they go.
 
 ![An invoice that is part paid, with a credit note](images/finance-invoice-partial.png)
 
@@ -28,14 +28,14 @@ Click an invoice number to open it.
 - **Email invoice** sends it to the customer's billing address. Once sent, the button reads **Email again**. *Email history* at the bottom lists every attempt, with the reason if one failed.
 - **Send reminder** appears once the invoice is overdue.
 - **Credit note** starts a credit note against this invoice.
-- **Void** cancels the invoice and asks for a reason. The invoice stays on file marked void, its number is not reused, and the order goes back to the *Awaiting invoice* list to be billed again. An invoice with a payment or a credit note against it cannot be voided: the button is greyed out and the line under the heading says what to remove first.
+- **Void** cancels the invoice and asks for a reason. The invoice stays on file marked void, its number is not reused, and the order goes back to the *To invoice* list to be billed again. An invoice with a payment or a credit note against it cannot be voided: the button is greyed out and the line under the heading says what to remove first.
 - **Record a payment** opens the payment form for this customer.
 
 ## To invoice
 
-**To invoice** opens the *Awaiting invoice* list. Because dispatch issues invoices by itself, this is the exceptions list.
+**To invoice** lists the orders still to be billed. Because dispatch issues invoices by itself, this is the exceptions list.
 
-![Awaiting invoice](images/finance-awaiting-invoice.png)
+![To invoice](images/finance-awaiting-invoice.png)
 
 - *Per-order billing*: dispatched orders with no invoice, usually because the automatic one failed. **Issue invoice** bills one; **Issue all** bills every row.
 - *Awaiting a consolidated run*: weekly and monthly customers with deliveries not yet billed. **Run consolidated invoices** takes you to that screen.

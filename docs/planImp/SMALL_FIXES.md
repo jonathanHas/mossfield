@@ -14,13 +14,14 @@ Most of these need no test. Where one is worth having, it says so.
 
 ## Copy and empty states
 
-- [ ] **The sidebar group is still called "Fulfillment"** (`layouts/navigation.blade.php:44`)
+- [x] **The sidebar group is still called "Fulfillment"** (`layouts/navigation.blade.php:44`)
   over Picking and Stock Allocation, while every screen under it now says "pick".
   After cycle 16 it is the only user-visible "fulfil…" in the views (the copy grep in
   `TESTING_AND_FIXES.md` → 2026-10-29 finds nothing else). Rename when the user guide
   settles the vocabulary — "Picking" is the obvious candidate. No test needed beyond
   `FinanceNavTest`-style `assertSee`.
   *Source: cycle 16 Implementer's note, 2026-10-29. Deliberately kept that cycle.*
+  *Done 2026-11-07 (cycle 18):* the group is **Picking** (sidebar and the guide's getting-started table).
 
 - [x] **`/cheese-cutting` empty state gives the wrong reason.** When every wheel in
   a ready batch is held or allocated, the list correctly shows nothing but says
@@ -77,23 +78,38 @@ Most of these need no test. Where one is worth having, it says so.
   *Source: Planner's review of cycle 16d, 2026-11-07, from the `stock-overview` picture.*
   *Done 2026-11-07 (cycle 16e):* a `not_ready` segment, out of the valuation.
 
-- [ ] **Two statements of "ready to sell".** `Batch::isReadyToSell()`
+- [x] **Two statements of "ready to sell".** `Batch::isReadyToSell()`
   (`ready_date->lte(now())`) and `BatchItem::isReadyToSell()`
   (`ready_date <= today` as strings, cheese only) agree today for a
   date-cast `ready_date`; make the item delegate to the batch so there is
   one. *Source: Implementer's note, cycle 16e, 2026-11-07.*
+  *Done 2026-11-07 (cycle 18):* `BatchItem::isReadyToSell()` delegates to the batch — the string comparison said "not ready" on the ready day itself (`StockOverviewTest`).
 
-- [ ] **The variants table on `/products/{product}` overflows its panel at
+- [x] **The variants table on `/products/{product}` overflows its panel at
   1280 px**, cutting the actions cell at "Edit · Dupli…" — Duplicate and
   Delete (greyed or red) are off the right edge, so the guide's
   `product-page.png` can't show the delete guard. Wrap the actions, narrow
   the columns, or drop the Unit column (it repeats Size for every seeded
   variant). *Source: Implementer's note, cycle 17, 2026-11-07.*
+  *Done 2026-11-07 (cycle 18):* the Unit column is gone; the table fits at 1280 px with Delete visible.
 
-- [ ] **Greyed-Delete hover says "depend on it" before a customer sentence
+- [ ] **Product page variant actions stack three deep.** With the Unit
+  column gone the row still wants ~700 px in a 678 px panel at 1280 px, so
+  "Edit · / Duplicate · / Delete" wraps one per line with a trailing "·" on
+  each. Delete is inside the panel now (the point of the fix); the shape is
+  the polish left. Tighten the Name cell or give the actions column a fixed
+  width. *Source: Planner review, cycle 18, 2026-11-07.*
+
+- [ ] **"Tax" vs "VAT (23%)" survives on the order page and the dispatch
+  confirmation.** The invoice page and PDF now always say "VAT"
+  (`orders/show.blade.php:555`, `orders/dispatch-confirmation.blade.php:120`
+  still carry the ternary). *Source: Planner review, cycle 18, 2026-11-07.*
+
+- [x] **Greyed-Delete hover says "depend on it" before a customer sentence
   that says "depend on them".** The prefix is the shared construct in the
   three list views and the batch card; "on this" would suit all four.
   *Source: Implementer's note, cycle 17, 2026-11-07.*
+  *Done 2026-11-07 (cycle 18):* the prefix reads "N records depend on this." in all four constructs.
 
 - [x] **Batch progress bar has five segments and a four-item legend.** Renders as
   `29 · 0 · 2 · 3 · 4 / 38` with one unexplained `0`. Either label it or drop it.
@@ -119,24 +135,28 @@ Most of these need no test. Where one is worth having, it says so.
   is a real finding, but it is small and belongs in the same batch.
   *Done 2026-09-13:* closed — see finding 8.
 
-- [ ] **One list, three names.** The sidebar and the finance tab bar say
+- [x] **One list, three names.** The sidebar and the finance tab bar say
   **To invoice**; the page it opens is headed *Awaiting invoice*; the tile on the
   Invoices list and the dashboard says *Awaiting invoice*. Pick one.
   *Source: cycle 16c, writing `docs/guide/finance.md` (2026-11-05). The guide
   names both; re-read `finance.md` → "To invoice" when this changes.*
+  *Done 2026-11-07 (cycle 18):* **To invoice** everywhere — page heading, both tiles, the order page line, the two flashes and `finance.md`.
 
-- [ ] **Invoice summary row is "Tax" without a delivery charge and "VAT (23%)" with
+- [x] **Invoice summary row is "Tax" without a delivery charge and "VAT (23%)" with
   one** (`invoicing/invoices/show.blade.php`). Same row, two labels.
   *Source: cycle 16c (2026-11-05).*
+  *Done 2026-11-07 (cycle 18):* always **VAT**, on the invoice page and the PDF.
 
-- [ ] **Sent documents' subtitle lists "docket" but not "dispatch confirmation"**,
+- [x] **Sent documents' subtitle lists "docket" but not "dispatch confirmation"**,
   which is most of what the list holds (`invoicing/emails/index.blade.php`).
   *Source: cycle 16c (2026-11-05).*
+  *Done 2026-11-07 (cycle 18):* the subtitle names the dispatch confirmation.
 
-- [ ] **The customer list keeps a Search button** although the box filters as you
+- [x] **The customer list keeps a Search button** although the box filters as you
   type and the Status select submits on change (`customers/index.blade.php`).
   The `/orders` list dropped its button in cycle 15.
   *Source: cycle 16c (2026-11-05).*
+  *Done 2026-11-07 (cycle 18):* button removed; the list still filters as you type.
 
 ## Routing
 
@@ -158,6 +178,7 @@ Display, Routing and Infrastructure). Both are real UX work, not polish.*
   unusable on a phone. Consider a compact repeating entry, a running total with
   add-as-you-weigh, or a bulk-weight mode for uniform units.
   *Source: browser pass, cosmetic list.*
+  *2026-11-07: not a polish fix — a design question for after the floor has picked real cheese orders; `is_bulk_weighed` already covers packs.*
 
 - [x] **Destructive actions use native `confirm()` via inline `onclick`.**
   Functional, but unstyleable, untestable, and it blocks browser automation
@@ -215,11 +236,12 @@ These are not bugs until someone says they are.
 
 ## Not investigated
 
-- [ ] **Dashboard reports the online order sync has never completed successfully.**
+- [x] **Dashboard reports the online order sync has never completed successfully.**
   Untouched by any pass so far. Could be configuration (`services.sync.enabled`),
   could be real. Needs its own look rather than a polish fix.
   *Decision (Jon, 2026-10-28): leave it while the Mossorders surface is behind
   `MOSSORDERS_UI_ENABLED`; look at it when that integration is picked up again.*
+  *Closed 2026-11-07 (Jon): not a defect — the correct report of no Mossorders portal; hidden while `MOSSORDERS_UI_ENABLED=false`, which stays false until a portal exists.*
 
 ---
 

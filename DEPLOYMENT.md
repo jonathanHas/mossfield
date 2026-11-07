@@ -132,7 +132,7 @@ Additional vars on mossfield:
 ```env
 MOSSORDERS_BASE_URL=https://mossorders.example.com       # must be https:// in prod
 MOSSORDERS_API_TOKEN=<shared-secret-from-openssl-rand>
-MOSSORDERS_UI_ENABLED=false                              # default false; true shows the Online Orders nav/screens, dashboard sync banner and customer link fields
+MOSSORDERS_UI_ENABLED=false                              # default false; leave false until a Mossorders portal exists — true shows the Online Orders nav/screens, dashboard sync banner and customer link fields
 OFFICE_API_TOKEN=<same-shared-secret>
 OFFICE_API_TOKEN_PREVIOUS=                               # leave blank outside rotation windows
 OFFICE_API_ALLOWED_IPS=<mossorders-public-ip>            # see §5

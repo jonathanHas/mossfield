@@ -293,6 +293,8 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
         Route::post('/credit-notes/{credit_note}/email', [CreditNoteController::class, 'email'])->name('credit-notes.email');
         Route::post('/credit-notes/{credit_note}/void', [CreditNoteController::class, 'void'])->name('credit-notes.void');
 
+        Route::post('/invoices/send-all', [InvoiceController::class, 'sendAll'])->name('invoices.send-all');
+
         // Wildcard {invoice} routes come last so /uninvoiced, /overdue etc.
         // aren't swallowed by the model binding.
         Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');

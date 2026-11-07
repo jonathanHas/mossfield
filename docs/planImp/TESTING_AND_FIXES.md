@@ -90,6 +90,89 @@ baseline.
 
 ---
 
+## 2026-11-07 — Before go-live: RESTRICT foreign keys, invoice send actions, one vocabulary, small fixes (Plan/Implement cycle 18)
+
+**Scope.** Jon's decisions of 2026-11-07, taken while production was
+deployed but not yet in use — the one moment a schema rule can change
+without a data migration. Four strands: the database backstop behind the
+`deletionBlocker()`s; the invoice send actions deferred on 2026-10-13
+(finding 4); one name for the uninvoiced queue and the picking nav group;
+and six small fixes. `OPEN_QUESTIONS.md` #7 decided and built; the
+Mossorders UI flag and the dashboard sync banner closed by decision
+(`SMALL_FIXES.md`, `DEPLOYMENT.md`).
+
+**What landed.**
+
+- **Ten history FKs CASCADE → RESTRICT** (migration
+  `2026_11_07_120000_restrict_history_foreign_keys`, one `KEYS` map, `down()`
+  cascades again): `orders.customer_id`, `batches.product_id`,
+  `batch_items.product_variant_id`, `order_items.product_variant_id`,
+  `order_allocations.batch_item_id`, `stock_write_offs.batch_item_id` and
+  `source_/target_batch_item_id` on `cheese_cutting_logs` and
+  `cheese_conversion_logs`. A child that is part of its parent still
+  cascades (`batch_items.batch_id`, `order_items.order_id`,
+  `order_allocations.order_item_id`, `product_variants.product_id`, the
+  invoice/credit-note/payment line tables, special prices). Delete rules
+  only; ~260 ms on the populated dev DB; rolled back and re-run on dev.
+  `ForeignKeyRestrictTest` (6) reads the rules from `information_schema`
+  and proves a raw delete of a parent with history fails with SQLSTATE
+  23000 while a batch without history still takes its items. The one test
+  that deleted a customer under its orders (`BackupRestoreTest`) now
+  deletes the lines and order first. `ResetTradingData::WIPE_ORDER` (children
+  first) and `BackupService::import()` (FK checks off) were already correct.
+- **Send the invoice from where it was issued.** The order page's billing
+  line offers **Email invoice** (same `invoicing.invoices.email` door, logged,
+  `back()`), else "emailed d/m/Y", the paper delivery label, or "not yet sent ·
+  no email address". The Invoices list has a ninth column — **PDF** always,
+  **· Email** while issued, unsent, wanted by email and addressable — and
+  **Send all not yet emailed (N)** beside Clear (`POST
+  /invoicing/invoices/send-all` → `InvoiceController::sendAll()`, `authorize('create')`,
+  `Invoice::notEmailed()` queued under one batch id, lands on Sent;
+  "Nothing to send — …" as a warning when the queue is empty; every-one-skipped
+  is an error on the list naming the addressless customers, mirroring
+  statements). The button sits inside the GET filter form with
+  `form="send-all-form"` — forms can't nest — and `confirm.js` resolves
+  `el.form` through the attribute. `InvoiceSendActionsTest` (10).
+- **One vocabulary.** "Awaiting invoice" → **To invoice** (h1, two tiles, order
+  page, two flashes, a docblock, guide, tests); sidebar group "Fulfillment" →
+  **Picking**. Tests pin the billing line's own markup because the Finance
+  sidebar shows a "To invoice" link on every office page. The group's
+  collapse state is keyed on the label slug, so a collapsed "Fulfillment"
+  opens once as "Picking".
+- **Small fixes.** `BatchItem::isReadyToSell()` delegates to
+  `Batch::isReadyToSell()` — the old Carbon-vs-string `<=` said "not ready" on
+  the ready day itself (`StockOverviewTest` +1, red against HEAD); the
+  product page drops the Unit column and lets the actions wrap, so Delete sits
+  inside the panel at 1280 px; the greyed-Delete prefix reads "depend on
+  this" in all four constructs; the invoice row is always **VAT**; the Sent
+  subtitle names the dispatch confirmation; the Customers Search button is
+  gone (the box submits debounced, the selects on change).
+- **39 of 44 guide pictures re-shot** (the five `/picking` phone-shell
+  pictures have no sidebar). Pixel-diffed against HEAD by the Implementer:
+  the sidebar label, this cycle's screens, and dev-data drift from
+  outside the loop (ORD-20261107-005 dispatched and INV-000004 emailed on
+  dev at 15:28, between the cycle-17 ship and the shoot — `customer-page`
+  now shows *Recent invoices* and *Documents sent*, as its prose says).
+
+**Things to know.**
+
+- Production needs **maintenance mode** for this ship (a migration). The
+  constraint names are Laravel's `{table}_{column}_foreign`, the same on
+  every environment migrated from this repo.
+- `DocumentMailer::queue()` raises `InvoicingException` only for a missing
+  address, which is why `sendAll()`'s catch can label every skip "no email
+  address". If `queue()` ever gains another refusal, split the catch.
+- `Batch::isReadyToSell()` has no product-type check; `ready_date` is set
+  only for cheese (`Batch::boot`), so milk and yoghurt stay ready
+  immediately. A milk batch hand-given a future `ready_date` would now read
+  not-ready — intended.
+- The order page's totals line and the dispatch confirmation still say
+  "Tax" / "VAT (23%)"; the plan named only the invoice. `SMALL_FIXES.md`.
+
+**Suite.** 865 tests, 0 failing (5,908 assertions); pint clean; 170 routes.
+
+---
+
 ## 2026-11-07 — Delete guards: products, variants and customers refuse when history depends on them (Plan/Implement cycle 17)
 
 **Scope.** The parked cycle 12, restarted from scratch (its WIP branch was

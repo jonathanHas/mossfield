@@ -273,4 +273,32 @@ class StockOverviewTest extends TestCase
             ->assertSee('not ready')
             ->assertSee('var(--state-not-ready)', false);
     }
+
+    public function test_cheese_on_its_ready_day_is_ready_for_the_item_and_the_stock_page(): void
+    {
+        $cheese = Product::create([
+            'name' => 'Ready Day Cheese', 'type' => 'cheese', 'maturation_days' => 60, 'is_active' => true,
+        ]);
+        $wheel = ProductVariant::create([
+            'product_id' => $cheese->id, 'name' => 'Whole Wheel', 'size' => '4kg', 'unit' => 'wheel',
+            'weight_kg' => 4.0, 'base_price' => 12.50, 'is_variable_weight' => true, 'is_active' => true,
+        ]);
+        $batch = Batch::create([
+            'product_id' => $cheese->id, 'production_date' => today()->subDays(60),
+            'raw_milk_litres' => 100, 'status' => 'active',
+        ]);
+        $this->assertTrue($batch->ready_date->isToday(), 'sanity: ready_date is today');
+        $item = BatchItem::create([
+            'batch_id' => $batch->id, 'product_variant_id' => $wheel->id,
+            'quantity_produced' => 4, 'quantity_remaining' => 4, 'unit_weight_kg' => 4.0,
+        ]);
+
+        // Cycle 18: the item compared a date to a string and said "not ready" on the day itself.
+        $this->assertTrue($batch->isReadyToSell());
+        $this->assertTrue($item->fresh()->isReadyToSell());
+
+        $row = collect(app(StockOverviewService::class)->build()['cheese']['wheels'])->keyBy('batch_code')[$batch->batch_code];
+        $this->assertSame(4, $row['segments']['available']);
+        $this->assertSame(0, $row['segments']['not_ready']);
+    }
 }

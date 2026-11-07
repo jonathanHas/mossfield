@@ -237,19 +237,30 @@ worth returning to.
   commit; cycle files in `archive/2026-11-07-no-prices-for-the-floor/`).
   The floor sees no `€` on `/stock` or `/products`; not-ready cheese is its
   own `not_ready` segment and out of the valuation. Suite 824.
-- **Cycle 17 "Delete guards" — ACCEPTED 2026-11-07, not yet archived,
-  committed or shipped.** The parked cycle 12 restarted from scratch (its
-  WIP branch is not on this clone). `deletionBlocker()` on
+- **Cycle 17 "Delete guards" — ACCEPTED and shipped 2026-11-07**
+  (`738a323`, mossserv at the same commit; cycle files in
+  `archive/2026-11-07-delete-guards/`). The parked cycle 12 restarted from
+  scratch (its WIP branch is not on this clone). `deletionBlocker()` on
   `ProductVariant`, `Product`, `Customer` on the `Batch` pattern; the
   controllers refuse with the sentence as the flash; `/products`,
   `/products/{product}` and `/customers` grey Delete with the reason on
   hover; `products.variants` `scoped()`; `authorize()` in every
   `CustomerController` action; `DeletionGuardTest` (24); three guide
   pictures re-shot; `OPEN_QUESTIONS.md` #7. No migrations. Suite 848.
-  **Next:** Jon archives `plan.md` + `implemented.md` to
-  `archive/2026-11-07-delete-guards/` and ships
-  (`deploy/bin/ship-jon --no-maintenance`). Then the Planner picks the next
-  cycle from `SMALL_FIXES.md` / `OPEN_QUESTIONS.md`.
+- **Cycle 18 "Before go-live" — ACCEPTED 2026-11-07, NOT yet archived
+  or shipped.** Jon's decisions of 2026-11-07, while production is
+  deployed but unused: ten history FKs CASCADE → RESTRICT (migration
+  `2026_11_07_120000_restrict_history_foreign_keys`, `ForeignKeyRestrictTest`;
+  OPEN_QUESTIONS #7 decided + built); invoice send actions — Email invoice
+  on the order page, PDF/Email on Invoices rows, Send all not yet emailed
+  (`invoices.send-all`, `InvoiceSendActionsTest`); "To invoice" everywhere
+  and the sidebar group "Picking"; six small fixes (`BatchItem::isReadyToSell()`
+  delegates; product page Unit column gone); Mossorders flag stays false by
+  decision; 39 guide pictures re-shot. Suite 865, routes 170. Two new
+  polish items in `SMALL_FIXES.md` (3 open). **Next:** Jon archives
+  `plan.md` + `implemented.md` to `archive/2026-11-07-before-go-live/`
+  (and fills the empty `archive/2026-11-07-delete-guards/` from `738a323`),
+  then ships **with maintenance mode** — the migration runs on mossserv.
 
 ## What has been done this run (all in `TESTING_AND_FIXES.md`, newest first)
 
@@ -281,7 +292,7 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **848 tests, 0 failing** as of 2026-11-07 (after cycle 17; 5,824 assertions) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **865 tests, 0 failing** as of 2026-11-07 (after cycle 18; 5,908 assertions) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
 
 ## Dev database — cycle 16d changes, 2026-11-07

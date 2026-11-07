@@ -18,7 +18,7 @@ use Illuminate\Support\Facades\DB;
  *     (weekly/monthly) customers are skipped: they're billed by the period run
  *     in Finance. InvoiceService opens its own transaction, so a failed issue
  *     cannot roll dispatch back — it's recorded on the result and the order sits
- *     in Finance → Awaiting invoice as the safety net.
+ *     in Finance → To invoice as the safety net.
  *  3. Email the priced Dispatch Confirmation. Queued for the run path (N
  *     PDF renders + SMTP round-trips don't belong in one request), sent inline
  *     for a single order so the operator gets an immediate flash. The invoice

@@ -189,7 +189,7 @@ class DispatchRunTest extends TestCase
         $order->refresh();
         $this->assertSame('dispatched', $order->status);
         $this->assertNull($order->invoice_id);
-        $this->assertTrue(UninvoicedOrderController::uninvoicedQuery()->whereKey($order->id)->exists(), 'it waits in Finance → Awaiting invoice');
+        $this->assertTrue(UninvoicedOrderController::uninvoicedQuery()->whereKey($order->id)->exists(), 'it waits in Finance → To invoice');
         // The confirmation still went.
         $this->assertSame(1, DocumentEmail::where('kind', 'dispatch_confirmation')->count());
     }

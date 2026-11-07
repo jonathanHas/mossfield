@@ -277,7 +277,7 @@ class ChilledRunController extends Controller
         if ($invoiceFailed->isNotEmpty()) {
             $parts[] = 'invoice failed: '.$invoiceFailed
                 ->map(fn (DispatchResult $r) => $r->order->order_number.' ('.$r->invoiceError.')')
-                ->implode(', ').' — see Finance → Awaiting invoice';
+                ->implode(', ').' — see Finance → To invoice';
         }
 
         $noEmail = collect($results)->filter(fn (DispatchResult $r) => $r->emailSkippedReason !== null);

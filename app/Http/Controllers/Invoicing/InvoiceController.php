@@ -13,6 +13,7 @@ use App\Services\InvoiceService;
 use App\Services\InvoicingException;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -119,6 +120,46 @@ class InvoiceController extends Controller
         return $row->status->value === 'sent'
             ? back()->with('success', 'Invoice '.$invoice->number.' emailed to '.$row->recipient.'.')
             : back()->with('error', 'Could not send the email. Please try again or check the mail settings.');
+    }
+
+    /**
+     * Queue every invoice that should have been emailed and hasn't
+     * (Invoice::notEmailed()) under one batch id, then land on Sent where
+     * they appear as they go. An invoice with no address is skipped and named.
+     */
+    public function sendAll(Request $request): RedirectResponse
+    {
+        $this->authorize('create', Invoice::class);
+
+        $queue = Invoice::notEmailed()->with('customer')->orderBy('id')->get();
+
+        if ($queue->isEmpty()) {
+            return redirect()->route('invoicing.invoices.index')
+                ->with('warning', 'Nothing to send — every invoice that should be emailed has been.');
+        }
+
+        $batchId = (string) Str::uuid();
+        $queued = 0;
+        $skipped = [];
+
+        foreach ($queue as $invoice) {
+            try {
+                $this->mailer->queue($invoice, $request->user(), batchId: $batchId);
+                $queued++;
+            } catch (InvoicingException $e) {
+                $skipped[] = ($invoice->customer?->name ?? 'Unknown customer').' ('.$invoice->number.')';
+            }
+        }
+
+        $skippedNote = $skipped ? ' Skipped (no email address): '.implode(', ', $skipped).'.' : '';
+
+        if ($queued === 0) {
+            return redirect()->route('invoicing.invoices.index')
+                ->with('error', 'No invoices were queued.'.$skippedNote);
+        }
+
+        return redirect()->route('invoicing.emails.index')->with('success',
+            $queued.' '.Str::plural('invoice', $queued).' queued for sending — they appear below as they go.'.$skippedNote);
     }
 
     public function remind(Invoice $invoice): RedirectResponse

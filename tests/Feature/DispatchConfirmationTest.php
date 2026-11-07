@@ -298,7 +298,7 @@ class DispatchConfirmationTest extends InvoicingTestCase
             ->assertSee('Unpaid')
             ->assertSee(route('invoicing.invoices.show', $order->fresh()->invoice))
             ->assertSee('Sent')
-            ->assertDontSee('Awaiting invoice')
+            ->assertDontSee('muted);">To invoice</span>', false)
             ->assertDontSee('Awaiting dispatch');
     }
 
@@ -315,7 +315,7 @@ class DispatchConfirmationTest extends InvoicingTestCase
             ->get(route('orders.show', $order))
             ->assertOk()
             ->assertDontSee('INV-000001')
-            ->assertDontSee('Awaiting invoice')
+            ->assertDontSee('muted);">To invoice</span>', false)
             ->assertDontSee('>Payment<', false);
     }
 }

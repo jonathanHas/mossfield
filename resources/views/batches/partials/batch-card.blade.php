@@ -182,7 +182,7 @@
                     @if($deletionBlocker = $batch->deletionBlocker())
                         @php $dependents = $batch->dependentRecordCount(); @endphp
                         <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
-                              title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                              title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on this. {{ $deletionBlocker }}">Delete</span>
                     @else
                         <form action="{{ route('batches.destroy', $batch) }}" method="POST" class="inline">
                             @csrf @method('DELETE')

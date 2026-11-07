@@ -474,11 +474,11 @@ class OrderTransitionsTest extends TestCase
 
         $this->actingAs($office)->get(route('orders.show', $ready))->assertOk()
             ->assertSee('Awaiting dispatch — invoiced when dispatched')
-            ->assertDontSee('Awaiting invoice');
+            ->assertDontSee('muted);">To invoice</span>', false);
 
         $shipped = $this->makeOrder('dispatched');
         $this->actingAs($office)->get(route('orders.show', $shipped))->assertOk()
-            ->assertSee('Awaiting invoice')
+            ->assertSee('muted);">To invoice</span>', false)
             ->assertDontSee('Awaiting dispatch — invoiced when dispatched');
     }
 

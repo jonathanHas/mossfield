@@ -5,7 +5,7 @@
         <div class="mb-4">
             <h1 class="text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">Sent documents</h1>
             <div class="mt-0.5 text-[13px]" style="color: var(--muted);">
-                Every invoice, credit note, statement, reminder and docket emailed from here — including the ones that failed.
+                Every invoice, credit note, statement, reminder, dispatch confirmation and docket emailed from here — including the ones that failed.
             </div>
         </div>
 

@@ -33,7 +33,7 @@
         $groups[] = ['label' => 'Finance', 'items' => \App\View\FinanceNav::items()];
     }
 
-    // Fulfillment — picking + allocation
+    // Picking — picking + allocation
     $fulfillItems = [];
     if ($canSeeOrders) {
         $fulfillItems[] = ['id' => 'picking', 'label' => 'Picking', 'route' => 'picking.index', 'match' => 'picking.*', 'icon' => 'package'];
@@ -41,7 +41,7 @@
     if ($canSeeAllocation) {
         $fulfillItems[] = ['id' => 'alloc', 'label' => 'Stock Allocation', 'route' => 'order-allocations.index', 'match' => 'order-allocations.*', 'icon' => 'alloc'];
     }
-    if ($fulfillItems) $groups[] = ['label' => 'Fulfillment', 'items' => $fulfillItems];
+    if ($fulfillItems) $groups[] = ['label' => 'Picking', 'items' => $fulfillItems];
 
     // Miscellaneous — delivery runs + customers (office+admin)
     $miscItems = [];

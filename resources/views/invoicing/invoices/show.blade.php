@@ -258,7 +258,7 @@
                             <dt style="color: var(--muted);">Delivery charge</dt>
                             <dd class="font-mono text-right">€{{ number_format((float) $invoice->delivery_charge_net, 2) }}</dd>
                         @endif
-                        <dt style="color: var(--muted);">{{ (float) $invoice->delivery_charge_net > 0 ? 'VAT (23%)' : 'Tax' }}</dt>
+                        <dt style="color: var(--muted);">VAT</dt>
                         <dd class="font-mono text-right">€{{ number_format((float) $invoice->tax_amount, 2) }}</dd>
                         <dt class="font-semibold pt-2" style="border-top: 1px solid var(--line-2);">Total</dt>
                         <dd class="font-mono text-right font-semibold pt-2" style="border-top: 1px solid var(--line-2);">€{{ number_format((float) $invoice->total, 2) }}</dd>

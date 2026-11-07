@@ -390,6 +390,9 @@ class BackupRestoreTest extends TestCase
     {
         $this->seedBusinessData();
         $upload = $this->archiveUpload();
+        // orders.customer_id is RESTRICT (cycle 18) — the order goes first.
+        OrderItem::query()->delete();
+        Order::query()->delete();
         Customer::query()->delete();
 
         $this->actingAs($this->admin)->post(route('backup.restore'), [

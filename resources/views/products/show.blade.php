@@ -109,7 +109,6 @@
                             <tr>
                                 <th class="mf-th">Name</th>
                                 <th class="mf-th">Size</th>
-                                <th class="mf-th">Unit</th>
                                 <th class="mf-th">Weight</th>
                                 @can('see-financials')
                                     <th class="mf-th">Price</th>
@@ -139,7 +138,6 @@
                                         </div>
                                     </td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $variant->size }}</td>
-                                    <td class="mf-td" style="color: var(--muted);">{{ $variant->unit }}</td>
                                     <td class="mf-td font-mono" style="color: var(--muted);">{{ $variant->weight_kg ?? '—' }}</td>
                                     @can('see-financials')
                                         <td class="mf-td font-mono font-medium">{{ $variant->price_label }}</td>
@@ -152,7 +150,7 @@
                                             <span class="mf-tag mf-tag-danger">Inactive</span>
                                         @endif
                                     </td>
-                                    <td class="mf-td text-right whitespace-nowrap">
+                                    <td class="mf-td text-right">
                                         @can('update', $product)
                                             <a href="{{ route('products.variants.edit', [$product, $variant]) }}" class="mf-link">Edit</a>
                                             <span style="color: var(--faint);">·</span>
@@ -161,7 +159,7 @@
                                             @if($deletionBlocker = $variant->deletionBlocker())
                                                 @php $dependents = $variant->dependentRecordCount(); @endphp
                                                 <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
-                                                      title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                                      title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on this. {{ $deletionBlocker }}">Delete</span>
                                             @else
                                                 <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline" data-confirm-title="Delete this variant?" data-confirm="The variant is removed. This can't be undone." data-confirm-label="Delete" data-confirm-danger>
                                                     @csrf @method('DELETE')

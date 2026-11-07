@@ -20,7 +20,7 @@
                     :tone="$stats['not_emailed'] > 0 ? 'warn' : null" />
             </a>
             <a href="{{ route('invoicing.uninvoiced.index') }}">
-                <x-dash-kpi label="Awaiting invoice" :value="$stats['uninvoiced']"
+                <x-dash-kpi label="To invoice" :value="$stats['uninvoiced']"
                     :sub="$stats['uninvoiced'] > 0 ? 'to bill' : null"
                     :tone="$stats['uninvoiced'] > 0 ? 'warn' : null" />
             </a>
@@ -69,7 +69,25 @@
                 </div>
                 <button type="submit" class="mf-btn-secondary">Filter</button>
                 <a href="{{ route('invoicing.invoices.index') }}" class="mf-link text-[12.5px]">Clear</a>
+                @if($stats['not_emailed'] > 0)
+                    @can('create', \App\Models\Invoice::class)
+                        {{-- Posts the sibling #send-all-form below: a form can't nest in the GET filter form. --}}
+                        <button type="submit" form="send-all-form" class="mf-btn-secondary sm:ml-auto"
+                                data-confirm-title="Send all unsent invoices?"
+                                data-confirm="{{ $stats['not_emailed'] }} {{ Str::plural('invoice', $stats['not_emailed']) }} {{ $stats['not_emailed'] === 1 ? 'is' : 'are' }} emailed to each customer's billing address, one at a time, and each send is logged under Sent."
+                                data-confirm-label="Send all">
+                            Send all not yet emailed ({{ $stats['not_emailed'] }})
+                        </button>
+                    @endcan
+                @endif
             </form>
+            @if($stats['not_emailed'] > 0)
+                @can('create', \App\Models\Invoice::class)
+                    <form id="send-all-form" method="POST" action="{{ route('invoicing.invoices.send-all') }}" class="hidden">
+                        @csrf
+                    </form>
+                @endcan
+            @endif
         </div>
 
         <div class="mf-panel">
@@ -84,6 +102,7 @@
                         <th class="mf-th text-right">Balance</th>
                         <th class="mf-th">State</th>
                         <th class="mf-th">Emailed</th>
+                        <th class="mf-th text-right"></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -112,10 +131,25 @@
                                     <span class="mf-tag mf-tag-warn">Not sent</span>
                                 @endif
                             </td>
+                            <td class="mf-td text-right whitespace-nowrap text-[12.5px]">
+                                <a href="{{ route('invoicing.invoices.pdf', $invoice) }}" target="_blank" rel="noopener" class="mf-link">PDF</a>
+                                @if($invoice->isIssued() && ! $invoice->hasBeenEmailed() && $invoice->customer?->wantsEmailedInvoices() && $invoice->documentRecipient())
+                                    @can('email', $invoice)
+                                        ·
+                                        <form method="POST" action="{{ route('invoicing.invoices.email', $invoice) }}" class="inline"
+                                              data-confirm-title="Email this invoice?"
+                                              data-confirm="Invoice {{ $invoice->number }} goes to {{ $invoice->documentRecipient() }} now. The send is logged under Finance → Sent."
+                                              data-confirm-label="Send">
+                                            @csrf
+                                            <button type="submit" class="mf-link">Email</button>
+                                        </form>
+                                    @endcan
+                                @endif
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="mf-td text-center py-6" style="color: var(--muted);">
+                            <td colspan="9" class="mf-td text-center py-6" style="color: var(--muted);">
                                 No invoices match these filters.
                             </td>
                         </tr>

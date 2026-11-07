@@ -315,7 +315,7 @@ class BatchCreateTest extends TestCase
         $html = $this->actingAs($admin)->get(route('batches.index'))->assertOk()->getContent();
         $this->assertStringContainsString('data-confirm="Batch '.$fresh->batch_code." and its items are removed. This can't be undone.\"", $html);
         $this->assertStringNotContainsString('data-confirm="Delete batch '.$held->batch_code, $html);
-        $this->assertStringContainsString("Can't delete — 1 record depends on it", $html);
+        $this->assertStringContainsString("Can't delete — 1 record depends on this", $html);
         $this->assertSame(1, substr_count($html, 'data-delete-blocked'));
 
         // The deletion counts ride the one batch_items eager-load however many

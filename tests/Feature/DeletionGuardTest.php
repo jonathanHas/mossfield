@@ -285,8 +285,8 @@ class DeletionGuardTest extends TestCase
 
         // The product (1 batch) and its 1L variant (1 batch item); the 2L and the probe are free.
         $this->assertSame(2, substr_count($html, 'data-delete-blocked'));
-        $this->assertStringContainsString("Can't delete — 1 record depends on it. ".e($this->milk->fresh()->deletionBlocker()), $html);
-        $this->assertStringContainsString("Can't delete — 1 record depends on it. ".e($this->bottle->fresh()->deletionBlocker()), $html);
+        $this->assertStringContainsString("Can't delete — 1 record depends on this. ".e($this->milk->fresh()->deletionBlocker()), $html);
+        $this->assertStringContainsString("Can't delete — 1 record depends on this. ".e($this->bottle->fresh()->deletionBlocker()), $html);
         $this->assertStringContainsString('action="'.route('products.destroy', $probe).'"', $html);
         $this->assertStringNotContainsString('action="'.route('products.destroy', $this->milk).'"', $html);
         $this->assertStringContainsString('action="'.route('products.variants.destroy', [$this->milk, $this->twoLitre]).'"', $html);
@@ -300,7 +300,7 @@ class DeletionGuardTest extends TestCase
         $html = $this->actingAs(User::factory()->create())->get(route('products.show', $this->milk))->assertOk()->getContent();
 
         $this->assertSame(1, substr_count($html, 'data-delete-blocked'));
-        $this->assertStringContainsString("Can't delete — 1 record depends on it. ".e("Guard Milk · 1L Bottle can't be deleted — 1 order line depends on it"), $html);
+        $this->assertStringContainsString("Can't delete — 1 record depends on this. ".e("Guard Milk · 1L Bottle can't be deleted — 1 order line depends on it"), $html);
         $this->assertStringContainsString('action="'.route('products.variants.destroy', [$this->milk, $this->twoLitre]).'"', $html);
         $this->assertStringNotContainsString('action="'.route('products.variants.destroy', [$this->milk, $this->bottle]).'"', $html);
     }
@@ -412,7 +412,7 @@ class DeletionGuardTest extends TestCase
         $html = $this->actingAs(User::factory()->create())->get(route('customers.index'))->assertOk()->getContent();
 
         $this->assertSame(1, substr_count($html, 'data-delete-blocked'));
-        $this->assertStringContainsString("Can't delete — 1 record depends on it. ".e($blocked->deletionBlocker()), $html);
+        $this->assertStringContainsString("Can't delete — 1 record depends on this. ".e($blocked->deletionBlocker()), $html);
         $this->assertStringContainsString('action="'.route('customers.destroy', $bare).'"', $html);
         $this->assertStringNotContainsString('action="'.route('customers.destroy', $blocked).'"', $html);
     }

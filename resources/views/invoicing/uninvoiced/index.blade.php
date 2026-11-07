@@ -4,7 +4,7 @@
     <div class="px-6 py-5">
         <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-4">
             <div>
-                <h1 class="text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">Awaiting invoice</h1>
+                <h1 class="text-[22px] font-display font-medium" style="letter-spacing: -0.4px;">To invoice</h1>
                 <div class="mt-0.5 text-[13px]" style="color: var(--muted);">
                     Dispatch issues invoices automatically, so this is the exceptions list: deliveries where the
                     auto-issue failed, customers on weekly/monthly billing waiting for their period run, and

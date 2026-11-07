@@ -552,7 +552,7 @@ class OrderController extends Controller
         } elseif ($result->invoice) {
             $success .= ' Already on invoice '.$result->invoice->number.'.';
         } elseif ($result->invoiceError) {
-            $problems[] = 'Invoice not issued: '.$result->invoiceError.' The order is in Finance → Awaiting invoice.';
+            $problems[] = 'Invoice not issued: '.$result->invoiceError.' The order is in Finance → To invoice.';
         }
 
         if ($result->emailSent()) {

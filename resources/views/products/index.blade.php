@@ -83,7 +83,7 @@
                                         @if($deletionBlocker = $product->deletionBlocker())
                                             @php $dependents = $product->dependentRecordCount(); @endphp
                                             <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
-                                                  title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                                  title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on this. {{ $deletionBlocker }}">Delete</span>
                                         @else
                                             <form action="{{ route('products.destroy', $product) }}" method="POST" class="inline">
                                                 @csrf @method('DELETE')
@@ -163,7 +163,7 @@
                                                                 @if($deletionBlocker = $variant->deletionBlocker())
                                                                     @php $dependents = $variant->dependentRecordCount(); @endphp
                                                                     <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
-                                                                          title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                                                          title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on this. {{ $deletionBlocker }}">Delete</span>
                                                                 @else
                                                                     <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline">
                                                                         @csrf @method('DELETE')
