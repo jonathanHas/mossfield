@@ -83,6 +83,18 @@ Most of these need no test. Where one is worth having, it says so.
   date-cast `ready_date`; make the item delegate to the batch so there is
   one. *Source: Implementer's note, cycle 16e, 2026-11-07.*
 
+- [ ] **The variants table on `/products/{product}` overflows its panel at
+  1280 px**, cutting the actions cell at "Edit · Dupli…" — Duplicate and
+  Delete (greyed or red) are off the right edge, so the guide's
+  `product-page.png` can't show the delete guard. Wrap the actions, narrow
+  the columns, or drop the Unit column (it repeats Size for every seeded
+  variant). *Source: Implementer's note, cycle 17, 2026-11-07.*
+
+- [ ] **Greyed-Delete hover says "depend on it" before a customer sentence
+  that says "depend on them".** The prefix is the shared construct in the
+  three list views and the batch card; "on this" would suit all four.
+  *Source: Implementer's note, cycle 17, 2026-11-07.*
+
 - [x] **Batch progress bar has five segments and a four-item legend.** Renders as
   `29 · 0 · 2 · 3 · 4 / 38` with one unexplained `0`. Either label it or drop it.
   *Source: browser pass, cosmetic list.*

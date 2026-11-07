@@ -272,3 +272,20 @@ as the order screens do; the `€/kg` tag carries no figure and may stay. The
 floor keeps the counts. A test per screen that a factory response contains
 no `€`. The guide pictures stay blurred (they are shot as office). To be
 built as a short cycle after 16d ships.
+
+## 7. The delete-cascade foreign keys are still in the schema
+
+**Raised:** 2026-11-07 (cycle 17) · **Status:** open.
+
+Cycle 17 made the app refuse to delete a product, variant or customer that
+history depends on (`deletionBlocker()` on each model). The schema still
+cascades underneath: `orders.customer_id` (customer → orders → lines),
+`products → batches → batch_items → order_allocations / cutting / conversion
+/ write-offs`, and `product_variants → order_items / batch_items`. A delete
+that bypasses the controllers (tinker, a future command, a new route that
+forgets the blocker) would still take that history with it, silently.
+
+Switch those FKs to RESTRICT in a migration, so the database is the
+backstop the finance tables already have? It touches live tables, so it is
+a deploy-window decision, not a code one.
+

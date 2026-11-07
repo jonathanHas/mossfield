@@ -90,6 +90,59 @@ baseline.
 
 ---
 
+## 2026-11-07 — Delete guards: products, variants and customers refuse when history depends on them (Plan/Implement cycle 17)
+
+**Scope.** The parked cycle 12, restarted from scratch (its WIP branch was
+never pushed and is not on this clone). Deleting a product or a variant
+cascaded through the schema — batches, batch items, allocations, cutting
+and conversion logs, write-offs, order lines, special prices — and the
+controllers refused nothing; a customer with a payment, invoice, credit
+note or statement but no orders hit the finance tables' RESTRICT as a 500.
+Plan and report in `archive/2026-11-07-delete-guards/`.
+
+**What landed.**
+
+- `ProductVariant::deletionBlocker()` (batch items, order lines, customer
+  special prices; new relations `orderItems()`, `specialPrices()`; public
+  `dependentCounts()`), `Product::deletionBlocker()` (batches + the
+  variants' order lines and special prices — not their batch items, which
+  live inside the batches), `Customer::deletionBlocker()` (orders,
+  invoices, payments, credit notes, statements; special prices cascade).
+  All on the `Batch` pattern: `*_count` attributes read by
+  `array_key_exists` when the loader counted them, else one `loadCount`.
+- `ProductController::destroy()`, `ProductVariantController::destroy()`
+  (which also gains the `authorize()` it never had) and
+  `CustomerController::destroy()` refuse with the sentence as the `error`
+  flash. `authorize()` in every `CustomerController` action.
+- `/products`, `/products/{product}` and `/customers` grey Delete on a
+  blocked row with "Can't delete — N records depend on it. <sentence>" as
+  the hover title (the batch-card construct, `data-delete-blocked`); the
+  dialog bodies are consequence-only. Loaders carry the counts
+  (`withCount`, `chaperone()` on the variant loads so `picker_label`
+  doesn't lazy-load); `/products` stays at 5 queries and `/customers` at 2
+  whatever the number of blocked rows.
+- `products.variants` is `scoped()`: `DELETE /products/1/variants/9` with
+  variant 9 under product 2 is a 404, not a deletion.
+- Guide: a Delete sentence in `stock.md` and `customers.md`; `products-index`,
+  `product-page`, `customers-list` re-shot. `CLAUDE.md` rule generalised;
+  `OPEN_QUESTIONS.md` #7 (the cascading FKs are still in the schema).
+- `tests/Feature/DeletionGuardTest.php`, 24 cases: the sentences and
+  counts per model, 0 queries off a `withCount` load, refusals and
+  successful deletes, factory 403, the cross-product 404, the pages'
+  `data-delete-blocked` counts and titles, query counts not growing.
+
+**Things to know.**
+
+- The payment-only customer was a real 500 on HEAD (SQLSTATE 23000/1451,
+  `payments_customer_id_foreign`); it is a sentence now.
+- Cancelled orders' lines still count as dependents — they are kept on
+  cancel as history, deliberately.
+- Deactivate, don't delete: `is_active` on all three models is the answer
+  the sentences give.
+- `product-page.png` can't show the variant Delete — the variants table on
+  `/products/{product}` overflows at 1280 px (pre-existing; `SMALL_FIXES.md`).
+- No migrations, no FK changes, no CSS/JS. Suite 848 (5,824 assertions).
+
 ## 2026-11-07 — No prices for the floor; `/stock` tells not-ready cheese apart (Plan/Implement cycle 16e)
 
 **Scope.** Jon's decision (`OPEN_QUESTIONS.md` #6): a factory login sees no

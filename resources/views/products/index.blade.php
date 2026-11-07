@@ -79,11 +79,18 @@
                                     @endcan
                                     @can('delete', $product)
                                         <span style="color: var(--faint);">·</span>
-                                        <form action="{{ route('products.destroy', $product) }}" method="POST" class="inline">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                    data-confirm-title="Delete this product?" data-confirm="This deletes the product, its variants, and every batch and order line that uses them. It can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
-                                        </form>
+                                        {{-- Product::deletionBlocker() is the rule; the counts ride the index's withCount. --}}
+                                        @if($deletionBlocker = $product->deletionBlocker())
+                                            @php $dependents = $product->dependentRecordCount(); @endphp
+                                            <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
+                                                  title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                        @else
+                                            <form action="{{ route('products.destroy', $product) }}" method="POST" class="inline">
+                                                @csrf @method('DELETE')
+                                                <button type="submit" class="mf-link" style="color: var(--danger);"
+                                                        data-confirm-title="Delete this product?" data-confirm="The product and its variants are removed. This can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
+                                            </form>
+                                        @endif
                                     @endcan
                                 </div>
                             </div>
@@ -153,11 +160,17 @@
                                                                 <span style="color: var(--faint);">·</span>
                                                                 <a href="{{ route('products.variants.create', ['product' => $product, 'from' => $variant->id]) }}" class="mf-link">Duplicate</a>
                                                                 <span style="color: var(--faint);">·</span>
-                                                                <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline">
-                                                                    @csrf @method('DELETE')
-                                                                    <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                                            data-confirm-title="Delete this variant?" data-confirm="This deletes the variant, its stock in every batch, and every order line for it. It can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
-                                                                </form>
+                                                                @if($deletionBlocker = $variant->deletionBlocker())
+                                                                    @php $dependents = $variant->dependentRecordCount(); @endphp
+                                                                    <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
+                                                                          title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                                                @else
+                                                                    <form action="{{ route('products.variants.destroy', [$product, $variant]) }}" method="POST" class="inline">
+                                                                        @csrf @method('DELETE')
+                                                                        <button type="submit" class="mf-link" style="color: var(--danger);"
+                                                                                data-confirm-title="Delete this variant?" data-confirm="The variant is removed. This can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
+                                                                    </form>
+                                                                @endif
                                                             @endcan
                                                         </td>
                                                     </tr>

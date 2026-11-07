@@ -57,6 +57,81 @@ class ProductVariant extends Model
         return $this->hasMany(BatchItem::class);
     }
 
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class);
+    }
+
+    public function specialPrices(): HasMany
+    {
+        return $this->hasMany(CustomerSpecialPrice::class);
+    }
+
+    /**
+     * Why this variant can't be deleted, or null when it can. The one place the
+     * rule lives: the /products pages grey Delete on it,
+     * ProductVariantController::destroy() refuses on it. Batch items and order
+     * lines are history; special prices are config, but deleting the variant
+     * would still silently drop them.
+     */
+    public function deletionBlocker(): ?string
+    {
+        ['batch_items' => $batchItems, 'order_lines' => $orderLines, 'special_prices' => $specialPrices] = $this->dependentCounts();
+
+        $reasons = [];
+        if ($batchItems) {
+            $reasons[] = $batchItems.' batch '.($batchItems === 1 ? 'item' : 'items');
+        }
+        if ($orderLines) {
+            $reasons[] = $orderLines.' order '.($orderLines === 1 ? 'line' : 'lines');
+        }
+        if ($specialPrices) {
+            $reasons[] = $specialPrices.' customer special '.($specialPrices === 1 ? 'price' : 'prices');
+        }
+
+        if (! $reasons) {
+            return null;
+        }
+
+        $total = $batchItems + $orderLines + $specialPrices;
+        $history = ($batchItems || $orderLines) ? ' from past batches and orders' : '';
+
+        return $this->picker_label.' can\'t be deleted — '.implode(' and ', $reasons).
+            ($total === 1 ? ' depends' : ' depend').' on it, and deleting it would remove '.
+            ($total === 1 ? 'it' : 'them').$history.'. Set the variant inactive instead.';
+    }
+
+    /** How many records hold the variant in place ("Can't delete — N records …"). */
+    public function dependentRecordCount(): int
+    {
+        return array_sum($this->dependentCounts());
+    }
+
+    /**
+     * Batch items, order lines and special prices on this variant. Reads the
+     * *_count attributes when the caller eager-loaded them (the /products
+     * loaders — read by array_key_exists, never ??, which re-queries on NULL),
+     * else one loadCount query. Public so Product can sum its variants'.
+     *
+     * @return array{batch_items: int, order_lines: int, special_prices: int}
+     */
+    public function dependentCounts(): array
+    {
+        $keys = ['batch_items_count', 'order_items_count', 'special_prices_count'];
+
+        if (! collect($keys)->every(fn ($k) => array_key_exists($k, $this->getAttributes()))) {
+            $this->loadCount(['batchItems', 'orderItems', 'specialPrices']);
+        }
+
+        $attributes = $this->getAttributes();
+
+        return [
+            'batch_items' => (int) $attributes['batch_items_count'],
+            'order_lines' => (int) $attributes['order_items_count'],
+            'special_prices' => (int) $attributes['special_prices_count'],
+        ];
+    }
+
     /**
      * The app's wheel classification (same test the cutting/conversion
      * controllers and the batch cards apply to the variant name).

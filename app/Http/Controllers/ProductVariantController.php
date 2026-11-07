@@ -86,6 +86,11 @@ class ProductVariantController extends Controller
      */
     public function destroy(Product $product, ProductVariant $variant): RedirectResponse
     {
+        $this->authorize('delete', $variant);
+        if ($blocker = $variant->deletionBlocker()) {
+            return redirect()->route('products.show', $product)->with('error', $blocker);
+        }
+
         if ($variant->image_path) {
             Storage::disk('public')->delete($variant->image_path);
         }

@@ -198,7 +198,8 @@ Route::middleware(['auth', 'role:admin,office'])->group(function () {
     Route::resource('customers.special-prices', CustomerSpecialPriceController::class)
         ->only(['store', 'update', 'destroy']);
     Route::resource('products.variants', ProductVariantController::class)
-        ->except(['index', 'show']);
+        ->except(['index', 'show'])
+        ->scoped();
 
     // Cheese cutting write actions — factory will get this later.
     Route::get('/cheese-cutting/cut/{batchItem}', [\App\Http\Controllers\CheeseCuttingController::class, 'create'])->name('cheese-cutting.create');

@@ -29,6 +29,7 @@ Open **Products**. Products are grouped by type; each product lists its variants
 - The *Stock* column is free stock: what can still be sold, after reservations and maturing holds, in batches that have not expired. It is the same figure the order screens, the run sheet and the online shop use.
 - The *Price* column is shown to the office only.
 - **View** opens a product with its variants and its recent batches, beside the list of the other products.
+- **Delete** on a product or a variant works only while nothing depends on it: no batches, order lines or customer prices. Otherwise it is greyed out; point at it to see why. To stop selling something, untick **Active** instead (**Edit**).
 
 ![A product page](images/product-page.png)
 

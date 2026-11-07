@@ -10,7 +10,7 @@ Open **Customers** in the sidebar.
 
 - Type part of the name or email in **Search**; the list filters as you type.
 - **Status** switches between all, active only and inactive only.
-- **View** opens the customer page, **Edit** the form. **Delete** is offered only for a customer with no orders.
+- **View** opens the customer page, **Edit** the form. **Delete** works only for a customer with no orders, invoices, payments, credit notes or statements; otherwise it is greyed out (point at it to see why), and the customer is set inactive instead.
 - The *Credit limit* column reads "No limit" where none is set.
 
 ## Add or change a customer

@@ -20,7 +20,13 @@ class ProductController extends Controller
         $this->authorize('viewAny', Product::class);
         $typeOrder = ['milk', 'yoghurt', 'cheese'];
 
-        $products = Product::with(['variants' => fn ($query) => $query->orderBy('name')])
+        // The deletion counts (Product/ProductVariant::deletionBlocker()) ride
+        // this load; chaperone() sets variant->product so a blocked variant's
+        // picker_label doesn't lazy-load it.
+        $products = Product::withCount('batches')
+            ->with(['variants' => fn ($query) => $query->orderBy('name')
+                ->withCount(['batchItems', 'orderItems', 'specialPrices'])
+                ->chaperone()])
             ->orderBy('name')
             ->get();
 
@@ -60,8 +66,11 @@ class ProductController extends Controller
     public function show(Request $request, Product $product): View
     {
         $this->authorize('view', $product);
+        $product->loadCount('batches');
         $product->load([
-            'variants',
+            'variants' => fn ($query) => $query
+                ->withCount(['batchItems', 'orderItems', 'specialPrices'])
+                ->chaperone(),
             'batches' => function ($query) {
                 $query->orderByDesc('production_date')->limit(10);
             },
@@ -107,6 +116,10 @@ class ProductController extends Controller
     public function destroy(Product $product): RedirectResponse
     {
         $this->authorize('delete', $product);
+        if ($blocker = $product->deletionBlocker()) {
+            return redirect()->route('products.show', $product)->with('error', $blocker);
+        }
+
         if ($product->image_path) {
             Storage::disk('public')->delete($product->image_path);
         }

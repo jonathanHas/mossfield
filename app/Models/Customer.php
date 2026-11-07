@@ -173,6 +173,71 @@ class Customer extends Model
     }
 
     /**
+     * Why this customer can't be deleted, or null when it can. The one place
+     * the rule lives: /customers greys Delete on it, CustomerController::destroy()
+     * refuses on it. Orders cascade in the schema and the four finance tables
+     * RESTRICT (a 500), so both are refused here with a sentence. Special
+     * prices are the customer's own config and go with them.
+     */
+    public function deletionBlocker(): ?string
+    {
+        $labels = [
+            'orders' => ['order', 'orders'],
+            'invoices' => ['invoice', 'invoices'],
+            'payments' => ['payment', 'payments'],
+            'credit_notes' => ['credit note', 'credit notes'],
+            'statements' => ['statement', 'statements'],
+        ];
+
+        $reasons = [];
+        foreach ($this->dependentCounts() as $key => $count) {
+            if ($count) {
+                $reasons[] = $count.' '.$labels[$key][$count === 1 ? 0 : 1];
+            }
+        }
+
+        if (! $reasons) {
+            return null;
+        }
+
+        return $this->name.' can\'t be deleted — '.implode(' and ', $reasons).
+            ($this->dependentRecordCount() === 1 ? ' depends' : ' depend').
+            ' on them. Set the customer inactive instead.';
+    }
+
+    /** How many records hold the customer in place ("Can't delete — N records …"). */
+    public function dependentRecordCount(): int
+    {
+        return array_sum($this->dependentCounts());
+    }
+
+    /**
+     * Orders, invoices, payments, credit notes and statements. Reads the
+     * *_count attributes when the caller loaded all five (CustomerController::index(),
+     * by array_key_exists — never ??), else one loadCount query.
+     *
+     * @return array{orders: int, invoices: int, payments: int, credit_notes: int, statements: int}
+     */
+    private function dependentCounts(): array
+    {
+        $keys = ['orders_count', 'invoices_count', 'payments_count', 'credit_notes_count', 'statements_count'];
+
+        if (! collect($keys)->every(fn ($k) => array_key_exists($k, $this->getAttributes()))) {
+            $this->loadCount(['orders', 'invoices', 'payments', 'creditNotes', 'statements']);
+        }
+
+        $attributes = $this->getAttributes();
+
+        return [
+            'orders' => (int) $attributes['orders_count'],
+            'invoices' => (int) $attributes['invoices_count'],
+            'payments' => (int) $attributes['payments_count'],
+            'credit_notes' => (int) $attributes['credit_notes_count'],
+            'statements' => (int) $attributes['statements_count'],
+        ];
+    }
+
+    /**
      * Where invoices, credit notes, statements and reminders are sent: the
      * dedicated billing address if the customer has one, else their main email.
      */

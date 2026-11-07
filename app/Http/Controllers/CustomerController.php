@@ -14,7 +14,10 @@ class CustomerController extends Controller
 {
     public function index(Request $request): View
     {
-        $query = Customer::withCount('orders');
+        $this->authorize('viewAny', Customer::class);
+        // The five counts are Customer::deletionBlocker()'s — read per row by
+        // array_key_exists, no per-row query. The Orders column reads orders_count.
+        $query = Customer::withCount(['orders', 'invoices', 'payments', 'creditNotes', 'statements']);
 
         // Search by name or email
         if ($request->filled('search')) {
@@ -46,11 +49,14 @@ class CustomerController extends Controller
 
     public function create(): View
     {
+        $this->authorize('create', Customer::class);
+
         return view('customers.create');
     }
 
     public function store(Request $request): RedirectResponse
     {
+        $this->authorize('create', Customer::class);
         $this->tidyInput($request);
         $validated = $this->normalise($request->validate($this->rules($request), $this->messages()), $request);
 
@@ -66,6 +72,7 @@ class CustomerController extends Controller
 
     public function show(Customer $customer): View
     {
+        $this->authorize('view', $customer);
         $customer->load([
             'orders' => function ($query) {
                 $query->orderBy('order_date', 'desc');
@@ -99,11 +106,14 @@ class CustomerController extends Controller
 
     public function edit(Customer $customer): View
     {
+        $this->authorize('update', $customer);
+
         return view('customers.edit', compact('customer'));
     }
 
     public function update(Request $request, Customer $customer): RedirectResponse
     {
+        $this->authorize('update', $customer);
         $this->tidyInput($request);
         $validated = $this->normalise($request->validate($this->rules($request, $customer), $this->messages()), $request);
 
@@ -238,14 +248,14 @@ class CustomerController extends Controller
 
     public function destroy(Request $request, Customer $customer): RedirectResponse
     {
+        $this->authorize('delete', $customer);
+
         // Back to the list as it was filtered (the delete form carries the
         // index's search / is_active query).
         $filters = array_filter($request->only('search', 'is_active'), fn ($value) => $value !== null && $value !== '');
 
-        // Check if customer has orders
-        if ($customer->orders()->count() > 0) {
-            return redirect()->route('customers.index', $filters)
-                ->with('error', 'Cannot delete customer with existing orders. Please set customer to inactive instead.');
+        if ($blocker = $customer->deletionBlocker()) {
+            return redirect()->route('customers.index', $filters)->with('error', $blocker);
         }
 
         $customer->delete();

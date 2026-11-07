@@ -96,13 +96,18 @@
                                     <a href="{{ route('customers.show', $customer) }}" class="mf-link">View</a>
                                     <span style="color: var(--faint);"> · </span>
                                     <a href="{{ route('customers.edit', $customer) }}" class="mf-link">Edit</a>
-                                    @if($customer->orders_count === 0)
-                                        <span style="color: var(--faint);"> · </span>
+                                    <span style="color: var(--faint);"> · </span>
+                                    {{-- Customer::deletionBlocker() is the rule; the counts ride the index's withCount. --}}
+                                    @if($deletionBlocker = $customer->deletionBlocker())
+                                        @php $dependents = $customer->dependentRecordCount(); @endphp
+                                        <span class="mf-link" style="color: var(--faint); cursor: not-allowed;" aria-disabled="true" data-delete-blocked
+                                              title="Can't delete — {{ $dependents }} {{ Str::plural('record', $dependents) }} {{ $dependents === 1 ? 'depends' : 'depend' }} on it. {{ $deletionBlocker }}">Delete</span>
+                                    @else
                                         <form action="{{ route('customers.destroy', array_merge(['customer' => $customer], request()->only('search', 'is_active'))) }}" method="POST" class="inline">
                                             @csrf
                                             @method('DELETE')
                                             <button type="submit" class="mf-link" style="color: var(--danger);"
-                                                    data-confirm-title="Delete this customer?" data-confirm="This deletes the customer and their special prices. A customer with orders can't be deleted — set them inactive instead." data-confirm-label="Delete" data-confirm-danger>Delete</button>
+                                                    data-confirm-title="Delete this customer?" data-confirm="The customer and their special prices are removed. This can't be undone." data-confirm-label="Delete" data-confirm-danger>Delete</button>
                                         </form>
                                     @endif
                                 </td>
