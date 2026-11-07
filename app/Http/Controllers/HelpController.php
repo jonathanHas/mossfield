@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -14,10 +15,26 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
  * Path safety is the route regexes ([a-z0-9-]+ with an optional .md, and
  * [a-z0-9-]+\.png) plus the is_file check here — nothing else can reach a
  * file outside the guide folder. Read-only: nothing on these pages writes.
+ *
+ * Who reads what: every page has an audience in AUDIENCE. `office` pages (and
+ * the pictures only they use) show money, so they need the see-financials gate
+ * the rest of the app hides prices behind; the floor gets a 403. A page
+ * missing from the map is treated as `office` — fail closed.
  */
 class HelpController extends Controller
 {
     private const DIR = 'docs/guide';
+
+    /** Every guide page and who may read it: `all`, or `office` (see-financials). */
+    public const AUDIENCE = [
+        'README' => 'all',
+        'getting-started' => 'all',
+        'chilled-runs' => 'all',
+        'picking' => 'all',
+        'orders' => 'office',
+        'finance' => 'office',
+        'customers' => 'office',
+    ];
 
     public function index(): View
     {
@@ -26,7 +43,11 @@ class HelpController extends Controller
 
     public function show(string $page): View
     {
-        return $this->render(Str::replaceEnd('.md', '', $page), withBackLink: true);
+        $page = Str::replaceEnd('.md', '', $page);
+        abort_unless(is_file($this->pagePath($page)), 404);
+        abort_unless($this->canRead($page), 403);
+
+        return $this->render($page, withBackLink: true);
     }
 
     public function image(string $file): BinaryFileResponse
@@ -34,15 +55,41 @@ class HelpController extends Controller
         $path = base_path(self::DIR."/images/$file");
         abort_unless(is_file($path), 404);
 
+        // A picture follows its pages: readable when a page the user may read uses it.
+        $used = collect(glob(base_path(self::DIR.'/*.md')))
+            ->filter(fn ($f) => $this->canRead(basename($f, '.md')))
+            ->contains(fn ($f) => str_contains(file_get_contents($f), "images/$file"));
+        abort_unless($used, 403);
+
         return response()->file($path, ['Cache-Control' => 'public, max-age=3600']);
+    }
+
+    private function canRead(string $page): bool
+    {
+        return (self::AUDIENCE[$page] ?? 'office') === 'all' || Gate::allows('see-financials');
+    }
+
+    private function pagePath(string $page): string
+    {
+        return base_path(self::DIR."/$page.md");
     }
 
     private function render(string $page, bool $withBackLink = false): View
     {
-        $path = base_path(self::DIR."/$page.md");
+        $path = $this->pagePath($page);
         abort_unless(is_file($path), 404);
 
         $md = file_get_contents($path);
+
+        // The index lists only the pages this user may open: drop the table
+        // rows that link to an unreadable page.
+        if (! $withBackLink) {
+            $md = preg_replace_callback(
+                '/^\|.*\]\(([a-z0-9-]+)\.md\).*\R?/m',
+                fn ($m) => $this->canRead($m[1]) ? $m[0] : '',
+                $md,
+            );
+        }
         $title = preg_match('/^# (.+)$/m', $md, $m) ? trim($m[1]) : 'Help';
 
         $html = Str::markdown($md, ['html_input' => 'strip', 'allow_unsafe_links' => false]);

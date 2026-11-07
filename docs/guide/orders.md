@@ -37,7 +37,7 @@ A pending order is entered but not yet sent to the floor.
 - **Confirm order** sends it to the picking queue and lets stock be allocated to it.
 - **Cancel order** (bottom right) withdraws it. Any reserved or picked stock goes back to its batch. An order is never deleted; it stays on record as cancelled.
 
-Confirm and cancel are the only status changes you make by hand. Everything after that follows from picking and dispatch.
+Confirm and cancel are the only status buttons until the order is picked. After that come **Loaded onto van**, **Mark dispatched** and **Mark delivered** (see *Send it out*).
 
 ## Allocate and watch the picking
 

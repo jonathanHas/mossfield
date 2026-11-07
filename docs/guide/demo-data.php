@@ -2,12 +2,25 @@
 
 // Demo orders for the user-guide screenshots (docs/guide/screenshots.json).
 //
-//   php artisan tinker docs/guide/demo-data.php
+//   php artisan tinker docs/guide/demo-data.php                 # make what is missing
+//   GUIDE_FRESH=1 php artisan tinker docs/guide/demo-data.php   # cancel the old ones, make new
 //
 // Dev box only (APP_ENV=local, database mossfield_cl). Idempotent: each order
 // carries a customer reference GUIDE-A … GUIDE-D, and a non-cancelled order
-// with that reference is left alone. It never deletes anything. Prints one
-// line per order — the ids the manifest's URLs use.
+// with that reference is left alone. It never deletes an order. Prints one
+// line per order.
+//
+// GUIDE_FRESH=1 (tinker takes no arguments, hence an environment variable)
+// first cancels every open GUIDE-* order the way the app does — each line's
+// reserved and picked units go back to stock through OrderItem::releaseUnits(),
+// then the status is written — so the normal path below finds nothing and
+// makes four new orders for the coming run dates. Use it when the delivery
+// dates have gone by.
+//
+// Either way it ends by writing docs/guide/demo-data.json (gitignored — the
+// ids are this box's): each order's id, number, status, delivery date and
+// line ids by variant name. screenshot.mjs fills the manifest's
+// {GUIDE-A.id} / {GUIDE-A.date} / {GUIDE-A.item.1L Bottle} placeholders from it.
 
 use App\Models\BatchItem;
 use App\Models\Customer;
@@ -23,6 +36,32 @@ if (! app()->environment('local')) {
 }
 if (config('database.connections.mysql.database') !== 'mossfield_cl') {
     throw new RuntimeException('Dev only: expected the mossfield_cl database.');
+}
+
+if (filter_var(getenv('GUIDE_FRESH'), FILTER_VALIDATE_BOOLEAN)) {
+    $guideOpen = Order::where('customer_reference', 'like', 'GUIDE-%')
+        ->where('status', '!=', 'cancelled')
+        ->orderBy('id')
+        ->get();
+
+    foreach ($guideOpen as $order) {
+        if (! $order->canBeCancelled()) {
+            echo "! {$order->customer_reference}  id={$order->id}  {$order->order_number}  is {$order->status} and cannot be cancelled; left as it is\n";
+
+            continue;
+        }
+
+        // What OrderController::update() does on → cancelled.
+        DB::transaction(function () use ($order) {
+            foreach ($order->orderItems()->get() as $item) {
+                $item->releaseUnits($item->quantity_allocated);
+            }
+            $order->update(['status' => 'cancelled']);
+            $order->calculateTotals();
+        });
+
+        echo "cancelled  {$order->customer_reference}  id={$order->id}  {$order->order_number}\n";
+    }
 }
 
 $guideRunDate = function (int $runId, int $weeksLater = 0): CarbonImmutable {
@@ -83,6 +122,8 @@ $guideOrders = [
     ],
 ];
 
+$guideResult = [];
+
 foreach ($guideOrders as $ref => $spec) {
     $order = Order::where('customer_reference', $ref)->where('status', '!=', 'cancelled')->first();
 
@@ -138,8 +179,25 @@ foreach ($guideOrders as $ref => $spec) {
         $order->refresh();
     }
 
-    $items = $order->orderItems()->with('productVariant')->get()
-        ->map(fn ($i) => "{$i->productVariant->name}={$i->id}")->implode(', ');
-    printf("%s  id=%d  %s  %s  %s  [%s]\n", $ref, $order->id, $order->order_number, $order->status,
-        optional($order->delivery_date)->toDateString() ?? '-', $items);
+    $lines = $order->orderItems()->with('productVariant')->get();
+    $items = $lines->map(fn ($i) => "{$i->productVariant->name}={$i->id}")->implode(', ');
+    $date = optional($order->delivery_date)->toDateString();
+
+    printf("%s  id=%d  %s  %s  %s  [%s]\n", $ref, $order->id, $order->order_number, $order->status, $date ?? '-', $items);
+
+    $guideResult[$ref] = [
+        'id' => $order->id,
+        'number' => $order->order_number,
+        'status' => $order->status,
+        'date' => $date,
+        'items' => $lines->mapWithKeys(fn ($i) => [$i->productVariant->name => $i->id])->all(),
+    ];
 }
+
+$guideJsonPath = base_path('docs/guide/demo-data.json');
+file_put_contents($guideJsonPath, json_encode([
+    'generated' => now()->toIso8601String(),
+    'orders' => $guideResult,
+], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n");
+
+echo "Written $guideJsonPath\n";

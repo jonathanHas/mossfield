@@ -12,7 +12,8 @@
       "as": "office",
       "url": "/dashboard",
       "width": 1280,
-      "height": 800
+      "height": 800,
+      "blur": ["table tbody td:nth-child(3)"]
     },
     {
       "name": "sidebar-help",
@@ -35,12 +36,26 @@
       "url": "/orders/create",
       "width": 1280,
       "height": 800,
-      "fullPage": true
+      "fullPage": true,
+      "before": [
+        {
+          "select": "#customer_id",
+          "value": "25"
+        },
+        {
+          "select": "select[name=\"items[0][product_variant_id]\"]",
+          "value": "5"
+        },
+        {
+          "type": "input[name=\"items[0][quantity]\"]",
+          "text": "2"
+        }
+      ]
     },
     {
       "name": "order-page-pending",
       "as": "office",
-      "url": "/orders/12",
+      "url": "/orders/{GUIDE-B.id}",
       "width": 1280,
       "height": 800,
       "fullPage": true
@@ -48,7 +63,7 @@
     {
       "name": "order-page-picking",
       "as": "office",
-      "url": "/orders/11",
+      "url": "/orders/{GUIDE-A.id}",
       "width": 1280,
       "height": 800,
       "fullPage": true,
@@ -66,7 +81,7 @@
     {
       "name": "chilled-runs-dublin",
       "as": "office",
-      "url": "/chilled-runs?run=1&date=2026-11-03",
+      "url": "/chilled-runs?run=1&date={GUIDE-C.date}",
       "width": 1440,
       "height": 800,
       "fullPage": true
@@ -74,14 +89,14 @@
     {
       "name": "chilled-runs-enter-order",
       "as": "office",
-      "url": "/chilled-runs?run=1&date=2026-11-03&edit=23",
+      "url": "/chilled-runs?run=1&date={GUIDE-C.date}&edit=23",
       "width": 1440,
       "height": 1250
     },
     {
       "name": "picking-queue",
       "as": "factory",
-      "url": "/picking?date=2026-10-29",
+      "url": "/picking?date={GUIDE-A.date}",
       "width": 390,
       "height": 844,
       "mobile": true
@@ -89,7 +104,7 @@
     {
       "name": "picking-order",
       "as": "factory",
-      "url": "/picking/11",
+      "url": "/picking/{GUIDE-A.id}",
       "width": 390,
       "height": 844,
       "mobile": true
@@ -97,7 +112,7 @@
     {
       "name": "picking-item-fixed",
       "as": "factory",
-      "url": "/picking/11/items/36",
+      "url": "/picking/{GUIDE-A.id}/items/{GUIDE-A.item.1L Bottle}",
       "width": 390,
       "height": 844,
       "mobile": true
@@ -105,7 +120,7 @@
     {
       "name": "picking-item-wheel",
       "as": "factory",
-      "url": "/picking/11/items/39",
+      "url": "/picking/{GUIDE-A.id}/items/{GUIDE-A.item.Whole Wheel}",
       "width": 390,
       "height": 1320,
       "mobile": true
@@ -121,10 +136,138 @@
     {
       "name": "picking-order-partly",
       "as": "factory",
-      "url": "/picking/13",
+      "url": "/picking/{GUIDE-C.id}",
       "width": 390,
       "height": 844,
       "mobile": true
+    },
+    {
+      "name": "finance-invoices",
+      "as": "office",
+      "url": "/invoicing",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "finance-invoice-partial",
+      "as": "office",
+      "url": "/invoicing/invoices/2",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "blur": [
+        "main div.px-4.py-3 > div.mt-1",
+        "main table:has(th:nth-child(5)) tbody td:nth-child(3)"
+      ]
+    },
+    {
+      "name": "finance-awaiting-invoice",
+      "as": "office",
+      "url": "/invoicing/uninvoiced",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "finance-record-payment",
+      "as": "office",
+      "url": "/invoicing/payments/create",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true,
+      "before": [
+        {
+          "select": "#customer_id",
+          "value": "22"
+        },
+        {
+          "waitFor": "#amount"
+        },
+        {
+          "type": "#amount",
+          "text": "50"
+        }
+      ]
+    },
+    {
+      "name": "finance-overdue-empty",
+      "as": "office",
+      "url": "/invoicing/overdue",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "finance-statements",
+      "as": "office",
+      "url": "/invoicing/statements",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "finance-statement-preview",
+      "as": "office",
+      "url": "/invoicing/customers/22/statement?from=2026-10-01&to=2026-10-31",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "finance-consolidated",
+      "as": "office",
+      "url": "/invoicing/consolidated",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "finance-sent",
+      "as": "office",
+      "url": "/invoicing/emails",
+      "width": 1280,
+      "height": 800,
+      "blur": [
+        "main table tbody td:nth-child(4)"
+      ]
+    },
+    {
+      "name": "finance-export",
+      "as": "office",
+      "url": "/invoicing/export",
+      "width": 1280,
+      "height": 800
+    },
+    {
+      "name": "customers-list",
+      "as": "office",
+      "url": "/customers",
+      "width": 1280,
+      "height": 800,
+      "blur": [
+        "main table tbody td:nth-child(2)"
+      ]
+    },
+    {
+      "name": "customer-page",
+      "as": "office",
+      "url": "/customers/25",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "customer-form",
+      "as": "office",
+      "url": "/customers/create",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
+    },
+    {
+      "name": "delivery-runs",
+      "as": "office",
+      "url": "/delivery-runs",
+      "width": 1280,
+      "height": 800,
+      "fullPage": true
     }
   ]
 }

@@ -104,6 +104,18 @@ class PickingTest extends TestCase
         $this->actingAs($factory)->get(route('picking.item', [$order, $item]))->assertOk();
     }
 
+    public function test_the_queue_links_to_the_picking_help_page(): void
+    {
+        $factory = User::factory()->factoryWorker()->create();
+
+        $this->actingAs($factory)->get(route('picking.index'))
+            ->assertOk()
+            ->assertSee('href="'.route('help.show', 'picking').'"', false)
+            ->assertSee('aria-label="Help"', false);
+
+        $this->actingAs($factory)->get(route('help.show', 'picking'))->assertOk();
+    }
+
     public function test_driver_is_denied_everywhere_on_picking(): void
     {
         $driver = User::factory()->driver()->create();

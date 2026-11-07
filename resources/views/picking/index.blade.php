@@ -63,10 +63,16 @@
                 <span class="mf-tag mf-tag-warn"><span class="inline-block w-[5px] h-[5px] rounded-full" style="background: currentColor;"></span>{{ $todoCount }} to do</span>
             </div>
         </div>
-        <a href="{{ route('dashboard') }}" class="iconbtn" title="Dashboard"
-           style="width: 34px; height: 34px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-2); flex-shrink: 0;">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
-        </a>
+        <div class="flex items-center gap-2" style="flex-shrink: 0;">
+            <a href="{{ route('help.show', 'picking') }}" class="iconbtn" title="Help" aria-label="Help"
+               style="width: 34px; height: 34px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-2); flex-shrink: 0;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z"/><path d="M9.1 9a3 3 0 0 1 5.8 1c0 2-3 2-3 4M12 17h.01"/></svg>
+            </a>
+            <a href="{{ route('dashboard') }}" class="iconbtn" title="Dashboard"
+               style="width: 34px; height: 34px; border-radius: 50%; background: var(--panel); border: 1px solid var(--line); display: grid; place-items: center; color: var(--ink-2); flex-shrink: 0;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 9 9"/><path d="M5 10v10h14V10"/></svg>
+            </a>
+        </div>
     </div>
 
     {{-- Progress strip --}}

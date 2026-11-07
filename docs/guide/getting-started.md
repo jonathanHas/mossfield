@@ -28,7 +28,7 @@ The sidebar groups the screens by job. Office users see all of these; factory us
 
 | Group | Screens |
 |---|---|
-| Sales | **Orders**, **Chilled Runs** (*floor*: both, read-only) |
+| Sales | **Orders**, **Chilled Runs** (*floor*: both — the floor can tick a stop as loaded, on the run sheet or the order page, and nothing else) |
 | Finance | **Invoices**, **To invoice**, **Consolidated**, **Payments**, **Overdue**, **Statements**, **Sent**, **Export** |
 | Fulfillment | **Picking** (*floor*), **Stock Allocation** |
 | Miscellaneous | **Delivery Runs**, **Customers**, **Write-off reasons**, **Stock** (*floor*), **Products** (*floor*) |

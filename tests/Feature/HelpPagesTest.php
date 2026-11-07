@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\HelpController;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -118,5 +119,80 @@ class HelpPagesTest extends TestCase
             ->assertOk()
             ->assertSee('href="'.route('help.index').'"', false)
             ->assertSee('Help');
+    }
+
+    /** @return array<string, array<int, string>> page name => pictures it uses */
+    private function picturesByPage(): array
+    {
+        $by = [];
+        foreach (glob($this->guide('*.md')) as $file) {
+            preg_match_all('/images\/([a-z0-9-]+\.png)/', file_get_contents($file), $m);
+            $by[basename($file, '.md')] = array_values(array_unique($m[1]));
+        }
+
+        return $by;
+    }
+
+    public function test_every_guide_page_has_an_audience(): void
+    {
+        $files = collect(glob($this->guide('*.md')))->map(fn ($f) => basename($f, '.md'))->sort()->values()->all();
+        $keys = collect(array_keys(HelpController::AUDIENCE))->sort()->values()->all();
+
+        $this->assertSame($files, $keys, 'HelpController::AUDIENCE and docs/guide/*.md must list the same pages');
+        foreach (HelpController::AUDIENCE as $page => $audience) {
+            $this->assertContains($audience, ['all', 'office'], "$page has audience '$audience'");
+        }
+    }
+
+    public function test_the_floor_cannot_open_office_pages_or_their_pictures(): void
+    {
+        $byPage = $this->picturesByPage();
+        $floorPictures = collect($byPage)
+            ->filter(fn ($_, $page) => HelpController::AUDIENCE[$page] === 'all')
+            ->flatten()->unique()->all();
+
+        foreach (HelpController::AUDIENCE as $page => $audience) {
+            if ($page === 'README') {
+                continue;
+            }
+            $expected = $audience === 'all' ? 200 : 403;
+            $this->actingAs($this->factory)->get("/help/$page")->assertStatus($expected);
+            $this->actingAs($this->factory)->get("/help/$page.md")->assertStatus($expected);
+
+            foreach ($byPage[$page] as $png) {
+                $this->actingAs($this->factory)->get("/help/images/$png")
+                    ->assertStatus(in_array($png, $floorPictures, true) ? 200 : 403);
+            }
+        }
+        $this->assertNotEmpty(array_diff(collect($byPage)->flatten()->all(), $floorPictures), 'some picture is office-only');
+
+        $admin = User::factory()->admin()->create();
+        foreach ([$this->office, $admin] as $user) {
+            foreach (array_keys(HelpController::AUDIENCE) as $page) {
+                if ($page !== 'README') {
+                    $this->actingAs($user)->get("/help/$page")->assertOk();
+                }
+                foreach ($byPage[$page] as $png) {
+                    $this->actingAs($user)->get("/help/images/$png")->assertOk();
+                }
+            }
+        }
+    }
+
+    public function test_the_floor_index_lists_only_its_pages(): void
+    {
+        $office = ['finance.md', 'customers.md', 'orders.md'];
+
+        $floor = $this->actingAs($this->factory)->get(route('help.index'))->assertOk()
+            ->assertSee(route('help.show', 'picking.md'), false);
+        foreach ($office as $page) {
+            $floor->assertDontSee(route('help.show', $page), false);
+        }
+
+        $seen = $this->actingAs($this->office)->get(route('help.index'))->assertOk()
+            ->assertSee(route('help.show', 'picking.md'), false);
+        foreach ($office as $page) {
+            $seen->assertSee(route('help.show', $page), false);
+        }
     }
 }

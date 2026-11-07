@@ -90,6 +90,25 @@ Most of these need no test. Where one is worth having, it says so.
   is a real finding, but it is small and belongs in the same batch.
   *Done 2026-09-13:* closed — see finding 8.
 
+- [ ] **One list, three names.** The sidebar and the finance tab bar say
+  **To invoice**; the page it opens is headed *Awaiting invoice*; the tile on the
+  Invoices list and the dashboard says *Awaiting invoice*. Pick one.
+  *Source: cycle 16c, writing `docs/guide/finance.md` (2026-11-05). The guide
+  names both; re-read `finance.md` → "To invoice" when this changes.*
+
+- [ ] **Invoice summary row is "Tax" without a delivery charge and "VAT (23%)" with
+  one** (`invoicing/invoices/show.blade.php`). Same row, two labels.
+  *Source: cycle 16c (2026-11-05).*
+
+- [ ] **Sent documents' subtitle lists "docket" but not "dispatch confirmation"**,
+  which is most of what the list holds (`invoicing/emails/index.blade.php`).
+  *Source: cycle 16c (2026-11-05).*
+
+- [ ] **The customer list keeps a Search button** although the box filters as you
+  type and the Status select submits on change (`customers/index.blade.php`).
+  The `/orders` list dropped its button in cycle 15.
+  *Source: cycle 16c (2026-11-05).*
+
 ## Routing
 
 - [x] **`/` still serves the stock Laravel welcome page**, complete with

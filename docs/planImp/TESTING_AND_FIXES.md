@@ -90,6 +90,90 @@ baseline.
 
 ---
 
+## 2026-11-07 — User guide, part 2: tooling leftovers, Finance, Customers, page audiences (Plan/Implement cycle 16c, revision 2)
+
+**Scope.** The second guide cycle: the 16b leftovers in the screenshot
+tooling, the Finance and Customers pages, and — added at review — who may
+read which help page. Planned by Fable on 2026-10-31, revision 1
+implemented by a Fable session on 2026-11-05 and reviewed the same day
+(steps pass, not accepted: the floor could open the money pages), revision
+2 implemented by Opus and accepted on 2026-11-07. Files in
+`archive/2026-11-05-user-guide-part-2/`.
+
+**What landed.**
+- **Page audiences.** `HelpController::AUDIENCE` lists every page as `all`
+  (anyone the route group admits) or `office` (passes the `see-financials`
+  gate); a page missing from the map is `office` — fail closed. `show()`
+  404s a missing file before it 403s an unreadable page; `image()` serves a
+  picture only when some page the user may read references `images/<file>`
+  (it scans the readable pages' Markdown — seven small files), so a picture
+  follows its pages and there is no second list; the index drops the README
+  table rows that link to a page the user may not read. `orders`, `finance`
+  and `customers` are office-only; the floor sees Getting started, Chilled
+  runs and Picking. **A new guide page must be added to `AUDIENCE`** —
+  `HelpPagesTest::test_every_guide_page_has_an_audience` compares the map
+  to `docs/guide/*.md` both ways. Two more tests walk every page and every
+  referenced picture as factory (403 for office material, 200 otherwise),
+  office and admin (200 everywhere), and check the floor's index.
+  `AuthorizationBoundaryTest`'s help fixtures moved to `picking` /
+  `picking-queue.png` so the matrix still expects 200 for factory.
+- **Pictures on an everyone-page show no prices.** `dashboard-office`
+  (on `getting-started.md`) blurs the order queue's *Value* column
+  (`"blur": ["table tbody td:nth-child(3)"]` — the dashboard has one
+  table). Rule written into `docs/guide/README.md`.
+- **Help on the phone**: a round Help button beside the home button on the
+  picking queue (`route('help.show', 'picking')`;
+  `PickingTest::test_the_queue_links_to_the_picking_help_page`).
+- **`demo-data.php`**: `GUIDE_FRESH=1` cancels the open `GUIDE-*` orders
+  through `OrderItem::releaseUnits()` (stock goes back; what
+  `canBeCancelled()` refuses is reported and left) and remakes them for the
+  coming run days; every run writes `docs/guide/demo-data.json`
+  (gitignored) with ids, numbers, dates and item ids.
+- **`screenshot.mjs`**: manifest URLs take `{GUIDE-X.id|number|date|item.<variant>}`
+  from that JSON (a missing value fails the shot and names it); per-shot
+  `before` actions (`select`, `type`, `click`, `waitFor`, `wait`) and
+  `blur` (CSS selectors, used for customers' emails and phone numbers on
+  `customers-list`, `finance-sent`, `finance-invoice-partial`); full-page
+  shots make `aside.h-screen` static so the sidebar runs the whole height.
+- **Two new pages**: `finance.md` (129 lines, ten pictures: how invoicing
+  works, Invoices, To invoice, Record a payment, Credit notes, Overdue,
+  Statements, Consolidated, Sent, Export, the six states) and
+  `customers.md` (92 lines, four pictures: find, add/change, the customer
+  page, special prices, delivery runs, stops, who pays the charge). Every
+  bold label (112 distinct) grepped against the views; the plan's own
+  wording was corrected to the screens in seven places (**To invoice**,
+  **Credit note**, **Part paid**, the consolidated screen picks a period,
+  **Generate & queue**, no online filter, **Add stop** only when a customer
+  has no run).
+- 29 pictures, 5.7 MB, largest 414 KB. `getting-started.md`'s Sales row
+  now says the floor can tick a stop as loaded on the run sheet or the
+  order page, and nothing else.
+
+**Things to know.**
+- Pictures are served with `Cache-Control: public, max-age=3600`; on a
+  shared browser an office picture could sit in cache for a floor login.
+  16d changes it to `private`.
+- Two `all` pages link to `orders.md` in prose; the floor gets the 403 page
+  with its link home. 16d marks those links *(office)*.
+- The top bar carries a clock, so a full re-shoot rewrites every office
+  picture even when nothing changed (11 of 15 part-1 PNGs this cycle). 16d
+  hides it for the capture.
+- The dev box's only sellable milk (`M281026`) expired on 2026-11-07;
+  `GUIDE_FRESH=1` comes up short until a batch is made. 16d does that first.
+- Dev DB: GUIDE orders 11–14 cancelled, GUIDE-A…D are now ids 15–18
+  (ORD-20261105-001…004). No email, invoice, payment or statement was
+  created.
+- Suite **820 tests, 0 failed**; pint clean.
+
+**Deferred to 16d** (production, stock, admin pages): the milk batch; the
+clock; `private` cache header; the two *(office)* link labels; a
+consolidated preview with content (`GUIDE-E`, needs a decision on dispatch
+under `MAIL_MAILER=log`); an `admin` audience; the dev box's expired stock
+kept for its pictures. Four screen-wording observations from the
+Implementer are in `SMALL_FIXES.md` → *Display and consistency*.
+
+---
+
 ## 2026-10-31 — User guide, part 1: help pages and the order flow (Plan/Implement cycle 16b)
 
 **Scope.** A user guide the office and the floor open from the sidebar, with

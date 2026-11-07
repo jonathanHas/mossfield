@@ -199,11 +199,29 @@ worth returning to.
   `plan.md` + `implemented.md` to `archive/2026-10-31-user-guide-part-1/`
   and commits with `ship-jon` (since 2026-10-31 it adds untracked files
   like `ship` does; `.gitignore` is the exclusion list).
-- **Next: cycle 16c = user guide, part 2** (finance, stock/production,
-  admin pages), opening with the small deferred items listed at the end of
-  the 2026-10-31 section of `TESTING_AND_FIXES.md` (Help link in the phone
-  shell, demo-data `--fresh`, two wording fixes, the empty new-order form
-  picture, the dev box's expired stock before the stock pictures).
+- **Cycle 16b shipped:** commit `4fda1a7`, deployed to `mossserv`
+  2026-10-31 (no migration). `ship-jon` now adds untracked files.
+- **Cycle 16c "User guide, part 2" — ACCEPTED 2026-11-07 (revision 2):**
+  Help button on the phone queue; `GUIDE_FRESH=1` + gitignored
+  `demo-data.json` + manifest placeholders; `before` and `blur` in
+  `screenshot.mjs`; 29 pictures (5.7 MB); pages `finance.md` and
+  `customers.md`; **page audiences** — `HelpController::AUDIENCE` makes
+  `orders`, `finance`, `customers` and the pictures only they use 403 for
+  the floor (`HelpPagesTest`, 9 tests; a new page must be listed there);
+  the dashboard picture blurs order values. Revision 1 was implemented by
+  Fable and revision 2 by Opus. Suite **820 tests, 0 failed**. Write-up in
+  `TESTING_AND_FIXES.md` → 2026-11-07. **Nothing committed since
+  `4fda1a7`.** Jon archives `plan.md` + `implemented.md` to
+  `archive/2026-11-05-user-guide-part-2/` and ships with
+  `ship-jon --no-maintenance` (no migration).
+- **16d** = production, stock and admin pages. Carried into it: make a
+  sellable milk batch first (dev milk `M281026` expired 2026-11-07, so
+  `GUIDE_FRESH=1` comes up short); hide the top-bar clock for the capture
+  (every re-shoot rewrites every office picture otherwise); picture
+  `Cache-Control` → `private`; the two prose links to `orders.md` on
+  everyone-pages marked *(office)*; a consolidated preview with content
+  (`GUIDE-E`); an `admin` audience for the admin page; the dev box's
+  expired stock is kept for its pictures.
 - **Then: cycle 17 = parked cycle 12 (delete guards)** — plan and the
   Implementer's IN PROGRESS report are in `parked/2026-10-10-delete-guards/`;
   resume instructions at the top of the parked plan. **The branch
@@ -245,8 +263,19 @@ invoicing migrations (`invoices`, `document_sequences`, …) and new
 
 ## Baseline to expect
 
-- `php artisan test` → **816 tests, 0 failing** as of 2026-10-31 (after cycle 16b) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
+- `php artisan test` → **820 tests, 0 failing** as of 2026-11-07 (after cycle 16c) (PHPUnit flags most as "deprecated" — the pre-existing `PDO::MYSQL_ATTR_SSL_CA` notice, not failures). Any failure is real.
 - `./vendor/bin/pint --test app tests database` → clean.
+
+## Dev database — cycle 16c changes, 2026-11-05
+
+`GUIDE_FRESH=1 php artisan tinker docs/guide/demo-data.php` cancelled the
+16b demo orders (ids 11–14, stock returned) and made `GUIDE-A` id 15
+(Organic Store, confirmed and allocated, 2026-11-05), `GUIDE-B` id 16
+(Organic Store pending, 2026-11-12), `GUIDE-C` id 17 (Cavistons preparing,
+12 × 1L picked from `M281026`, 2026-11-10), `GUIDE-D` id 18 (Roundwood
+pending, 2026-11-10) — ORD-20261105-001…004. `M281026`, the only sellable
+milk, expired on 2026-11-07: the dashboard's Expired tile reads 4 batches /
+10,398 units and a fresh run comes up short until 16d makes a milk batch.
 
 ## Dev database — cycle 16b changes, 2026-10-29
 
@@ -256,8 +285,8 @@ docs/guide/demo-data.php` (idempotent; re-running creates nothing):
 2026-10-29; `GUIDE-B` id 12 Organic Store pending, 2026-11-05; `GUIDE-C` id
 13 Cavistons preparing (12 × 1L picked from `M281026`, other lines
 reserved), 2026-11-03; `GUIDE-D` id 14 Roundwood Stores pending, 2026-11-03.
-They hold reservations on `M281026`, `Y230726` and `G030426`. To clear them,
-cancel them in the app (stock returns); 16c adds a `--fresh` flag.
+They hold reservations on `M281026`, `Y230726` and `G030426`. Superseded by
+the 16c orders above (these four are cancelled).
 
 ## Dev database — cycle 16 change, 2026-10-29
 
